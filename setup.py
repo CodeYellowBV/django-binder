@@ -32,4 +32,9 @@ setup(
 		'Topic :: Internet :: WWW/HTTP',
 		'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
 	],
+	install_requires=[
+		'Django >= 1.9',
+		'Pillow >= 3.2.0',
+		'django-request-id >= 0.1.0',
+	],
 )
