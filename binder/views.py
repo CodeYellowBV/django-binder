@@ -39,6 +39,8 @@ class BinderJSONEncoder(json.JSONEncoder):
 	def default(self, obj):
 		if isinstance(obj, (datetime.datetime, datetime.date)):
 			return obj.isoformat()
+		if isinstance(obj, set):
+			return list(obj)
 		return json.JSONEncoder.default(self, obj)
 
 def jsondumps(o, indent=None):
