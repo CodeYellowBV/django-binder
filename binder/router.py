@@ -1,30 +1,31 @@
 import django
 
-from .exceptions import BinderRequestError, BinderCSRFFailure
+from .exceptions import BinderRequestError, BinderCSRFFailure, BinderMethodNotAllowed
 
 
 
-# decorator
-def list_route(name=None, extra_route='', unauthenticated=False):
+def _route_decorator(is_detail, name=None, methods=None, extra_route='', unauthenticated=False):
 	def decorator(func):
-		func.list_route = True
-		func.route_name = name
-		func.extra_route = extra_route
-		func.unauthenticated = unauthenticated
-		return func
+		def wrapper(self, request=None, *args, **kwargs):
+			if methods is not None and request.method not in methods:
+				raise BinderMethodNotAllowed(methods)
+			return func(self, request, *args, **kwargs)
+		if is_detail:
+			wrapper.detail_route = True
+		else:
+			wrapper.list_route = True
+
+		wrapper.route_name = name
+		wrapper.extra_route = extra_route
+		wrapper.unauthenticated = unauthenticated
+		return wrapper
 	return decorator
 
+def list_route(*args, **kwargs):
+	return _route_decorator(False, *args, **kwargs)
 
-
-# decorator
-def detail_route(name=None, extra_route='', unauthenticated=False):
-	def decorator(func):
-		func.detail_route = True
-		func.route_name = name
-		func.extra_route = extra_route
-		func.unauthenticated = unauthenticated
-		return func
-	return decorator
+def detail_route(*args, **kwargs):
+	return _route_decorator(True, *args, **kwargs)
 
 
 
@@ -35,6 +36,7 @@ def csrf_failure(request, reason=None):
 	except BinderRequestError as e:
 		e.log()
 		return e.response()
+
 
 
 class Route(object):
