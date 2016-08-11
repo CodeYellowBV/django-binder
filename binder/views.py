@@ -407,7 +407,7 @@ class ModelView(View):
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
 		elif isinstance(field, models.CharField) or isinstance(field, models.TextField):
-			allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact')
+			allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search')
 			clean_value = values
 		else:
 			raise BinderRequestError('Filtering not supported for type {} ({{{}}}.{{{}}}).'
