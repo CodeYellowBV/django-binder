@@ -99,6 +99,11 @@ class BinderMethodNotAllowed(BinderException):
 	http_code = 405
 	code = 'MethodNotAllowed'
 
+	def __init__(self, methods=None):
+		super().__init__()
+		if methods is not None:
+			self.fields['allowed_methods'] = methods
+
 
 
 class BinderNotAuthenticated(BinderException):

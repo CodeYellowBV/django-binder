@@ -1,0 +1,15 @@
+[flake8]
+ignore = W191,E501,E301,E302,E303,E265,E201,E202,E713,E126,E128,E226,E221,E266,E127,E251
+
+# W191            indentation uses tabs
+# E501            line too long
+# E301,E302,E303  wrong number of blank lines
+# E265            block comment should start with '# '
+# E201,E202       whitespace inside parentheses
+# E713            test for membership should be 'not in'
+# E126,E128       continuation line under/over-indented
+# E226            missing whitespace around arithmetic operator
+# E221            multiple spaces before operator
+# E266            too many leading '#' for block comment
+# E127            continuation line over-indented for visual indent
+# E251            unexpected spaces around keyword / parameter equals

@@ -6,6 +6,7 @@ from django.db import models
 from django.utils import timezone
 from django.http import HttpResponse
 from django.contrib.auth.models import User
+from django.conf import settings
 
 
 
@@ -23,7 +24,7 @@ def jsondumps(o, indent=None):
 
 class Changeset(models.Model):
 	source = models.CharField(max_length=32)
-	user = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='changesets')
+	user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='changesets')
 	date = models.DateTimeField(default=timezone.now)
 	uuid = models.CharField(max_length=36, blank=True, null=True)
 
