@@ -15,7 +15,7 @@ setup(
 	license='MIT License',
 	description='Code Yellow backend framework for SPA webapps with REST-like API.',
 	long_description=README,
-	url='https://bitbucket.org/codeyellow/django-binder',
+	url='https://github.com/CodeYellowBV/django-binder',
 	author='Marcel Moreaux',
 	author_email='marcel@codeyellow.nl',
 	classifiers=[
