@@ -170,7 +170,7 @@ class ModelView(View):
 		try:
 			#### START TRANSACTION
 			with transaction.atomic():
-				if not kwargs.pop('unauthenticated', False) and not request.user.is_authenticated():
+				if not kwargs.pop('unauthenticated', False) and not request.user.is_authenticated:
 					raise BinderNotAuthenticated()
 
 				if 'method' in kwargs:
@@ -1174,7 +1174,7 @@ def debug_changesets_24h(request):
 	if request.method != 'GET':
 		raise BinderMethodNotAllowed()
 
-	if not request.user.is_authenticated():
+	if not request.user.is_authenticated:
 		logger.warning('Not authenticated.')
 		return HttpResponseForbidden('Not authenticated.')
 
