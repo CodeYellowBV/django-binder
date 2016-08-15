@@ -1,4 +1,5 @@
 import django
+from django.urls import reverse
 
 from .exceptions import BinderRequestError, BinderCSRFFailure, BinderMethodNotAllowed
 
@@ -99,7 +100,7 @@ class Router(object):
 
 	def model_route(self, model, pk=None, field=None):
 		if not model in self.model_routes:
-			self.model_routes[model] = django.core.urlresolvers.reverse(model.__name__)
+			self.model_routes[model] = reverse(model.__name__)
 		route = self.model_routes[model]
 
 		if pk and field:
