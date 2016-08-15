@@ -156,7 +156,7 @@ class ModelView(View):
 		# So we're good for most requests. For file uploads, we proceed without body logging.
 		if not self.log_request_body:
 			body = ' censored.'
-		elif not hasattr(request, '_post'):
+		elif request.method in ('HEAD', 'GET'):
 			body = ' unavailable.'
 		else:
 			if request.META.get('CONTENT_TYPE', '').lower() == 'application/json':
