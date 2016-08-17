@@ -9,6 +9,7 @@ We’ll use this example model, added in `models.py`.
 ```python
 from binder.models import BinderModel, CaseInsensitiveCharField
 
+
 class Animal(BinderModel):
 	name = models.CaseInsensitiveCharField()
 ```
@@ -31,11 +32,12 @@ And that’s it!
 
 After registering the model, a couple of new routes are at your disposal:
 
-- `GET api/animal` - view collection of models
-- `GET api/animal/[id]` - view a specific model
-- `POST api/animal` - create a new model
-- `PUT api/animal/[id]` - update a specific model
-- `DELETE api/animal/[id]` - delete a specific model
+- `GET api/animal/` - view collection of models
+- `GET api/animal/[id]/` - view a specific model
+- `POST api/animal/` - create a new model
+- `PUT api/animal/` - create or update (nested) models
+- `PUT api/animal/[id]/` - update a specific model
+- `DELETE api/animal/[id]/` - delete a specific model
 
 ### Filtering on the collection
 
@@ -60,10 +62,97 @@ After adding the above, you can search on a model by using `api/animal?search=12
 
 ### Saving a model
 
-TODO:
+Creating a new model is possible with `POST api/animal/`, and updating a model with `PUT api/animal/`. Both requests accept a JSON body, like this:
 
-- m2m
-- `with`
+```json
+{
+	"name": "Scooby Doo"
+}
+```
+
+If the request succeeds, it will return a `200` response, with a JSON body:
+
+```json
+{
+	"name": "Other Location223",
+	"id": 4,
+	"_meta": {
+		"ignored_fields": []
+	}
+}
+```
+
+If you leave the `name` field blank, and `blank=True` is not set on the field, this will result in a response with status `400`;
+
+```json
+{
+	"code": "ValidationError",
+	"error": {
+		"validation_errors": {
+			"name": [
+				{
+					"code": "This field cannot be blank."
+				}
+			]
+		}
+	},
+}
+```
+
+#### Multi PUT
+
+For models with relations, you often don't want to make a separate request to save each model. Multi PUT makes it easy to save related models in one request.
+
+Imagine that the `Animal` model from above is linked to a `Zoo` model;
+
+```python
+zoo = models.ForeignKey(Zoo, on_delete=models.CASCADE, related_name='+')
+```
+
+Now you can create a new animal and zoo in one request to `PUT api/animal/`;
+
+```json
+{
+	"data": [{
+		"id": -1,
+		"zoo": -1,
+		"name": "Scooby Doo"
+	}, {
+		"id": -2,
+		"zoo": -1,
+		"name": "Alex"
+	}],
+	"with": {
+		"zoo": [{
+			"id": -1,
+			"name": "Slagharen"
+		}]
+	}
+}
+```
+
+The negative `id` indicates that it is made up. Because those models are not created yet, they don't have an `id`. By using a "fake" `id`, it is possible to reference a model in another model. The fake `id` only has to be unique per model.
+
+If this request succeeds, you'll get back a mapping of the fake ids and the real ones;
+
+```json
+{
+	"idmap": {
+		"zoo": [[
+			-1,
+			47
+		]],
+		"animal": [[
+			-1,
+			48
+		]]
+	}
+}
+```
+
+It is also possible to update existing models with multi PUT. If you use a "real" id instead of a fake one, the model will be updated instead of created.
+
+TODO:
 - permissions
 -- change permission model
 

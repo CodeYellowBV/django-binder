@@ -59,7 +59,7 @@ Via the database, you can use the table `binder_changeset` to find a changeset y
 
 To view the history through an API endpoint, add the following to your `urls.py`;
 
-```
+```python
 import binder.views
 
 urlpatterns = [
