@@ -1,6 +1,5 @@
 import logging
 import time
-import json
 import io
 import re
 import os
@@ -22,6 +21,7 @@ from django.db import transaction
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from .router import Router
 from . import history
+from .utils import JsonResponse, jsonloads, jsondumps
 
 
 
@@ -32,19 +32,6 @@ def multiput_get_id(bla):
 
 
 logger = logging.getLogger(__name__)
-
-
-
-class BinderJSONEncoder(json.JSONEncoder):
-	def default(self, obj):
-		if isinstance(obj, (datetime.datetime, datetime.date)):
-			return obj.isoformat()
-		if isinstance(obj, set):
-			return list(obj)
-		return json.JSONEncoder.default(self, obj)
-
-def jsondumps(o, indent=None):
-	return json.dumps(o, cls=BinderJSONEncoder, indent=indent)
 
 
 
@@ -588,8 +575,7 @@ class ModelView(View):
 
 		response_data = {'data': data, 'with': extras, 'with_mapping': extras_mapping, 'meta': meta, 'debug': debug}
 
-		response_data = jsondumps(response_data)
-		return HttpResponse(response_data, content_type='application/json')
+		return JsonResponse(response_data)
 
 
 
@@ -788,10 +774,7 @@ class ModelView(View):
 	def multi_put(self, request):
 		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
 
-		try:
-			body = json.loads(request.body.decode())
-		except ValueError as e:
-			raise BinderRequestError('JSON parse error: {}.'.format(str(e)))
+		body = jsonloads(request.body)
 
 		if not 'data' in body:
 			raise BinderRequestError('missing data')
@@ -914,7 +897,7 @@ class ModelView(View):
 		for (model, oid), nid in new_id_map.items():
 			bla[Router().model_view(model)()._model_name()].append((oid, nid))
 
-		return HttpResponse(jsondumps({'idmap': bla}), content_type='application/json')
+		return JsonResponse({'idmap': bla})
 
 
 
@@ -924,10 +907,7 @@ class ModelView(View):
 		if pk is None:
 			return self.multi_put(request)
 
-		try:
-			values = json.loads(request.body.decode())
-		except ValueError as e:
-			raise BinderRequestError('JSON parse error: {}.'.format(str(e)))
+		values = jsonloads(request.body)
 
 		try:
 			obj = self.model.objects.get(pk=int(pk))
@@ -946,7 +926,7 @@ class ModelView(View):
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
 			logger.debug('PUT ' + c)
 
-		return HttpResponse(jsondumps(data), content_type='application/json')
+		return JsonResponse(data)
 
 
 
@@ -961,10 +941,7 @@ class ModelView(View):
 		if pk is not None:
 			return self.delete(request, pk, undelete=True)
 
-		try:
-			values = json.loads(request.body.decode())
-		except ValueError as e:
-			raise BinderRequestError('JSON parse error: {}.'.format(str(e)))
+		values = jsonloads(request.body)
 
 		data = self._store(self.model(), values, request)
 
@@ -974,7 +951,7 @@ class ModelView(View):
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
 			logger.debug('POST ' + c)
 
-		return HttpResponse(jsondumps(data), content_type='application/json')
+		return JsonResponse(data)
 
 
 
@@ -1115,7 +1092,7 @@ class ModelView(View):
 
 			logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
 			path = Router().model_route(self.model, obj.id, field)
-			return HttpResponse(jsondumps( {"data": {file_field_name: path}} ))
+			return JsonResponse( {"data": {file_field_name: path}} )
 
 		if request.method == 'DELETE':
 			self._require_model_perm('change', request)
@@ -1131,7 +1108,7 @@ class ModelView(View):
 			file_field.delete()
 
 			logger.info('DELETEd {}[{}].{}: {}'.format(self._model_name(), pk, file_field_name, old_hash))
-			return HttpResponse(jsondumps( {"data": {file_field_name: None}} ))
+			return JsonResponse( {"data": {file_field_name: None}} )
 
 
 
