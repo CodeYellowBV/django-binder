@@ -1,6 +1,4 @@
-import datetime
 import logging
-import json
 
 from django.db import models
 from django.utils import timezone
@@ -8,17 +6,7 @@ from django.http import HttpResponse
 from django.contrib.auth.models import User
 from django.conf import settings
 
-
-
-# FIXME: copy/paste from views.py
-class BinderJSONEncoder(json.JSONEncoder):
-	def default(self, obj):
-		if isinstance(obj, (datetime.datetime, datetime.date)):
-			return obj.isoformat()
-		return json.JSONEncoder.default(self, obj)
-
-def jsondumps(o, indent=None):
-	return json.dumps(o, cls=BinderJSONEncoder, indent=indent)
+from .json import jsondumps, JsonResponse
 
 
 
@@ -176,7 +164,7 @@ def view_changesets(request, changesets):
 	for u in User.objects.filter(id__in=userids):
 		users.append({'id': u.id, 'username': u.username, 'email': u.email, 'first_name': u.first_name, 'last_name': u.last_name})
 
-	return HttpResponse(jsondumps({'data': data, 'with': {'user': users}}), content_type='application/json')
+	return JsonResponse({'data': data, 'with': {'user': users}})
 
 
 
