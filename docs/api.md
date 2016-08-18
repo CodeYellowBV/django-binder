@@ -44,9 +44,9 @@ After registering the model, a couple of new routes are at your disposal:
 #### Simple field filtering
 It is possible to filter on a field. The simplest example is `api/animal?.name=Scooby-Doo`. This will return the models where the name of the animal is exactly `Scooby-Doo`.
 
-To use a partial case-insensitive match, you can use `api/animal?.name:icontains`. Behind the scenes, Djangos [Field Lookup](https://docs.djangoproject.com/en/1.10/ref/models/querysets/#field-lookups) are used. This means that other lookups like `in` and `startswith` also work!
+To use a partial case-insensitive match, you can use `api/animal?.name:icontains`. Behind the scenes, Djangos [Field Lookup](https://docs.djangoproject.com/en/1.10/ref/models/querysets/#field-lookups) is used. This means that other lookups like `in` and `startswith` also work!
 
-Note that currently, it is not possible to search on many2many fields.
+Note that currently, it is not possible to search on many-to-many fields.
 
 #### More advanced searching
 
@@ -131,7 +131,9 @@ Now you can create a new animal and zoo in one request to `PUT api/animal/`;
 }
 ```
 
-The negative `id` indicates that it is made up. Because those models are not created yet, they don't have an `id`. By using a "fake" `id`, it is possible to reference a model in another model. The fake `id` only has to be unique per model.
+The negative `id` indicates that it is made up. Because those models are not created yet, they don't have an `id`. By using a "fake" `id`, it is possible to reference a model in another model.
+
+The fake `id` has to be unique per model type. So you can use `-1` once for `Animal`, and once for `Zoo`. The backend does not care what number you use exactly, as long as it is negative.
 
 If this request succeeds, you'll get back a mapping of the fake ids and the real ones;
 
