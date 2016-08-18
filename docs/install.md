@@ -1,8 +1,14 @@
 # Installing
 
-TODO: explain how to install with pip
+Binder requires Python 3+.
 
-It is necessary to change a couple of files from a standard Django application.
+The preferred way to install Binder is with pip.
+
+```
+pip install git+ssh://git@github.com/CodeYellowBV/django-binder.git@1.0
+```
+
+To get started, a couple of files need to be changed from a standard Django application.
 
 In `settings.py`, add the following:
 

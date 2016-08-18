@@ -63,7 +63,7 @@ To view the history through an API endpoint, add the following to your `urls.py`
 import binder.views
 
 urlpatterns = [
-    url(r'^history/$',, binder.views.debug_changesets_24h, name='history'),
+	url(r'^history/$',, binder.views.debug_changesets_24h, name='history'),
 ]
 ```
 
