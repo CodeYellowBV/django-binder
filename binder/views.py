@@ -136,20 +136,18 @@ class ModelView(View):
 		logger.info('request parameters: {}'.format(dict(request.GET)))
 		logger.debug('cookies: {}'.format(request.COOKIES))
 
-		# Ugh. T1850.
-		# In Django, you can't access the raw body after you've accessed POST/FILES. (http/request.py:201, in def body)
-		# And Django's csrf middleware fondles request.POST so ouch. (middleware/csrf.py:170, in def process_view)
-		# Luckily, this doesn't succeed for application/json POSTs (http/request.py:226, in def _load_post_and_files)
-		# So we're good for most requests. For file uploads, we proceed without body logging.
 		if not self.log_request_body:
 			body = ' censored.'
-		elif request.method in ('HEAD', 'GET', 'DELETE'):
-			body = ' unavailable.'
 		else:
-			if request.META.get('CONTENT_TYPE', '').lower() == 'application/json':
-				body = ': ' + ellipsize(request.body, length=65536)
-			else:
-				body = ': ' + ellipsize(request.body, length=64)
+			# FIXME: ugly workaround, remove when Django bug fixed
+			# Try/except because https://code.djangoproject.com/ticket/27005
+			try:
+				if request.META.get('CONTENT_TYPE', '').lower() == 'application/json':
+					body = ': ' + ellipsize(request.body, length=65536)
+				else:
+					body = ': ' + ellipsize(request.body, length=64)
+			except ValueError:
+				body = ' unavailable.'
 
 		logger.debug('body (content-type={}){}'.format(request.META.get('CONTENT_TYPE'), body))
 
@@ -962,8 +960,13 @@ class ModelView(View):
 		if pk is None:
 			raise BinderMethodNotAllowed()
 
-		if request.body not in (b'', b'{}'):
-			raise BinderRequestError('{}DELETE body must be empty or empty json object.'.format('UN' if undelete else ''))
+		# FIXME: ugly workaround, remove when Django bug fixed
+		# Try/except because https://code.djangoproject.com/ticket/27005
+		try:
+			if request.body not in (b'', b'{}'):
+				raise BinderRequestError('{}DELETE body must be empty or empty json object.'.format('UN' if undelete else ''))
+		except ValueError:
+			pass
 
 		try:
 			obj = self.model.objects.get(pk=int(pk))
