@@ -962,8 +962,9 @@ class ModelView(View):
 		if pk is None:
 			raise BinderMethodNotAllowed()
 
-		if request.body not in (b'', b'{}'):
-			raise BinderRequestError('{}DELETE body must be empty or empty json object.'.format('UN' if undelete else ''))
+		# TODO: Temporary disabled because `request.body` gives a ValueError if it's empty since Django 1.10
+		# if request.body not in (b'', b'{}'):
+		# 	raise BinderRequestError('{}DELETE body must be empty or empty json object.'.format('UN' if undelete else ''))
 
 		try:
 			obj = self.model.objects.get(pk=int(pk))
