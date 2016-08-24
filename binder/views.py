@@ -838,7 +838,9 @@ class ModelView(View):
 						raise BinderRequestError('with.{} refers to unspecified {}[{}]'.format(
 								model.__name__, r_model.__name__, r_id))
 					if (r_model, r_id) in objects:
-						dependencies[(model, mid)].add((r_model, r_id))
+						# Ignore dependencies from an object to itself
+						if (model, mid) != (r_model, r_id):
+							dependencies[(model, mid)].add((r_model, r_id))
 
 		ordered_objects = []
 		while dependencies:
