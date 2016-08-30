@@ -154,6 +154,20 @@ If this request succeeds, you'll get back a mapping of the fake ids and the real
 
 It is also possible to update existing models with multi PUT. If you use a "real" id instead of a fake one, the model will be updated instead of created.
 
+### Uploading files
+
+To upload a file, you have to add it to the `file_fields` of the `ModelView`:
+
+```python
+class ArticleView(ModelView):
+	model = Article
+	file_fields = ['diagram']
+```
+
+Then, to upload the file, just do a `POST api/<model>/<pk>/<file_field_name>/` with the data as form-data.
+
+To retrive the file, just do `GET api/<model>/<pk>/<file_field_name>/`
+
 TODO:
 - permissions
 -- change permission model
