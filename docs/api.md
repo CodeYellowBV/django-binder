@@ -164,9 +164,9 @@ class ArticleView(ModelView):
 	file_fields = ['diagram']
 ```
 
-Then, to upload the file, just do a `POST api/<model>/<pk>/<file_field_name>/` with the data as form-data.
+Then, to upload the file, do a `POST api/<model>/<pk>/<file_field_name>/` with the data as form-data.
 
-To retrive the file, just do `GET api/<model>/<pk>/<file_field_name>/`
+To retrive the file, do `GET api/<model>/<pk>/<file_field_name>/`
 
 TODO:
 - permissions
