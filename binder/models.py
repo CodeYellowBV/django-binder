@@ -174,7 +174,7 @@ def history_m2m_change(sender, instance=None, action=None, reverse=None, pk_set=
 
 	# Find the corresponding fields on the local and remote (defining) model
 	field = [f for f in instance._meta.get_fields() if not f.concrete and f.many_to_many and f.through == sender][0]
-	remote_field = [f for f in model._meta.get_fields() if f.concrete and f.many_to_many and f.rel.through == sender][0]
+	remote_field = [f for f in model._meta.get_fields() if f.concrete and f.many_to_many and f.remote_field.through == sender][0]
 
 	# If clearing, find all the remote ids that need to be updated
 	if action == 'pre_clear':
