@@ -373,6 +373,17 @@ class ModelView(View):
 				except ValueError:
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
+		if isinstance(field, models.FloatField):
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
+			for v in values:
+				# Filter out empty strings
+				if v == '':
+					continue
+				try:
+					clean_value.append(float(v))
+				except ValueError:
+					raise CyrfRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
+										   .format(v, field.__class__.__name__, self.model.__name__, head))
 		elif isinstance(field, models.DateField) or isinstance(field, models.DateTimeField):
 			# FIXME: fix date/datetime issues. Maybe allow __startswith? And __year etc?
 			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
