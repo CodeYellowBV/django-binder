@@ -512,11 +512,12 @@ class ModelView(View):
 
 		return queryset
 
-
+	def get_queryset(self, request):
+		return self.model.objects.all()
 
 	def get(self, request, pk=None, withs=None):
 		meta = {}
-		queryset = self.model.objects.all()
+		queryset = self.get_queryset(request)
 		if pk:
 			queryset = queryset.filter(pk=int(pk))
 
