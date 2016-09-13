@@ -373,7 +373,7 @@ class ModelView(View):
 				except ValueError:
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
-		if isinstance(field, models.FloatField):
+		elif isinstance(field, models.FloatField):
 			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
 			for v in values:
 				# Filter out empty strings
