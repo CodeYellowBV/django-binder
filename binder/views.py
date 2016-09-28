@@ -642,6 +642,10 @@ class ModelView(View):
 				for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
 					if obj_field.field.null:
 						setattr(rmobj, obj_field.field.name, None)
+					elif hasattr(rmobj, 'deleted'):
+						if rmobj.deleted == False:
+							rmobj.deleted = True
+							rmobj.save()
 					else:
 						rmobj.delete()
 				for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
