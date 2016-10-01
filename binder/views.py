@@ -221,7 +221,11 @@ class ModelView(View):
 			for this, other in self.model.objects.filter(id__in=list(queryset.values_list('id', flat=True))).values_list('id', rfield):
 				if other is not None:
 					idmap[this].append(other)
-			m2m_ids[field] = idmap
+
+			if isinstance(self.model._meta.get_field(field), models.fields.reverse_related.OneToOneRel):
+				m2m_ids[field] = {k: v[0] for k, v in idmap.items()}
+			else:
+				m2m_ids[field] = idmap
 
 		# Serialize the objects, and add in id arrays for m2m fields
 		datas = []
