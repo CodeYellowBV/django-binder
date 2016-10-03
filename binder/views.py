@@ -720,7 +720,8 @@ class ModelView(View):
 				ids = set(v for v in value if v > 0)
 				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
 				if ids:
-					raise BinderValidationError({field: ['{} instances {} do not exist'.format(getattr(obj, field).model.__name__, list(ids))]})
+					field_name = obj._meta.get_field(field).remote_field.model.__name__
+					raise BinderValidationError({field: ['{} instances {} do not exist'.format(field_name, list(ids))]})
 				return value
 
 		raise BinderInvalidField(self.model.__name__, field)
