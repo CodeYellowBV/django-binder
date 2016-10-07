@@ -60,6 +60,12 @@ class AnimalView(ModelView):
 
 After adding the above, you can search on a model by using `api/animal?search=12`, or `api/animal?search=Scooby`.
 
+### Ordering the collection
+Ordering is a simple matter of enumerating the fields in the `order_by` query parameter, eg. `api/animal?order_by=name`.  If you want to make the ordering stable when there are multiple animals sharing the same name, you can separate with commas like `api/animal?order_by=name,id`.  The results will be sorted on name, and where the name is the same, they'll be sorted by `id`.
+
+The default sort order is ascending.  If you want to sort in descending order, simply prefix the attribute name with a minus sign.  This honors the scoping, so `api/animal?order_by=-name,id` will sort by `name` in descending order and by `id` in ascending order.
+
+
 ### Saving a model
 
 Creating a new model is possible with `POST api/animal/`, and updating a model with `PUT api/animal/`. Both requests accept a JSON body, like this:
