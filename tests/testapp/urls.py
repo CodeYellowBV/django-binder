@@ -5,7 +5,7 @@ import binder.views
 import binder.history
 import binder.models
 
-from .views import custom, animal
+from .views import custom, animal, zoo
 
 binder.router.Router().register(binder.views.ModelView)
 
