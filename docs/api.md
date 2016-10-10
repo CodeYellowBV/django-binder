@@ -80,7 +80,7 @@ If the request succeeds, it will return a `200` response, with a JSON body:
 
 ```json
 {
-	"name": "Other Location223",
+	"name": "Scooby Doo",
 	"id": 4,
 	"_meta": {
 		"ignored_fields": []
