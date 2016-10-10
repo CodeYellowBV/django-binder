@@ -32,11 +32,20 @@ settings.configure(**{
 	'ROOT_URLCONF': 'tests.testapp.urls',
 	'LOGGING': {
 		'version': 1,
+		'handlers': {
+			'console': {
+				'level': 'DEBUG',
+				'class': 'logging.StreamHandler',
+			},
+		},
 		'loggers': {
 			# We override only this one to avoid logspam
 			# while running tests.  Django warnings are
 			# stil shown.
-			'binder': { 'level': 'ERROR', },
+			'binder': {
+				'handlers': ['console'],
+				'level': 'ERROR',
+			},
 		}
 	}
 })
