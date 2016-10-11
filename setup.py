@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 import os
 from setuptools import find_packages, setup
 
@@ -18,10 +20,11 @@ setup(
 	url='https://github.com/CodeYellowBV/django-binder',
 	author='Marcel Moreaux',
 	author_email='marcel@codeyellow.nl',
+	test_suite='tests',
 	classifiers=[
 		'Environment :: Web Environment',
 		'Framework :: Django',
-		'Framework :: Django :: 1.9',
+		'Framework :: Django :: 1.10',
 		'Intended Audience :: Developers',
 		'License :: OSI Approved :: MIT License',
 		'Operating System :: OS Independent',
