@@ -17,7 +17,7 @@ class MultiPutTest(TestCase):
 		self.assertTrue(r)
 
 
-	def xtest_put_several_simple_items(self):
+	def test_put_several_simple_items(self):
 		model_data = {
 			'data': [{
 				'id': -1,
@@ -44,7 +44,7 @@ class MultiPutTest(TestCase):
 		self.assertEqual(scrappy.name, 'Scrappy Doo')
 
 
-	def xtest_put_with_mixed_ids_updates_existing_items(self):
+	def test_put_with_mixed_ids_updates_existing_items(self):
 		scooby = Animal(name='Scoooooby Dooooo')
 		scooby.save()
 
@@ -73,7 +73,7 @@ class MultiPutTest(TestCase):
 		self.assertEqual(scrappy.name, 'Scrappy Doo')
 
 
-	def xtest_put_relations_from_referencing_side(self):
+	def test_put_relations_from_referencing_side(self):
 		with_model_data = {
 			'data': [{
 				'id': -2,
