@@ -81,6 +81,9 @@ class ModelView(View):
 	#  - id, pk, deleted, _meta
 	#  - reverse relations
 	#  - file fields (as specified in file_fields)
+	#
+	# NOTE: Unwritability also disables the in-Binder not-NULL check.
+	# See the nullability check in self._store() (search for T9646)
 	unwritable_fields = []
 
 	# Fields to use for ?search=foo. Empty tuple for disabled search.
@@ -615,6 +618,13 @@ class ModelView(View):
 
 		# full_clean() doesn't check nullability (WHY?), so do it here. See T2989.
 		for f in obj._meta.fields:
+			# Ok, this nullable check poses problems. For example, when using MPTT models, we subclass
+			# the MPTTModel, which defines not-NULL bookkeeping fields which it populates on save().
+			# However, for new objects, this check occurs *before* the super().save(), so it complains.
+			# See T9646. Current solution: these fields are strictly populated by the backend, so
+			# they're unwritable from the frontend. So, unwritable -> no NULL check.  ¯\_(ツ)_/¯
+			if f.name in self.unwritable_fields:
+				continue
 			name = f.name + ('_id' if isinstance(f, models.ForeignKey) or isinstance(f, models.OneToOneField) else '')
 			if not f.primary_key and not f.null and getattr(obj, name) is None:
 				validation_errors[f.name] = ['This field cannot be null.']
