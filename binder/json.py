@@ -9,14 +9,16 @@ from .exceptions import BinderRequestError
 
 class BinderJSONEncoder(json.JSONEncoder):
 	def default(self, obj):
-		if isinstance(obj, (datetime.datetime, datetime.date)):
+		if isinstance(obj, datetime.datetime):
 			# FIXME: was .isoformat(), but that omits the microseconds if they
 			# are 0, which upsets our front-end devs. This is ugly.
 			# I hear .isoformat() might learn a timespec parameter in 3.6...
 			tz = obj.strftime("%z")
 			tz = tz if tz else '+00:00'
 			return obj.strftime("%Y-%m-%dT%H:%M:%S.%f") + tz
-		if isinstance(obj, set):
+		elif isinstance(obj, datetime.date):
+			return obj.isoformat()
+		elif isinstance(obj, set):
 			return list(obj)
 		return json.JSONEncoder.default(self, obj)
 
