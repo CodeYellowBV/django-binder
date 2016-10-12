@@ -14,7 +14,7 @@ class BinderJSONEncoder(json.JSONEncoder):
 			# are 0, which upsets our front-end devs. This is ugly.
 			# I hear .isoformat() might learn a timespec parameter in 3.6...
 			tz = obj.strftime("%z")
-			tz = tz if tz else '+00:00'
+			tz = tz if tz else '+0000'
 			return obj.strftime("%Y-%m-%dT%H:%M:%S.%f") + tz
 		elif isinstance(obj, datetime.date):
 			return obj.isoformat()
