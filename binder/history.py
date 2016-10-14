@@ -97,7 +97,10 @@ def change(model, oid, field, old, new):
 	elif old is DeferredM2M:
 		# If we haven't seen this field before, and it's a m2m of
 		# unknown value, we need to get the value now.
-		old = model(id=oid).binder_serialize_m2m_field(field)
+		#
+		# The target model may be a non-Binder model (e.g. User), so lbyl.
+		if hasattr(model, 'binder_serialize_m2m_field'):
+			old = model(id=oid).binder_serialize_m2m_field(field)
 
 	Transaction.changes[hid] = old, new
 
@@ -112,8 +115,10 @@ def commit():
 	# Fill in the deferred m2ms
 	for (model, oid, field), (old, new) in Transaction.changes.items():
 		if new is DeferredM2M:
-			new = model(id=oid).binder_serialize_m2m_field(field)
-			Transaction.changes[model, oid, field] = old, new
+			# The target model may be a non-Binder model (e.g. User), so lbyl.
+			if hasattr(model, 'binder_serialize_m2m_field'):
+				new = model(id=oid).binder_serialize_m2m_field(field)
+				Transaction.changes[model, oid, field] = old, new
 
 	# Filter non-changes
 	Transaction.changes = {idx: (old, new) for idx, (old, new) in Transaction.changes.items() if old != new}
