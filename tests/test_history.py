@@ -64,6 +64,16 @@ class HistoryTest(TestCase):
 		self.assertEqual(0, Change.objects.count())
 
 		model_data = {
+			'name': 'Daffy Duck',
+		}
+		response = self.client.patch('/animal/%d/' % (daffy.pk,), data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		# No actual change was done
+		self.assertEqual(0, Changeset.objects.count())
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
 			'name': 'Daffy THE Duck',
 		}
 		response = self.client.patch('/animal/%d/' % (daffy.pk,), data=json.dumps(model_data), content_type='application/json')
