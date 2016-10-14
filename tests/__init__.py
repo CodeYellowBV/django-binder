@@ -28,6 +28,7 @@ settings.configure(**{
 		'auth': None,
 		'sessions': None,
 		'contenttypes': None,
+		'binder': None,
 	},
 	'ROOT_URLCONF': 'tests.testapp.urls',
 	'LOGGING': {
