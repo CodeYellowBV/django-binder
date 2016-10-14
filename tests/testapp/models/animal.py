@@ -14,3 +14,6 @@ class Animal(BinderModel):
 
 	def __str__(self):
 		return 'animal %d: %s' % (self.pk or 0, self.name)
+
+	class Binder:
+		history = True
