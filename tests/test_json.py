@@ -39,3 +39,9 @@ class JsonTest(TestCase):
 		# Loading from json, currently just defers to plain
 		# JSON (after decoding).
 		self.assertEqual(plain, binder_json.jsonloads(bytes(python_core_json.dumps(plain), 'utf-8')))
+
+
+	# This assumes missing timezone is UTC
+	def test_nontimezoned_json_dates_dump_correctly(self):
+		t = datetime.strptime('2016-01-01 01:02:03', '%Y-%m-%d %H:%M:%S')
+		self.assertEqual('["2016-01-01T01:02:03.000000+0000"]', binder_json.jsondumps([t]))
