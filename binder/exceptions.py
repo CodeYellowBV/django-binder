@@ -45,11 +45,9 @@ class BinderException(Exception):
 
 	def response(self, request=None):
 		data = self.data()
+		data['debug'] = {'request_id': request.request_id if request else None}
 		if django.conf.settings.DEBUG:
-			data['debug'] = {
-					'location': '{1}:{2} in {0}'.format(*self.exception_location()),
-					'request_id': request.request_id if request else None,
-				}
+			data['debug']['location'] = '{1}:{2} in {0}'.format(*self.exception_location())
 		return HttpResponse(json.dumps(data), status=self.http_code, content_type='application/json')
 
 
