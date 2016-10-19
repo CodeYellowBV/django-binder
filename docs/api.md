@@ -38,6 +38,7 @@ After registering the model, a couple of new routes are at your disposal:
 - `PUT api/animal/` - create or update (nested) models
 - `PUT api/animal/[id]/` - update a specific model
 - `DELETE api/animal/[id]/` - delete a specific model
+- `POST api/animal/[id]/` - undelete a specific model
 
 ### Filtering on the collection
 
