@@ -665,7 +665,7 @@ class ModelView(View):
 					if obj_field.field.null:
 						setattr(rmobj, obj_field.field.name, None)
 					elif hasattr(rmobj, 'deleted'):
-						if not rmobj.deleted:
+						if rmobj.deleted == False:
 							rmobj.deleted = True
 							rmobj.save()
 					else:
