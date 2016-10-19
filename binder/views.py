@@ -21,7 +21,7 @@ from django.db import transaction
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from .router import Router
 from . import history
-from .json import JsonResponse, jsonloads, jsondumps
+from .json import JsonResponse, jsonloads
 
 
 
@@ -386,7 +386,7 @@ class ModelView(View):
 					clean_value.append(float(v))
 				except ValueError:
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
-										   .format(v, field.__class__.__name__, self.model.__name__, head))
+							.format(v, field.__class__.__name__, self.model.__name__, head))
 		elif isinstance(field, models.DateField) or isinstance(field, models.DateTimeField):
 			# FIXME: fix date/datetime issues. Maybe allow __startswith? And __year etc?
 			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
@@ -665,7 +665,7 @@ class ModelView(View):
 					if obj_field.field.null:
 						setattr(rmobj, obj_field.field.name, None)
 					elif hasattr(rmobj, 'deleted'):
-						if rmobj.deleted == False:
+						if not rmobj.deleted:
 							rmobj.deleted = True
 							rmobj.save()
 					else:
