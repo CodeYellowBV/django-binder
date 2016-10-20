@@ -4,7 +4,7 @@ import json
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-from .testapp.models import Animal, Zoo
+from .testapp.models import Animal, Costume, Zoo
 
 class ModelViewBasicsTest(TestCase):
 	def setUp(self):
@@ -136,7 +136,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('RequestError', result['code'])
 
 
-	def test_get_collection_with_relations(self):
+	def test_get_collection_with_foreignkey(self):
 		gaia = Zoo(name='GaiaZOO')
 		gaia.full_clean()
 		gaia.save()
@@ -157,7 +157,7 @@ class ModelViewBasicsTest(TestCase):
 		woody.full_clean()
 		woody.save()
 
-		# Quick check that relations are excluded unless we ask for them
+		# Quick check that foreign key relations are excluded unless we ask for them
 		response = self.client.get('/animal/', data={'order_by': 'name'})
 		self.assertEqual(response.status_code, 200)
 		self.assertIsNone(response.get('with_mapping'))
@@ -169,7 +169,6 @@ class ModelViewBasicsTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual(3, len(result['data']))
-		self.assertEqual(3, len(result['with_mapping']['zoo']))
 		self.assertEqual(2, len(result['with']['zoo']))
 		# TODO: Add test for relations with different name than models
 		self.assertEqual('zoo', result['with_mapping']['zoo'])
@@ -181,3 +180,49 @@ class ModelViewBasicsTest(TestCase):
 		self.assertSetEqual(set([coyote.pk, roadrunner.pk]),
 				    set(zoo_by_id[gaia.pk]['animals']))
 		self.assertSetEqual(set([woody.pk]), set(zoo_by_id[emmen.pk]['animals']))
+
+
+	def test_get_collection_with_reverse_foreignkey(self):
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.full_clean()
+		emmen.save()
+
+		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
+		coyote.full_clean()
+		coyote.save()
+
+		roadrunner = Animal(name='Roadrunner', zoo=gaia)
+		roadrunner.full_clean()
+		roadrunner.save()
+
+		woody = Animal(name='Woody Woodpecker', zoo=emmen)
+		woody.full_clean()
+		woody.save()
+
+		# Quick check that foreign key relations are excluded unless we ask for them
+		response = self.client.get('/zoo/', data={'order_by': 'name'})
+		self.assertEqual(response.status_code, 200)
+		self.assertIsNone(response.get('with_mapping'))
+		self.assertIsNone(response.get('with'))
+
+		# Filtering on an attribute of the relation should not mess with result set size!
+		response = self.client.get('/zoo/', data={'order_by': 'name', 'with': 'animals'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
+		self.assertEqual(3, len(result['with']['animal']))
+		self.assertEqual('animal', result['with_mapping']['animals'])
+
+		self.assertSetEqual(set([roadrunner.pk, coyote.pk]), set(result['data'][0]['animals']))
+		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
+		self.assertEqual('Wile E. Coyote', animal_by_id[coyote.pk]['name'])
+		self.assertEqual('Roadrunner', animal_by_id[roadrunner.pk]['name'])
+		self.assertEqual('Woody Woodpecker', animal_by_id[woody.pk]['name'])
+		self.assertEqual(emmen.pk, animal_by_id[woody.pk]['zoo'])
+		self.assertEqual(gaia.pk, animal_by_id[roadrunner.pk]['zoo'])
+		self.assertEqual(gaia.pk, animal_by_id[coyote.pk]['zoo'])

@@ -12,6 +12,7 @@ class Animal(BinderModel):
 	name=models.TextField()
 	zoo=models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 	caretaker=models.ForeignKey('Caretaker', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
+	costume=models.OneToOneField('Costume', on_delete=models.CASCADE, related_name='animal', blank=True, null=True)
 
 	def __str__(self):
 		return 'animal %d: %s' % (self.pk or 0, self.name)

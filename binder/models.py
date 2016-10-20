@@ -116,7 +116,9 @@ class BinderModel(models.Model):
 				old_value = self._history[field_name]
 				if old_value != new_value:
 					field = self._meta.get_field(field_name)
-					if isinstance(field, models.fields.related.ForeignKey) and field.remote_field.name != '+':
+					if (not isinstance(field, models.fields.related.OneToOneField) and
+					    isinstance(field, models.fields.related.ForeignKey) and
+					    field.remote_field.name != '+'):
 						history.change(field.remote_field.model, old_value, field.remote_field.name, history.DeferredM2M, history.DeferredM2M)
 						history.change(field.remote_field.model, new_value, field.remote_field.name, history.DeferredM2M, history.DeferredM2M)
 
