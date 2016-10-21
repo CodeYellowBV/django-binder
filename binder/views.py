@@ -236,13 +236,13 @@ class ModelView(View):
 			data = {}
 			for f in fields:
 				if isinstance(f, models.fields.files.FileField):
-					file = f.value_from_object(obj)
+					file = getattr(obj, f.attname)
 					if file:
 						data[f.name] = Router().model_route(self.model, obj.id, f)
 					else:
 						data[f.name] = None
 				else:
-					data[f.name] = f.value_from_object(obj)
+					data[f.name] = getattr(obj, f.attname)
 			for field, idmap in m2m_ids.items():
 				data[field] = idmap[obj.id]
 			datas.append(data)
