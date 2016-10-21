@@ -275,3 +275,80 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual("Gentleman's frock coat", costume_by_id[frock.pk]['description'])
 		self.assertEqual(scrooge.pk, costume_by_id[frock.pk]['animal'])
 		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['animal'])
+
+
+	def test_post_new_model_with_foreign_key_value(self):
+		artis = Zoo(name='Artis')
+		artis.full_clean()
+		artis.save()
+
+		model_data = {
+			'name': 'Scooby Doo',
+			'zoo': artis.pk,
+		}
+		response = self.client.post('/animal/', data=json.dumps(model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		self.assertIsNotNone(returned_data.get('id'))
+		self.assertEqual('Scooby Doo', returned_data.get('name'))
+		self.assertEqual(artis.pk, returned_data.get('zoo'))
+
+		scooby = Animal.objects.get(id=returned_data.get('id'))
+		self.assertEqual(artis, scooby.zoo) # haha, Scooby Zoo!
+		self.assertEqual('Scooby Doo', scooby.name)
+
+
+	def test_post_new_model_with_one_to_one_value(self):
+		donald = Animal(name='Donald Duck')
+		donald.full_clean()
+		donald.save()
+
+		model_data = {
+			'description': 'Weird sailor costume',
+			'animal': donald.pk,
+		}
+		response = self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		self.assertIsNotNone(returned_data.get('id'))
+		self.assertEqual('Weird sailor costume', returned_data.get('description'))
+		self.assertEqual(donald.pk, returned_data.get('animal'))
+
+		sailor = Costume.objects.get(id=returned_data.get('id'))
+		self.assertEqual(donald, sailor.animal)
+		self.assertEqual('Weird sailor costume', sailor.description)
+
+
+	def test_post_new_model_with_reverse_foreign_key_multi_value(self):
+		scooby = Animal(name='Scooby Doo')
+		scooby.full_clean()
+		scooby.save()
+
+		scrappy = Animal(name='Scrappy Doo')
+		scrappy.full_clean()
+		scrappy.save()
+
+		woody = Animal(name='Woody Woodpecker')
+		woody.full_clean()
+		woody.save()
+
+		model_data = {
+			'name': 'Artis',
+			'animals': [scooby.pk, scrappy.pk],
+		}
+		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		self.assertIsNotNone(returned_data.get('id'))
+		self.assertEqual('Artis', returned_data.get('name'))
+		self.assertSetEqual(set([scooby.id, scrappy.id]),
+				    set(returned_data.get('animals')))
+
+		artis = Zoo.objects.get(id=returned_data.get('id'))
+		self.assertEquals('Artis', artis.name)
+		self.assertSetEqual(set([scooby.id, scrappy.id]), set([a.id for a in artis.animals.all()]))
