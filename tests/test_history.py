@@ -45,11 +45,10 @@ class HistoryTest(TestCase):
 		self.assertEqual('testuser', cs.user.username)
 		self.assertAlmostEqual(datetime.now(), cs.date, delta=timedelta(seconds=1))
 
-		self.assertEqual(5, Change.objects.count())
+		self.assertEqual(4, Change.objects.count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='name', before='null', after='"Daffy Duck"').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='id', before='null', after=Animal.objects.get().id).count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='caretaker', before='null', after='null').count())
-		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='costume', before='null', after='null').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='zoo', before='null', after='null').count())
 
 

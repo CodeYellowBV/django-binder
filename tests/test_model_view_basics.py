@@ -226,3 +226,52 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(emmen.pk, animal_by_id[woody.pk]['zoo'])
 		self.assertEqual(gaia.pk, animal_by_id[roadrunner.pk]['zoo'])
 		self.assertEqual(gaia.pk, animal_by_id[coyote.pk]['zoo'])
+
+
+	def test_get_collection_with_one_to_one(self):
+		scrooge = Animal(name='Scrooge McDuck')
+		scrooge.full_clean()
+		scrooge.save()
+
+		frock = Costume(description="Gentleman's frock coat", animal=scrooge)
+		frock.full_clean()
+		frock.save()
+
+		donald = Animal(name='Donald Duck')
+		donald.full_clean()
+		donald.save()
+
+		sailor = Costume(description='Weird sailor costume', animal=donald)
+		sailor.full_clean()
+		sailor.save()
+
+		# This animal goes naked
+		pluto = Animal(name='Pluto')
+		pluto.full_clean()
+		pluto.save()
+
+
+		# Quick check that one to one relations are also excluded unless we ask for them
+		response = self.client.get('/animal/', data={'order_by': 'name'})
+		self.assertEqual(response.status_code, 200)
+		self.assertIsNone(response.get('with_mapping'))
+		self.assertIsNone(response.get('with'))
+
+
+		response = self.client.get('/animal/', data={'order_by': 'name', 'with': 'costume'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(3, len(result['data']))
+		self.assertEqual(2, len(result['with']['costume']))
+		# TODO: Add test for relations with different name than models
+		self.assertEqual('costume', result['with_mapping']['costume'])
+
+		self.assertEqual(sailor.pk, result['data'][0]['costume'])
+		self.assertIsNone(result['data'][1]['costume'])
+		self.assertEqual(frock.pk, result['data'][2]['costume'])
+		costume_by_id = {costume['id']: costume for costume in result['with']['costume']}
+		self.assertEqual('Weird sailor costume', costume_by_id[sailor.pk]['description'])
+		self.assertEqual("Gentleman's frock coat", costume_by_id[frock.pk]['description'])
+		self.assertEqual(scrooge.pk, costume_by_id[frock.pk]['animal'])
+		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['animal'])

@@ -244,7 +244,12 @@ class ModelView(View):
 				else:
 					data[f.name] = getattr(obj, f.attname)
 			for field, idmap in m2m_ids.items():
-				data[field] = idmap[obj.id]
+				# TODO: Don't require OneToOneFields in the m2m_fields list
+				if isinstance(self.model._meta.get_field(field), models.OneToOneRel):
+					assert(len(idmap[obj.id]) <= 1)
+					data[field] = idmap[obj.id][0] if len(idmap[obj.id]) == 1 else None
+				else:
+					data[field] = idmap[obj.id]
 			datas.append(data)
 
 		return datas

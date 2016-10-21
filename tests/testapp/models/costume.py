@@ -7,6 +7,7 @@ from binder.models import BinderModel
 # Each costume is unique to an animal (one to one mapping)
 class Costume(BinderModel):
 	description=models.TextField()
+	animal=models.OneToOneField('Animal', on_delete=models.CASCADE, related_name='costume')
 
 	def __str__(self):
-		return 'costume %d: %s' % (self.pk or 0, self.description)
+		return 'costume %d: %s (for %s)' % (self.pk or 0, self.description, self.animal)
