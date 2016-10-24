@@ -1,5 +1,6 @@
 import json
 import datetime
+from uuid import UUID
 
 from django.http import HttpResponse
 
@@ -18,6 +19,8 @@ class BinderJSONEncoder(json.JSONEncoder):
 			return obj.strftime("%Y-%m-%dT%H:%M:%S.%f") + tz
 		elif isinstance(obj, datetime.date):
 			return obj.isoformat()
+		elif isinstance(obj, UUID):
+			return str(obj) # Standard string notation
 		elif isinstance(obj, set):
 			return list(obj)
 		return json.JSONEncoder.default(self, obj)
