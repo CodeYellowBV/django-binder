@@ -9,7 +9,7 @@ settings.configure(**{
 			'NAME': ':memory:',
 		},
 	},
-	'MIDDLEWARE_CLASSES': [ # Using MIDDLEWARE_CLASSES while still on django-request-id 0.1.0
+	'MIDDLEWARE': [
 		# TODO: Try to reduce the set of absolutely required middlewares
 		'request_id.middleware.RequestIdMiddleware',
 		'django.contrib.sessions.middleware.SessionMiddleware',
