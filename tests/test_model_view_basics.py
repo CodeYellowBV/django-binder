@@ -350,5 +350,5 @@ class ModelViewBasicsTest(TestCase):
 				    set(returned_data.get('animals')))
 
 		artis = Zoo.objects.get(id=returned_data.get('id'))
-		self.assertEquals('Artis', artis.name)
+		self.assertEqual('Artis', artis.name)
 		self.assertSetEqual(set([scooby.id, scrappy.id]), set([a.id for a in artis.animals.all()]))
