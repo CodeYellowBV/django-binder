@@ -113,6 +113,9 @@ class ModelView(View):
 	# Set this to False for endpoints that receive passwords etc.
 	log_request_body = True
 
+	# The router object through which this view was invoked.  Will
+	# be set by dispatch().
+	router = None
 
 
 	#### XXX WARNING XXX
@@ -121,6 +124,7 @@ class ModelView(View):
 	# If you detect an error and return a HttpResponse(status=400), the transaction is not aborted!
 	#### XXX WARNING XXX
 	def dispatch(self, request, *args, **kwargs):
+		self.router = kwargs.pop('router')
 		history.start(source='http', user=request.user, uuid=request.request_id, date=None)
 		time_start = time.time()
 		logger.info('request dispatch; verb={}, user={}/{}, path={}'.
@@ -238,7 +242,7 @@ class ModelView(View):
 				if isinstance(f, models.fields.files.FileField):
 					file = getattr(obj, f.attname)
 					if file:
-						data[f.name] = Router().model_route(self.model, obj.id, f)
+						data[f.name] = self.router.model_route(self.model, obj.id, f)
 					else:
 						data[f.name] = None
 				else:
@@ -315,7 +319,7 @@ class ModelView(View):
 			# Forward relations
 			related_model = field.remote_field.model
 
-		return (RelatedModel(fieldname, related_model),) + Router().model_view(related_model)()._follow_related(fieldspec)
+		return (RelatedModel(fieldname, related_model),) + self.router.model_view(related_model)()._follow_related(fieldspec)
 
 
 
@@ -324,7 +328,7 @@ class ModelView(View):
 
 		next = self._follow_related(head)[0].model
 		ids = list(self.model.objects.filter(id__in=ids).values_list(head + '__id', flat=True))
-		view = Router().model_view(next)
+		view = self.router.model_view(next)
 
 		if not tail:
 			return (view, ids)
@@ -338,7 +342,7 @@ class ModelView(View):
 
 		if tail:
 			next = self._follow_related(head)[0].model
-			view = Router().model_view(next)()
+			view = self.router.model_view(next)()
 			return view._parse_filter(queryset, '.'.join(tail), value, partial + head + '__')
 
 		invert = False
@@ -437,7 +441,7 @@ class ModelView(View):
 
 		if tail:
 			next = self._follow_related(head)[0].model
-			view = Router().model_view(next)()
+			view = self.router.model_view(next)()
 			return view._parse_order_by(queryset, '.'.join(tail), partial + head + '__')
 
 		try:
@@ -826,7 +830,7 @@ class ModelView(View):
 				raise BinderRequestError('with.{} value should be a list')
 
 			try:
-				model = Router().name_models[modelname]
+				model = self.router.name_models[modelname]
 			except KeyError:
 				raise BinderRequestError('with.{} is not a valid model name'.format(modelname))
 
@@ -920,14 +924,14 @@ class ModelView(View):
 				if field.name in values:
 					values[field.name] = [multiput_get_id(i) for i in values[field.name] if multiput_get_id(i) >= 0]
 
-			Router().model_view(model)()._store(obj, values, request)
+			self.router.model_view(model)()._store(obj, values, request)
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))
 
 		bla = defaultdict(list)
 		for (model, oid), nid in new_id_map.items():
-			bla[Router().model_view(model)()._model_name()].append((oid, nid))
+			bla[self.router.model_view(model)()._model_name()].append((oid, nid))
 
 		return JsonResponse({'idmap': bla})
 
@@ -1128,7 +1132,7 @@ class ModelView(View):
 			new_hash = new_hash.hexdigest()
 
 			logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
-			path = Router().model_route(self.model, obj.id, field)
+			path = self.router.model_route(self.model, obj.id, field)
 			return JsonResponse( {"data": {file_field_name: path}} )
 
 		if request.method == 'DELETE':

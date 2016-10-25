@@ -53,18 +53,12 @@ class Route(object):
 
 
 class Router(object):
-	# Singleton hackery
-	_instance = None
-	def __new__(cls):
-		if cls._instance is None:
-			cls._instance = super(Router, cls).__new__(cls)
-		return cls._instance
-
-	model_views = {}
-	model_routes = {}
-	route_views = {}
-	# FIXME: this needs to be much much better defined
-	name_models = {}
+	def __init__(self):
+		self.model_views = {}
+		self.model_routes = {}
+		self.route_views = {}
+		# FIXME: this needs to be much much better defined
+		self.name_models = {}
 
 	def register(self, superclass):
 		for view in superclass.__subclasses__():
@@ -90,6 +84,7 @@ class Router(object):
 				self.route_views[route] = view
 
 			self.register(view)
+		return self
 
 	def model_view(self, model):
 		try:
@@ -118,19 +113,19 @@ class Router(object):
 			name = view.model.__name__
 			# List and detail endpoints
 			if route.list_endpoint:
-				urls.append(django.conf.urls.url(r'^{}/$'.format(route.route), view.as_view(), name=name))
+				urls.append(django.conf.urls.url(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 			if route.detail_endpoint:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), name=name))
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 
 			# History views
 			if hasattr(view.model, 'Binder') and view.model.Binder.history:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/$'.format(route.route), view.as_view(), {'history': 'normal'}, name=name))
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/debug/$'.format(route.route), view.as_view(), {'history': 'debug'}, name=name))
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/$'.format(route.route), view.as_view(), {'history': 'normal', 'router': self}, name=name))
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/debug/$'.format(route.route), view.as_view(), {'history': 'debug', 'router': self}, name=name))
 
 			# File field endpoints
 			for ff in view.file_fields:
 				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/{}/$'.format(route.route, ff),
-						view.as_view(), {'file_field': ff}, name='{}.{}'.format(name, ff)))
+						view.as_view(), {'file_field': ff, 'router': self}, name='{}.{}'.format(name, ff)))
 
 			# Custom endpoints
 			for m in dir(view):
@@ -138,7 +133,7 @@ class Router(object):
 				if hasattr(method, 'detail_route') or hasattr(method, 'list_route'):
 					route_name = method.route_name
 					extra = method.extra_route
-					kwargs = {'method': m}
+					kwargs = {'method': m, 'router': self}
 					if method.unauthenticated:
 						kwargs['unauthenticated'] = True
 					if hasattr(method, 'detail_route'):

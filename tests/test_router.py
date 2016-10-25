@@ -18,14 +18,7 @@ class BarModel(BinderModel):
 
 
 class RouterTest(TestCase):
-	def setUp(self):
-		# Defeat singleton hackery for now, until #28 is resolved.
-		Router.model_views = {}
-		Router.route_views = {}
-		Router.model_routes = {}
-		Router.name_models = {}
-		# Ugh, more hackery
-		urls_module.urlpatterns = []
+	def tearDown(self):
 		# Without this, tests can influence one another!
 		clear_url_caches()
 
