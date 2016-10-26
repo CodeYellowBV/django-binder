@@ -136,6 +136,66 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('RequestError', result['code'])
 
 
+	def test_get_collection_filtering(self):
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.full_clean()
+		emmen.save()
+
+		artis = Zoo(name='Artis')
+		artis.full_clean()
+		artis.save()
+
+		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
+		coyote.full_clean()
+		coyote.save()
+
+		roadrunner = Animal(name='Roadrunner', zoo=gaia)
+		roadrunner.full_clean()
+		roadrunner.save()
+
+		woody = Animal(name='Woody Woodpecker', zoo=emmen)
+		woody.full_clean()
+		woody.save()
+
+		donald = Animal(name='Donald Duck', zoo=artis)
+		donald.full_clean()
+		donald.save()
+
+		response = self.client.get('/animal/', data={'.name': 'Wile E. Coyote'})
+
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+		self.assertEqual('Wile E. Coyote', result['data'][0]['name'])
+
+
+		response = self.client.get('/animal/', data={'.name:startswith': 'W', 'order_by': 'name'})
+
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
+		self.assertEqual('Wile E. Coyote', result['data'][0]['name'])
+		self.assertEqual('Woody Woodpecker', result['data'][1]['name'])
+
+
+		# Filtering by relation
+		response = self.client.get('/animal/', data={'.zoo.name:in': 'Artis,Wildlands Adventure Zoo Emmen', 'order_by': 'name'})
+
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
+		self.assertEqual('Donald Duck', result['data'][0]['name'])
+		self.assertEqual('Woody Woodpecker', result['data'][1]['name'])
+
+
+
 	def test_get_collection_with_foreignkey(self):
 		gaia = Zoo(name='GaiaZOO')
 		gaia.full_clean()
@@ -209,7 +269,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertIsNone(response.get('with_mapping'))
 		self.assertIsNone(response.get('with'))
 
-		# Filtering on an attribute of the relation should not mess with result set size!
+		# Ordering on an attribute of the relation should not mess with result set size!
 		response = self.client.get('/zoo/', data={'order_by': 'name', 'with': 'animals'})
 		self.assertEqual(response.status_code, 200)
 
