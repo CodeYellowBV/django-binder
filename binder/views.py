@@ -1,6 +1,7 @@
 import logging
 import time
 import io
+import inspect
 import re
 import os
 import hashlib
@@ -22,6 +23,7 @@ from django.db import transaction
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from .router import Router
 from . import history
+from .models import FieldFilter
 from .json import JsonResponse, jsonloads, jsondumps
 
 
@@ -115,7 +117,6 @@ class ModelView(View):
 	log_request_body = True
 
 
-
 	#### XXX WARNING XXX
 	# dispatch() ensures transactions. If overriding or circumventing dispatch(), you're on your own!
 	# Also, a transaction is aborted if and only if post() or whatever raises an exception.
@@ -188,6 +189,23 @@ class ModelView(View):
 
 		return response
 
+
+	# This returns a (cached) filterclass for a field class.
+	def get_field_filter(self, field_class, reset=False):
+		f = not reset and getattr(self, '_field_filters', None)
+
+		if not f:
+			f = {}
+			for field_filter_cls in FieldFilter.__subclasses__():
+				for field_cls in field_filter_cls.fields:
+					if f.get(field_cls):
+						raise ValueError('Field-Filter mapping conflict: {} vs {}'.format(field_filter_cls.name, field_cls.name))
+					else:
+						f[field_cls] = field_filter_cls
+
+			self.field_filters = f
+
+		return f.get(field_class)
 
 
 	# Like model._meta.model_name, except it converts camelcase to underscores
@@ -372,7 +390,21 @@ class ModelView(View):
 		except models.fields.FieldDoesNotExist:
 			raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
-		clean_value = []
+
+		filter = None
+		for field_class in inspect.getmro(field.__class__):
+			filter_class = self.get_field_filter(field_class)
+			if filter_class:
+				field_descr = '{{{}}}.{{{}}}'.format(field.__class__.__name__, self.model.__name__, head)
+				filter = filter_class(field_descr)
+				break
+
+		if filter is None:
+			raise BinderRequestError('Filtering not supported for type {} ({{{}}}.{{{}}}).'
+					.format(field.__class__.__name__, self.model.__name__, head))
+		elif qualifier not in filter.allowed_qualifiers:
+			raise BinderRequestError('Qualifier {} not supported for type {} ({{{}}}.{{{}}}).'
+					.format(qualifier, field.__class__.__name__, self.model.__name__, head))
 
 		if qualifier in ('in', 'range', 'isnull'):
 			values = value.split(',')
@@ -383,90 +415,26 @@ class ModelView(View):
 		else:
 			values = [value]
 
-		if isinstance(field, models.IntegerField) or isinstance(field, models.ForeignKey) or isinstance(field, models.AutoField):
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
-			for v in values:
-				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
-				if v == '':
-					continue
-				try:
-					clean_value.append(int(v))
-				except ValueError:
-					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
-							.format(v, field.__class__.__name__, self.model.__name__, head))
-		elif isinstance(field, models.FloatField):
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
-			for v in values:
-				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
-				if v == '':
-					continue
-				try:
-					clean_value.append(float(v))
-				except ValueError:
-					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
-							.format(v, field.__class__.__name__, self.model.__name__, head))
-		elif isinstance(field, models.DateTimeField):
-			# Maybe allow __startswith? And __year etc?
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
-			for v in values:
-				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
-				if v == '':
-					continue
-				if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})?)?$', v):
-					raise BinderRequestError('Invalid YYYY-MM-DDTHH:MM:SS(.mmm)ZONE value {{{}}} for {} {{{}}}.{{{}}}.'
-							.format(v, field.__class__.__name__, self.model.__name__, head))
-			clean_value = values
-		elif isinstance(field, models.DateField):
-			# Maybe allow __startswith? And __year etc?
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
-			for v in values:
-				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
-				if v == '':
-					continue
-				if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', v):
-					raise BinderRequestError('Invalid YYYY-MM-DD value {{{}}} for {} {{{}}}.{{{}}}.'
-							.format(v, field.__class__.__name__, self.model.__name__, head))
-			clean_value = values
-		elif isinstance(field, models.BooleanField):
-			allowed_qualifiers = (None, 'isnull')
-			for v in values:
-				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
-				if v == '':
-					continue
-				if v == 'true':
-					clean_value.append(True)
-				elif v == 'false':
-					clean_value.append(False)
-				else:
-					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
-							.format(v, field.__class__.__name__, self.model.__name__, head))
-		elif isinstance(field, models.CharField) or isinstance(field, models.TextField):
-			allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search', 'isnull')
-			clean_value = values
-		else:
-			raise BinderRequestError('Filtering not supported for type {} ({{{}}}.{{{}}}).'
-					.format(field.__class__.__name__, self.model.__name__, head))
 
-		if qualifier == 'isnull':
-			clean_value=True
-		elif qualifier in ('in', 'range'):
-			pass
-		else:
-			try:
-				clean_value = clean_value[0]
-			except IndexError:
-				raise BinderRequestError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.model.__name__, head))
-
-		if qualifier not in allowed_qualifiers:
-			raise BinderRequestError('Qualifier {} not supported for type {} ({{{}}}.{{{}}}).'
-					.format(qualifier, field.__class__.__name__, self.model.__name__, head))
+		try:
+			if qualifier == 'isnull':
+				cleaned_value=True
+			elif qualifier in ('in', 'range'):
+				cleaned_value = [filter.clean_value(v) for v in values]
+			else:
+				try:
+					cleaned_value = filter.clean_value(values[0])
+				except IndexError:
+					raise BinderRequestError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.model.__name__, head))
+		except ValidationError as e:
+			# TODO: Maybe convert to a BinderValidationError later?
+			raise BinderRequestError(e.message)
 
 		suffix = '__' + qualifier if qualifier else ''
 		if invert:
-			return queryset.exclude(**{partial + head + suffix: clean_value})
+			return queryset.exclude(**{partial + head + suffix: cleaned_value})
 		else:
-			return queryset.filter(**{partial + head + suffix: clean_value})
-
+			return queryset.filter(**{partial + head + suffix: cleaned_value})
 
 
 	def _parse_order_by(self, queryset, field, partial=''):

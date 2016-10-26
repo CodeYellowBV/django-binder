@@ -3,6 +3,7 @@ from operator import itemgetter
 
 from django.db import models
 from django.db.models import signals
+from django.core.exceptions import ValidationError
 
 from . import history
 
@@ -52,6 +53,85 @@ class ChoiceEnum(object):
 			if v == value:
 				return k
 		raise ValueError()
+
+
+class FieldFilter(object):
+	# The classes that this filter applies to (should be mutually
+	# exclusive with the other classes)
+	fields = ()
+	# The list of allowed qualifiers
+	allowed_qualifiers = ()
+
+	def __init__(self, field_name):
+		self.field_name = field_name
+
+	def clean_value(self, v):
+		raise ValueError('FieldFilter {} has not overridden the clean_value method'.format(self.__class__.name))
+
+
+class IntegerFieldFilter(FieldFilter):
+	fields = (models.IntegerField, models.ForeignKey, models.AutoField)
+	allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+
+	def clean_value(self, v):
+		try:
+			return int(v)
+		except ValueError:
+			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_name))
+
+
+class FloatFieldFilter(FieldFilter):
+	fields = (models.FloatField,)
+	allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+
+	def clean_value(self, v):
+		try:
+			return float(v)
+		except ValueError:
+			raise ValidationError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'.format(v, self.field_name))
+
+
+class DateFilter(FieldFilter):
+	fields = (models.DateField,)
+	# Maybe allow __startswith? And __year etc?
+	allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+
+	def clean_value(self, v):
+		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', v):
+			raise ValidationError('Invalid YYYY-MM-DD value {{{}}} for {}.'.format(v, self.field_name))
+		return v
+
+class DateTimeFieldFilter(FieldFilter):
+	fields = (models.DateTimeField,)
+	# Maybe allow __startswith? And __year etc?
+	allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+
+	def clean_value(self, v):
+		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})?)?$', v):
+			raise ValidationError('Invalid YYYY-MM-DD(.mmm)ZONE value {{{}}} for {}.'.format(v, self.field_name))
+		return v
+
+
+class BooleanFieldFilter(FieldFilter):
+	fields = (models.BooleanField,)
+	allowed_qualifiers = (None,)
+
+	def clean_value(self, v):
+		if v == 'true':
+			return True
+		elif v == 'false':
+			return False
+		else:
+			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_name))
+
+
+class TextFieldFilter(FieldFilter):
+	fields = (models.CharField, models.TextField)
+	allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search')
+
+	# Always valid(?)
+	def clean_value(self, v):
+		return v
 
 
 
