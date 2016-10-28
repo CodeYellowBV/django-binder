@@ -385,33 +385,40 @@ class ModelView(View):
 		except ValueError:
 			qualifier = None
 
+		return self._add_field_filter(queryset, head, qualifier, value, invert, partial)
+
+
+	def _add_field_filter(self, queryset, field_name, qualifier, value, invert, partial=''):
 		try:
-			field = self.model._meta.get_field(head)
+			field = self.model._meta.get_field(field_name)
 		except models.fields.FieldDoesNotExist:
-			raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
+			raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, field_name))
 
 
 		filter = None
 		for field_class in inspect.getmro(field.__class__):
 			filter_class = self.get_field_filter(field_class)
 			if filter_class:
-				field_descr = '{{{}}}.{{{}}}'.format(field.__class__.__name__, self.model.__name__, head)
+				field_descr = '{{{}}}.{{{}}}'.format(field.__class__.__name__, self.model.__name__, field_name)
 				filter = filter_class(field_descr)
 				break
 
 		if filter is None:
 			raise BinderRequestError('Filtering not supported for type {} ({{{}}}.{{{}}}).'
-					.format(field.__class__.__name__, self.model.__name__, head))
+					.format(field.__class__.__name__, self.model.__name__, field_name))
 		elif qualifier not in filter.allowed_qualifiers:
 			raise BinderRequestError('Qualifier {} not supported for type {} ({{{}}}.{{{}}}).'
-					.format(qualifier, field.__class__.__name__, self.model.__name__, head))
+					.format(qualifier, field.__class__.__name__, self.model.__name__, field_name))
 
+		# TODO: Try to make the splitting and cleaning re-usable
+		# We could move it to FieldFilter, but that wouldn't work
+		# so well with truly custom filters (must make a class)
 		if qualifier in ('in', 'range', 'isnull'):
 			values = value.split(',')
 			if qualifier == 'range':
 				if len(values) != 2:
 					raise BinderRequestError('Range requires exactly 2 values for {{{}}}.{{{}}}.'
-							.format(self.model.__name__, head))
+							.format(self.model.__name__, field_name))
 		else:
 			values = [value]
 
@@ -432,9 +439,9 @@ class ModelView(View):
 
 		suffix = '__' + qualifier if qualifier else ''
 		if invert:
-			return queryset.exclude(**{partial + head + suffix: cleaned_value})
+			return queryset.exclude(**{partial + field_name + suffix: cleaned_value})
 		else:
-			return queryset.filter(**{partial + head + suffix: cleaned_value})
+			return queryset.filter(**{partial + field_name + suffix: cleaned_value})
 
 
 	def _parse_order_by(self, queryset, field, partial=''):
