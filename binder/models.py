@@ -4,6 +4,7 @@ from operator import itemgetter
 from django.db import models
 from django.db.models import signals
 from django.core.exceptions import ValidationError
+from django.db.models.query_utils import Q
 
 from . import history
 
@@ -62,11 +63,54 @@ class FieldFilter(object):
 	# The list of allowed qualifiers
 	allowed_qualifiers = ()
 
-	def __init__(self, field_name):
+	def __init__(self, model, field_name):
+		self.model = model
 		self.field_name = field_name
+
+
+	def field_description(self):
+		return '{{{}}}.{{{}}}'.format(self.model.__name__, self.field_name)
+
 
 	def clean_value(self, v):
 		raise ValueError('FieldFilter {} has not overridden the clean_value method'.format(self.__class__.name))
+
+
+	def check_qualifier(self, qualifier):
+		if qualifier not in self.allowed_qualifiers:
+			raise BinderRequestError('Qualifier {} not supported for type {} ({}).'
+					.format(qualifier, self.__class__.__name__, self.field_description()))
+
+
+	def get_q(self, qualifier, value, invert, partial=''):
+		self.check_qualifier(qualifier)
+
+		# TODO: Try to make the splitting and cleaning more re-usable
+		if qualifier in ('in', 'range'):
+			values = value.split(',')
+			if qualifier == 'range':
+				if len(values) != 2:
+					raise BinderRequestError('Range requires exactly 2 values for {}.'.format(self.field_description()))
+		else:
+			values = [value]
+
+
+		if qualifier == 'isnull':
+			cleaned_value=True
+		elif qualifier in ('in', 'range'):
+			cleaned_value = [self.clean_value(v) for v in values]
+		else:
+			try:
+				cleaned_value = self.clean_value(values[0])
+			except IndexError:
+				raise ValidationError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.model.__name__, head))
+
+		suffix = '__' + qualifier if qualifier else ''
+		if invert:
+			return ~Q(**{partial + self.field_name + suffix: cleaned_value})
+		else:
+			return Q(**{partial + self.field_name + suffix: cleaned_value})
+
 
 
 class IntegerFieldFilter(FieldFilter):
@@ -77,7 +121,7 @@ class IntegerFieldFilter(FieldFilter):
 		try:
 			return int(v)
 		except ValueError:
-			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_name))
+			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
 
 class FloatFieldFilter(FieldFilter):
@@ -88,7 +132,7 @@ class FloatFieldFilter(FieldFilter):
 		try:
 			return float(v)
 		except ValueError:
-			raise ValidationError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'.format(v, self.field_name))
+			raise ValidationError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'.format(v, self.field_description()))
 
 
 class DateFilter(FieldFilter):
@@ -98,7 +142,7 @@ class DateFilter(FieldFilter):
 
 	def clean_value(self, v):
 		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', v):
-			raise ValidationError('Invalid YYYY-MM-DD value {{{}}} for {}.'.format(v, self.field_name))
+			raise ValidationError('Invalid YYYY-MM-DD value {{{}}} for {}.'.format(v, self.field_description()))
 		return v
 
 class DateTimeFieldFilter(FieldFilter):
@@ -108,7 +152,7 @@ class DateTimeFieldFilter(FieldFilter):
 
 	def clean_value(self, v):
 		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})?)?$', v):
-			raise ValidationError('Invalid YYYY-MM-DD(.mmm)ZONE value {{{}}} for {}.'.format(v, self.field_name))
+			raise ValidationError('Invalid YYYY-MM-DD(.mmm)ZONE value {{{}}} for {}.'.format(v, self.field_description()))
 		return v
 
 
@@ -122,7 +166,7 @@ class BooleanFieldFilter(FieldFilter):
 		elif v == 'false':
 			return False
 		else:
-			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_name))
+			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
 
 class TextFieldFilter(FieldFilter):
