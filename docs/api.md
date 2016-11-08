@@ -181,6 +181,80 @@ TODO:
 
 ## Hacking the API
 
+The standard API should provide most of your common needs, but most
+projects have special requirements.  For example, you might want to
+provide reports that decorate the existing models, or add special
+filters.
+
+### Defining custom endpoints
+
+Binder has two kinds of view endpoints: *detail* and *list*.
+
+A *detail* endpoint is intended for returning detailed information
+about a single object.  Let's say we want an endpoint specifically for
+displaying an animal's name, returning plain text instead of JSON.
+Perhaps for easy `curl`ing.  This is how you'd do it:
+
+```python
+from binder.router import detail_route
+from django.http import HttpResponse
+
+class AnimalView(ModelView):
+	model = Animal
+
+	@detail_route(name='plain_name')
+	def plain_name(self, request, pk):
+		animal = self.model.objects.get(pk=pk)
+		return HttpResponse(animal.name, content_type='text/plain')
+```
+
+With this view, `api/animal/1/plain_name/` will respond with the name
+of the animal with `id` 1, in plaintext.  The `detail_route` function
+will take care of passing the primary key to the view, as the argument
+with name `pk`.
+
+
+A *list* endpoint is intended for returning a list of multiple
+objects.  For example, if we wanted a newline-separated list of names
+of all animals, it would look like this:
+
+```python
+from binder.router import detail_route
+from django.http import HttpResponse
+
+class AnimalView(ModelView):
+	model = Animal
+
+	@list_route(name='all_names')
+	def all_names(self, request):
+		result = []
+		for animal in self.model.objects.all():
+			result.append(animal.name)
+		return HttpResponse("\n".join(result), content_type='text/plain')
+```
+
+With this view, `api/animal/all_names/` will respond with the list of
+all animal names.
+
+The `list_route` does not **need** to return a list of objects.  It
+may also return a single object or completely unrelated information.
+For example, when generating a reporting endpoint, the `list_route`
+would typically be used.
+
+However, if you need to create completely custom endpoints that have
+nothing to do with the Binder models, it might be more sensible to
+just register a non-Binder view for those.  Just remember that you'll
+need to perform an authentication check (Binder does that
+automatically).
+
+Speaking of authentication, both `list_route` and `detail_route`
+accept the following keyword options:
+
+- `unauthenticated`: If `True`, this route should skip the authentication check.
+- `methods`: Either `None` or a list of strings that indicate the allowed methods.  Any other method results in a BinderNotAllowed exception (a 418 status).
+- `extra_route`: An optional string suffix to append to the route. You can use named capturing groups here, just like in `urls.py`.
+
+
 TODO:
 
 - how to add custom saving logic
