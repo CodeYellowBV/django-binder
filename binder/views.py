@@ -265,14 +265,20 @@ class ModelView(View):
 
 
 	# Find which objects of which models to include according to <withs> for the objects in <queryset>.
-	# returns a dictionary of {related view class: {ids}}.
-	def _get_withs(self, withs, ids, request=None):
+	# returns two dictionaries:
+	# - withs: { related_modal_name: [ids]}
+	# - mappings: { with_name: related_model_name}
+	def _get_withs(self, ids, withs=None, request=None):
+		if withs is None and request is not None:
+			withs = list(filter(None, request.GET.get('with', '').split(',')))
+
 		if isinstance(ids, django.db.models.query.QuerySet):
 			ids = ids.values_list('id', flat=True)
 		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
 		ids = list(ids)
 
 		# Make sure to include A if A.B is specified.
+		# TODO: include A if A.B.C is specified
 		for w in withs:
 			if '.' in w:
 				withs.append('.'.join(w.split('.')[:-1]))
@@ -287,7 +293,15 @@ class ModelView(View):
 				extras_mapping[w] = view
 				extras[view].update(set(new_ids))
 
-		return (extras, extras_mapping)
+		extras_dict = {}
+		# FIXME: delegate this to a router or something
+		for view, with_ids in extras.items():
+			view = view()
+			os = view._get_objs(view.model.objects.filter(id__in=with_ids))
+			extras_dict[view._model_name()] = os
+		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
+
+		return (extras_dict, extras_mapping_dict)
 
 
 
@@ -565,16 +579,7 @@ class ModelView(View):
 		queryset = self._paginate(queryset, request)
 
 		#### with
-		if withs is None:
-			withs = list(filter(None, request.GET.get('with', '').split(',')))
-		raw_extras, extras_mapping = self._get_withs(withs, queryset, request=request)
-		extras = {}
-		# FIXME: delegate this to a router or something
-		for view, with_ids in raw_extras.items():
-			view = view()
-			os = view._get_objs(view.model.objects.filter(id__in=with_ids))
-			extras[view._model_name()] = os
-		extras_mapping = {fk: view()._model_name() for fk, view in extras_mapping.items()}
+		extras, extras_mapping = self._get_withs(queryset, withs, request=request)
 
 		data = self._get_objs(queryset, request=request)
 		if pk:
@@ -954,6 +959,11 @@ class ModelView(View):
 
 		new = dict(data)
 		new.pop('_meta', None)
+
+		extras, extras_mapping = self._get_withs([new['id']], request=request)
+		data['_meta']['with'] = extras
+		data['_meta']['with_mapping'] = extras_mapping
+
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
 			logger.debug('PUT ' + c)
@@ -979,6 +989,11 @@ class ModelView(View):
 
 		new = dict(data)
 		new.pop('_meta', None)
+
+		extras, extras_mapping = self._get_withs([new['id']], request=request)
+		data['_meta']['with'] = extras
+		data['_meta']['with_mapping'] = extras_mapping
+
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
 			logger.debug('POST ' + c)
