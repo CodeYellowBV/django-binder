@@ -960,9 +960,8 @@ class ModelView(View):
 		new = dict(data)
 		new.pop('_meta', None)
 
-		extras, extras_mapping = self._get_withs([new['id']], request=request)
-		data['_meta']['with'] = extras
-		data['_meta']['with_mapping'] = extras_mapping
+		meta = data['_meta']
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
 
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
@@ -990,9 +989,8 @@ class ModelView(View):
 		new = dict(data)
 		new.pop('_meta', None)
 
-		extras, extras_mapping = self._get_withs([new['id']], request=request)
-		data['_meta']['with'] = extras
-		data['_meta']['with_mapping'] = extras_mapping
+		meta = data['_meta']
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
 
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
