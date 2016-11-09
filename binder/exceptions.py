@@ -56,12 +56,14 @@ class BinderInvalidURI(BinderException):
 	http_code = 418
 	code = 'InvalidURI'
 
-	def __init__(self, path):
+	def __init__(self, path, urls=None):
 		super().__init__()
 		self.fields['path'] = path
 		self.fields['message'] = 'Undefined URI for this API.'
 		if not path.endswith('/'):
 			self.fields['message'] += ' (Hint: did you forget the trailing slash?)'
+		if urls is not None:
+			self.fields['valid_endpoints'] = urls
 
 
 
