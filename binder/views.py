@@ -1198,3 +1198,13 @@ def debug_changesets_24h(request):
 
 	changesets = history.Changeset.objects.filter(date__gte=timezone.now() - datetime.timedelta(days=1))
 	return history.view_changesets_debug(request, changesets.order_by('-id'))
+
+
+
+def handler500(request):
+	try:
+		request_id = request.request_id
+	except Exception as e:
+		request_id = str(e)
+
+	return HttpResponse('{"code": "InternalServerError", "debug": {"request_id": "' + request_id + '"}}', status=500)
