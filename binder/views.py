@@ -13,6 +13,7 @@ import django
 from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
+from django.http.request import RawPostDataException
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -149,7 +150,7 @@ class ModelView(View):
 					body = ': ' + ellipsize(request.body, length=65536)
 				else:
 					body = ': ' + ellipsize(request.body, length=64)
-			except ValueError:
+			except RawPostDataException:
 				body = ' unavailable.'
 
 		logger.debug('body (content-type={}){}'.format(request.META.get('CONTENT_TYPE'), body))
