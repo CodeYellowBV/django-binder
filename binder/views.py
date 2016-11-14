@@ -278,7 +278,6 @@ class ModelView(View):
 		ids = list(ids)
 
 		# Make sure to include A if A.B is specified.
-		# TODO: include A if A.B.C is specified
 		for w in withs:
 			if '.' in w:
 				withs.append('.'.join(w.split('.')[:-1]))
