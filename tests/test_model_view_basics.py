@@ -412,3 +412,33 @@ class ModelViewBasicsTest(TestCase):
 		artis = Zoo.objects.get(id=returned_data.get('id'))
 		self.assertEqual('Artis', artis.name)
 		self.assertSetEqual(set([scooby.id, scrappy.id]), set([a.id for a in artis.animals.all()]))
+
+
+	def test_post_put_respect_with_clause(self):
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.full_clean()
+		emmen.save()
+
+		model_data = {
+			'name': 'Scooby Doo',
+			'zoo': emmen.pk,
+		}
+		response = self.client.post(
+			'/animal/?with=zoo',
+			data=json.dumps(model_data),
+			content_type='application/json'
+		)
+
+		self.assertEqual(response.status_code, 200)
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['_meta']['with']['zoo']))
+
+		response = self.client.put(
+			'/animal/{}/?with=zoo'.format(result['id']),
+			data=json.dumps(model_data),
+			content_type='application/json'
+		)
+
+		self.assertEqual(response.status_code, 200)
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['_meta']['with']['zoo']))
