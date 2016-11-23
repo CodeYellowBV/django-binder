@@ -1,7 +1,9 @@
 def force_download(response, filename=None):
 	"""
 	Take a Django HttpResponse object, and modify it to force the browser to save
-	the response as a file. The file will be named <filename> (if specified).
+	the response as a file named <filename>. Returns the response object.
+
+	If <filename> is None, return the response object unmodified.
 
 	This sets the "Content-Disposition" header on the response. It also strips out
 	any characters that might cause trouble from the filename. This includes any-
@@ -21,5 +23,5 @@ def force_download(response, filename=None):
 		filename = filename.lstrip('.')
 
 		response['Content-Disposition'] = 'attachment; filename="{}"'.format(filename)
-	else:
-		response['Content-Disposition'] = 'attachment'
+
+	return response
