@@ -1,7 +1,7 @@
-def force_download(response, filename=None, jquery_cookie=False):
+def force_download(response, filename=None, prefix='', suffix='', jquery_cookie=False):
 	"""
 	Take a Django HttpResponse object, and modify it to force the browser to save
-	the response as a file named <filename>. Returns the response object.
+	the response as a file named <prefix><filename><suffix>. Returns the response.
 
 	If <filename> is None, return the response object unmodified.
 
@@ -24,7 +24,7 @@ def force_download(response, filename=None, jquery_cookie=False):
 		# Finally, strip leading dots. They don't make sense in filenames, and may lead to hidden files on Unices
 		filename = filename.lstrip('.')
 
-		response['Content-Disposition'] = 'attachment; filename="{}"'.format(filename)
+		response['Content-Disposition'] = 'attachment; filename="{}{}{}"'.format(prefix, filename, postfix)
 
 		if jquery_cookie:
 			response.set_cookie('fileDownload', 'true')
