@@ -24,7 +24,7 @@ def force_download(response, filename=None, prefix='', suffix='', jquery_cookie=
 		# Finally, strip leading dots. They don't make sense in filenames, and may lead to hidden files on Unices
 		filename = filename.lstrip('.')
 
-		response['Content-Disposition'] = 'attachment; filename="{}{}{}"'.format(prefix, filename, postfix)
+		response['Content-Disposition'] = 'attachment; filename="{}{}{}"'.format(prefix, filename, suffix)
 
 		if jquery_cookie:
 			response.set_cookie('fileDownload', 'true')
