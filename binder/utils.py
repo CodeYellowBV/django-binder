@@ -1,16 +1,17 @@
 def force_download(response, filename=None, prefix='', suffix='', jquery_cookie=False):
 	"""
-	Take a Django HttpResponse object, and modify it to force the browser to save
-	the response as a file named <prefix><filename><suffix>. Returns the response.
+	Take a Django HttpResponse object, and modify it to force the browser to
+	save the response as a file named <prefix><filename><suffix>. Returns the
+	response object.
 
 	If <filename> is None, return the response object unmodified.
 
-	This sets the "Content-Disposition" header on the response. It also strips out
-	any characters that might cause trouble from the filename. This includes any-
-	thing non-ascii, non-printable characters, forward and backward slashes, and
-	leading dots.
+	This sets the "Content-Disposition" header on the response. It also strips
+	out any characters that might cause trouble from the filename. This
+	includes any- thing non-ascii, non-printable characters, forward and
+	backward slashes, and leading dots.
 
-	If <jquery_cookie> is True, also add a "fileDownload=true" cookie for jquery.
+	If <jquery_cookie> is True, also add a "fileDownload=true" cookie.
 	"""
 	if filename:
 		# HTTP header content is ill-defined; we strip out anything that might not work
