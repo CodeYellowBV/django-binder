@@ -115,7 +115,7 @@ class Router(object):
 	def urls(self):
 		urls = []
 		for route, view in self.route_views.items():
-			name = view.model.__name__
+			name = view.model.__name__ if view.model else route.route
 			# List and detail endpoints
 			if route.list_endpoint:
 				urls.append(django.conf.urls.url(r'^{}/$'.format(route.route), view.as_view(), name=name))
@@ -123,7 +123,7 @@ class Router(object):
 				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), name=name))
 
 			# History views
-			if hasattr(view.model, 'Binder') and view.model.Binder.history:
+			if view.model and hasattr(view.model, 'Binder') and view.model.Binder.history:
 				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/$'.format(route.route), view.as_view(), {'history': 'normal'}, name=name))
 				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/debug/$'.format(route.route), view.as_view(), {'history': 'debug'}, name=name))
 
