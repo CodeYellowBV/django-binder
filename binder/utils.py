@@ -8,8 +8,8 @@ def force_download(response, filename=None, prefix='', suffix='', jquery_cookie=
 
 	This sets the "Content-Disposition" header on the response. It also strips
 	out any characters that might cause trouble from the filename. This
-	includes any- thing non-ascii, non-printable characters, forward and
-	backward slashes, and leading dots.
+	includes anything non-ascii, non-printable characters, forward and backward
+	slashes, and leading dots.
 
 	If <jquery_cookie> is True, also add a "fileDownload=true" cookie.
 	"""
