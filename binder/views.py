@@ -875,18 +875,20 @@ class ModelView(View):
 						if (model, mid) != (r_model, r_id):
 							dependencies[(model, mid)].add((r_model, r_id))
 
+		# Actually sort the objects by dependency (and within dependency layer by model/id)
 		ordered_objects = []
 		while dependencies:
-			before = len(dependencies)
+			this_batch = []
 			for obj, deps in list(dependencies.items()):
 				if not deps:
-					ordered_objects.append(obj)
+					this_batch.append(obj)
 					del dependencies[obj]
 					for d in dependencies.values():
 						if obj in d:
 							d.remove(obj)
-			if len(dependencies) == before:
+			if len(this_batch) == 0:
 				raise BinderRequestError('No progress in dependency resolution! Cyclic dependencies?')
+			ordered_objects += sorted(this_batch, key=lambda obj: (obj[0].__name__, obj[1]))
 
 		new_id_map = {}
 		for model, oid in ordered_objects:
