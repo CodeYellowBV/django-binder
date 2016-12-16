@@ -883,7 +883,10 @@ class ModelView(View):
 		ordered_objects = []
 		while dependencies:
 			this_batch = []
-			for obj, deps in list(dependencies.items()):
+			# NOTE: careful. This code makes a deep copy of the dependency list, so the dependency
+			# data the for iterates over is stable. The body of the loop modifies <dependencies>,
+			# so without the deep copy this leads to nasty surprises.
+			for obj, deps in [(k, set(v)) for k, v in dependencies.items()]:
 				if not deps:
 					this_batch.append(obj)
 					del dependencies[obj]
