@@ -12,7 +12,8 @@ class BuildLogMiddleware:
 	Middleware to log a string on every request. Intended for version/commit/etc.
 
 	Simply including this middleware will log the following settings variables
-	on every request: BRANCH, VERSION, COMMIT_NR, COMMIT_HASH, BUILD_DATE.
+	on every request: ENV_NAME, DEBUG, BRANCH, VERSION, COMMIT_NR, COMMIT_HASH,
+	BUILD_DATE.
 
 	To provide a custom message, define settings.BUILD_LOG_MESSAGE. This will
 	replace the entire log string.
@@ -22,7 +23,9 @@ class BuildLogMiddleware:
 		try:
 			self.log_message = settings.BUILD_LOG_MESSAGE
 		except AttributeError:
-			self.log_message = 'branch={} tag={} commit={}/{} built={}'.format(
+			self.log_message = 'env={} debug={} branch={} tag={} commit={}/{} built={}'.format(
+				getattr(settings, 'ENV_NAME', None),
+				settings.DEBUG,
 				getattr(settings, 'BRANCH', None),
 				getattr(settings, 'VERSION', None),
 				getattr(settings, 'COMMIT_NR', None),
