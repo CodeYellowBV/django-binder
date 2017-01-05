@@ -729,6 +729,13 @@ class ModelView(View):
 						except ValueError:
 							raise BinderValidationError({f.name: ['This value must be an integral number.']}, object=obj)
 					setattr(obj, f.attname, value)
+				elif isinstance(f, models.TextField):
+					# Django doesn't enforce max_length on TextFields, so we do.
+					if f.max_length is not None:
+						if len(value) > f.max_length:
+							msg = 'Ensure this value has at most {} characters (it has {}).'.format(f.max_length, len(value))
+							raise BinderValidationError({f.name: [msg]}, object=obj)
+					setattr(obj, f.attname, value)
 				else:
 					try:
 						f.to_python(value)
