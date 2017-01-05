@@ -1,4 +1,5 @@
 import logging
+import resource
 from django.conf import settings
 
 
@@ -37,4 +38,32 @@ class BuildLogMiddleware:
 		logger.info(self.log_message)
 
 		response = self.get_response(request)
+		return response
+
+
+
+class MemoryLogMiddleware:
+	"""
+	Middleware to log VM/memory stats of a request.
+
+	Simply including this middleware is enough.
+
+	Logs Max RSS size before and after the request, plus the number of minor and
+	major page faults and swapouts that occured during the request.
+	"""
+	def __init__(self, get_response):
+		self.get_response = get_response
+
+	def __call__(self, request):
+		before = resource.getrusage(resource.RUSAGE_SELF)
+		response = self.get_response(request)
+		after = resource.getrusage(resource.RUSAGE_SELF)
+
+		logger.debug('rusage maxRSS = {} before / {} after, {} minor / {} major pagefaults, {} swapouts'.format(
+			before.ru_maxrss,
+			after.ru_maxrss,
+			after.ru_minflt - before.ru_minflt,
+			after.ru_majflt - before.ru_majflt,
+			after.ru_nswap - before.ru_nswap,
+		))
 		return response
