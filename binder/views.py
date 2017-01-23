@@ -1187,12 +1187,14 @@ class ModelView(View):
 		if request.method != 'GET':
 			raise BinderMethodNotAllowed()
 
-		if not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
+		debug = kwargs['history'] == 'debug':
+
+		if debug and not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
 			logger.warning('Debug endpoints disabled.')
 			return HttpResponseForbidden('Debug endpoints disabled.')
 
 		changesets = history.Changeset.objects.filter(id__in=set(history.Change.objects.filter(model=self.model.__name__, oid=pk).values_list('changeset_id', flat=True)))
-		if kwargs['history'] == 'debug':
+		if debug:
 			return history.view_changesets_debug(request, changesets.order_by('-id'))
 		else:
 			return history.view_changesets(request, changesets.order_by('-id'))
