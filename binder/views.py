@@ -1187,7 +1187,7 @@ class ModelView(View):
 		if request.method != 'GET':
 			raise BinderMethodNotAllowed()
 
-		debug = kwargs['history'] == 'debug':
+		debug = kwargs['history'] == 'debug'
 
 		if debug and not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
 			logger.warning('Debug endpoints disabled.')
