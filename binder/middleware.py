@@ -75,10 +75,10 @@ class VersionHeaderMiddleware:
 	"""
 	Middleware that adds a response header to every request with the version.
 
-	The header is "CY-BackEnd-Version", and its value is a JSON object
+	The header is "Cy-Backend-Version", and its value is a JSON object
 	containing the version number and the commit hash. e.g.:
 
-	  CY-BackEnd-Version: {"version": "2.0.1", "commit_hash": "2b50dfb"}
+	  Cy-Backend-Version: {"version": "2.0.1", "commit_hash": "2b50dfb"}
 
 	Simply including this middleware is enough to gain this functionality.
 	"""
@@ -92,7 +92,7 @@ class VersionHeaderMiddleware:
 
 	def __call__(self, request):
 		response = self.get_response(request)
-		response['CY-BackEnd-Version'] = self.header_value
+		response['Cy-Backend-Version'] = self.header_value
 		return response
 
 
@@ -102,8 +102,8 @@ class LogFrontEndVersionMiddleware:
 	Middleware that logs the front-end version as found in a request header.
 
 	Simply including this middleware will log the value of the request
-	header "CY-FrontEnd-Version". This aids debugging, showing if the FE and
-	BE are in sync. Absense of the header is not an error.
+	header "Cy-Frontend-Version". This aids debugging, showing if the FE and
+	BE are in sync. Absence of the header is not an error.
 	"""
 	def __init__(self, get_response):
 		self.get_response = get_response
@@ -122,14 +122,14 @@ class LogFrontEndSourceLocMiddleware:
 	the front-end as found in a request header.
 
 	Simply including this middleware will log the value of the request
-	header "CY-FrontEnd-SourceLoc". This aids debugging, showing where a
-	particular request originated. Absense of the header is not an error.
+	header "Cy-Frontend-Source-Loc". This aids debugging, showing where a
+	particular request originated. Absence of the header is not an error.
 	"""
 	def __init__(self, get_response):
 		self.get_response = get_response
 
 	def __call__(self, request):
-		logger.debug('front-end source location: {}'.format(request.META.get('HTTP_CY_FRONTEND_SOURCELOC')))
+		logger.debug('front-end source location: {}'.format(request.META.get('HTTP_CY_FRONTEND_SOURCE_LOC')))
 
 		response = self.get_response(request)
 		return response
