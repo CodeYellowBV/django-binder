@@ -1,6 +1,7 @@
 import logging
 import resource
 from django.conf import settings
+import json
 
 
 
@@ -66,4 +67,69 @@ class MemoryLogMiddleware:
 			after.ru_majflt - before.ru_majflt,
 			after.ru_nswap - before.ru_nswap,
 		))
+		return response
+
+
+
+class VersionHeaderMiddleware:
+	"""
+	Middleware that adds a response header to every request with the version.
+
+	The header is "CY-BackEnd-Version", and its value is a JSON object
+	containing the version number and the commit hash. e.g.:
+
+	  CY-BackEnd-Version: {"version": "2.0.1", "commit_hash": "2b50dfb"}
+
+	Simply including this middleware is enough to gain this functionality.
+	"""
+	def __init__(self, get_response):
+		self.get_response = get_response
+
+		version = getattr(settings, 'VERSION', None)
+		commit_hash = getattr(settings, 'COMMIT_HASH', None)
+
+		self.header_value = json.dumps({'version': version, 'commit_hash': commit_hash})
+
+	def __call__(self, request):
+		response = self.get_response(request)
+		response['CY-BackEnd-Version'] = self.header_value
+		return response
+
+
+
+class LogFrontEndVersionMiddleware:
+	"""
+	Middleware that logs the front-end version as found in a request header.
+
+	Simply including this middleware will log the value of the request
+	header "CY-FrontEnd-Version". This aids debugging, showing if the FE and
+	BE are in sync. Absense of the header is not an error.
+	"""
+	def __init__(self, get_response):
+		self.get_response = get_response
+
+	def __call__(self, request):
+		logger.debug('front-end version: {}'.format(request.META.get('HTTP_CY_FRONTEND_VERSION')))
+
+		response = self.get_response(request)
+		return response
+
+
+
+class LogFrontEndSourceLocMiddleware:
+	"""
+	Middleware that logs the source location of the request initiation in
+	the front-end as found in a request header.
+
+	Simply including this middleware will log the value of the request
+	header "CY-FrontEnd-SourceLoc". This aids debugging, showing where a
+	particular request originated. Absense of the header is not an error.
+	"""
+	def __init__(self, get_response):
+		self.get_response = get_response
+
+	def __call__(self, request):
+		logger.debug('front-end source location: {}'.format(request.META.get('HTTP_CY_FRONTEND_SOURCELOC')))
+
+		response = self.get_response(request)
 		return response
