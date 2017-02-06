@@ -972,7 +972,7 @@ class ModelView(View):
 		new = dict(data)
 		new.pop('_meta', None)
 
-		meta = data['_meta']
+		meta = data.get('_meta', {})
 		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
 
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
@@ -1001,7 +1001,7 @@ class ModelView(View):
 		new = dict(data)
 		new.pop('_meta', None)
 
-		meta = data['_meta']
+		meta = data.get('_meta', {})
 		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
 
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
