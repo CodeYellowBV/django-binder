@@ -1,6 +1,6 @@
 import django
 from django.urls import reverse
-
+import re
 from .exceptions import BinderRequestError, BinderCSRFFailure, BinderMethodNotAllowed
 
 
@@ -68,26 +68,39 @@ class Router(object):
 
 	def register(self, superclass):
 		for view in superclass.__subclasses__():
-			if view.register_for_model and view.model is not None:
-				if view.model in self.model_views:
-					raise ValueError('Model-View mapping conflict for {}: {} vs {}'.format(view.model, view, self.model_views[view.model]))
-				self.model_views[view.model] = view
-				self.name_models[view._model_name()] = view.model
+			meta = getattr(view, 'Meta', None)
+			if meta != None:
+				# We have a meta class. Now we just need to determine if the meta view belongs to this object
+				# or one of its parents. In the latter case, the meta class does not belong to the class itself.
+				view_qual_name = view.__qualname__
+				meta_qual_name = meta.__qualname__
+				if meta_qual_name != view_qual_name + '.Meta':
+					meta = None
 
-			if view.route is not None:
-				if isinstance(view.route, Route):
-					route = view.route
-				elif isinstance(view.route, str):
-					route = Route(view.route)
-				elif view.route is True:
-					route = Route(view._model_name())
-				else:
-					raise TypeError('{}.route'.format(view))
+			is_abstract = getattr(meta, 'abstract', False)
 
-				for r, v in self.route_views.items():
-					if r.route == route.route:
-						raise ValueError('Routing conflict for "{}": {} vs {}'.format(route.route, view, v))
-				self.route_views[route] = view
+			if not is_abstract:
+				if view.register_for_model and view.model is not None:
+					if view.model in self.model_views:
+						raise ValueError('Model-View mapping conflict for {}: {} vs {}'.format(view.model, view, self.model_views[view.model]))
+
+					self.model_views[view.model] = view
+					self.name_models[view._model_name()] = view.model
+
+				if view.route is not None:
+					if isinstance(view.route, Route):
+						route = view.route
+					elif isinstance(view.route, str):
+						route = Route(view.route)
+					elif view.route is True:
+						route = Route(view._model_name())
+					else:
+						raise TypeError('{}.route'.format(view))
+
+					for r, v in self.route_views.items():
+						if r.route == route.route:
+							raise ValueError('Routing conflict for "{}": {} vs {}'.format(route.route, view, v))
+					self.route_views[route] = view
 
 			self.register(view)
 
