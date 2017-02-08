@@ -297,7 +297,7 @@ class ModelView(View):
 		# FIXME: delegate this to a router or something
 		for view, with_ids in extras.items():
 			view = view()
-			os = view._get_objs(view.model.objects.filter(id__in=with_ids))
+			os = view._get_objs(view.model.objects.filter(id__in=with_ids), request=request)
 			extras_dict[view._model_name()] = os
 		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
 
@@ -973,7 +973,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
@@ -1002,7 +1002,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
