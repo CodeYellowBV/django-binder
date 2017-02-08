@@ -210,7 +210,7 @@ class ModelView(View):
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_objs(self, queryset, request=None):
+	def _get_objs(self, queryset, request):
 		# Create a dictionary of {field name: {this object id: [related object ids]}}
 		# (one query per field for performance)
 		m2m_ids = {}
@@ -260,7 +260,7 @@ class ModelView(View):
 	# Kinda like model_to_dict()
 	# Fetches the object specified by <id>, and returns a dictionary.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_obj(self, id, request=None):
+	def _get_obj(self, id, request):
 		return self._get_objs(self.model.objects.filter(pk=id), request=request)[0]
 
 
@@ -269,7 +269,7 @@ class ModelView(View):
 	# returns two dictionaries:
 	# - withs: { related_modal_name: [ids]}
 	# - mappings: { with_name: related_model_name}
-	def _get_withs(self, ids, withs=None, request=None):
+	def _get_withs(self, ids, withs, request):
 		if withs is None and request is not None:
 			withs = list(filter(None, request.GET.get('with', '').split(',')))
 
@@ -333,7 +333,7 @@ class ModelView(View):
 
 
 
-	def _get_with(self, wth, ids, request=None):
+	def _get_with(self, wth, ids, request):
 		head, *tail = wth.split('.')
 
 		next = self._follow_related(head)[0].model
@@ -463,7 +463,7 @@ class ModelView(View):
 
 
 
-	def search(self, queryset, search, request=None):
+	def search(self, queryset, search, request):
 		if not search:
 			return queryset
 
@@ -483,7 +483,7 @@ class ModelView(View):
 
 
 
-	def filter_deleted(self, queryset, pk, deleted, request=None):
+	def filter_deleted(self, queryset, pk, deleted, request):
 		if pk:
 			return queryset
 
@@ -1039,7 +1039,7 @@ class ModelView(View):
 
 
 
-	def soft_delete(self, obj, undelete=False, request=None):
+	def soft_delete(self, obj, undelete, request):
 		try:
 			if obj.deleted and not undelete:
 				raise BinderIsDeleted()
@@ -1174,7 +1174,7 @@ class ModelView(View):
 
 
 
-	def filefield_get_name(self, instance=None, request=None, file_field=None):
+	def filefield_get_name(self, instance=None, file_field=None):
 		try:
 			method = getattr(self, 'filefield_get_name_' + file_field.field.name)
 		except AttributeError:
