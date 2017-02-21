@@ -915,7 +915,7 @@ class ModelView(View):
 
 			if oid >= 0:
 				try:
-					obj = model.objects.get(pk=oid)
+					obj = model.objects.select_for_update().get(pk=oid)
 				except ObjectDoesNotExist:
 					raise BinderNotFound('{}[{}]'.format(model.__name__, oid))
 				if hasattr(obj, 'deleted') and obj.deleted:
@@ -963,7 +963,7 @@ class ModelView(View):
 		values = jsonloads(request.body)
 
 		try:
-			obj = self.model.objects.get(pk=int(pk))
+			obj = self.model.objects.select_for_update().get(pk=int(pk))
 			old = self._get_obj(int(pk), request)
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
@@ -1032,7 +1032,7 @@ class ModelView(View):
 			pass
 
 		try:
-			obj = self.model.objects.get(pk=int(pk))
+			obj = self.model.objects.select_for_update().get(pk=int(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
