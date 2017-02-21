@@ -534,8 +534,12 @@ class ModelView(View):
 
 		return queryset
 
+
+
 	def get_queryset(self, request):
 		return self.model.objects.all()
+
+
 
 	def get(self, request, pk=None, withs=None):
 		meta = {}
