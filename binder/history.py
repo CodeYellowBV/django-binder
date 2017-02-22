@@ -126,9 +126,11 @@ def commit():
 	if not Transaction.changes:
 		return
 
+	user = Transaction.user if Transaction.user and not Transaction.user.is_anonymous else None
+
 	changeset = Changeset(
 		source=Transaction.source,
-		user=Transaction.user,
+		user=user,
 		date=Transaction.date,
 		uuid=Transaction.uuid,
 	)
