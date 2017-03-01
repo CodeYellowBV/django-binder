@@ -432,7 +432,11 @@ class ModelView(View):
 					.format(field.__class__.__name__, self.model.__name__, head))
 
 		if qualifier not in ('in', 'range'):
-			clean_value = clean_value[0]
+			try:
+				clean_value = clean_value[0]
+			except IndexError:
+				raise BinderRequestError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.model.__name__, head))
+
 
 		if qualifier not in allowed_qualifiers:
 			raise BinderRequestError('Qualifier {} not supported for type {} ({{{}}}.{{{}}}).'
