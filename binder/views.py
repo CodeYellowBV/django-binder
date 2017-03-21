@@ -1062,7 +1062,11 @@ class ModelView(View):
 			if not obj.deleted and undelete:
 				raise BinderIsNotDeleted()
 		except AttributeError:
-			raise BinderMethodNotAllowed()
+			if undelete: # Should never happen
+				raise BinderMethodNotAllowed()
+			else:
+				obj.delete()
+				return
 
 		obj.deleted = not undelete
 		obj.save()
