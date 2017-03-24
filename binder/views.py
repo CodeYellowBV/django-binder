@@ -405,8 +405,19 @@ class ModelView(View):
 				except ValueError:
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
-		elif isinstance(field, models.DateField) or isinstance(field, models.DateTimeField):
-			# FIXME: fix date/datetime issues. Maybe allow __startswith? And __year etc?
+		elif isinstance(field, models.DateTimeField):
+			# Maybe allow __startswith? And __year etc?
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+			for v in values:
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
+				if v == '':
+					continue
+				if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})?)?$', v):
+					raise BinderRequestError('Invalid YYYY-MM-DDTHH:MM:SS(.mmm)ZONE value {{{}}} for {} {{{}}}.{{{}}}.'
+							.format(v, field.__class__.__name__, self.model.__name__, head))
+			clean_value = values
+		elif isinstance(field, models.DateField):
+			# Maybe allow __startswith? And __year etc?
 			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
 			for v in values:
 				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
