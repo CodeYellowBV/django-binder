@@ -3,7 +3,7 @@ from django.db import connection
 
 from django.test import TestCase, Client
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 from binder.json import jsonloads
 from binder.history import Change, Changeset
@@ -43,7 +43,7 @@ class HistoryTest(TestCase):
 		self.assertEqual(1, Changeset.objects.count())
 		cs = Changeset.objects.get()
 		self.assertEqual('testuser', cs.user.username)
-		self.assertAlmostEqual(datetime.now(), cs.date, delta=timedelta(seconds=1))
+		self.assertAlmostEqual(datetime.now(tz=timezone.utc), cs.date, delta=timedelta(seconds=1))
 
 		self.assertEqual(5, Change.objects.count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='name', before='null', after='"Daffy Duck"').count())
@@ -81,7 +81,7 @@ class HistoryTest(TestCase):
 		self.assertEqual(1, Changeset.objects.count())
 		cs = Changeset.objects.get()
 		self.assertEqual('testuser', cs.user.username)
-		self.assertAlmostEqual(datetime.now(), cs.date, delta=timedelta(seconds=1))
+		self.assertAlmostEqual(datetime.now(tz=timezone.utc), cs.date, delta=timedelta(seconds=1))
 
 		self.assertEqual(1, Change.objects.count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='name', before='"Daffy Duck"', after='"Daffy THE Duck"').count())
@@ -117,7 +117,7 @@ class HistoryTest(TestCase):
 		self.assertEqual(1, Changeset.objects.count())
 		cs = Changeset.objects.get()
 		self.assertEqual('testuser', cs.user.username)
-		self.assertAlmostEqual(datetime.now(), cs.date, delta=timedelta(seconds=1))
+		self.assertAlmostEqual(datetime.now(tz=timezone.utc), cs.date, delta=timedelta(seconds=1))
 
 		self.assertEqual(2, Change.objects.count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='name', before='"Pluto"', after='"Pluto the dog"').count())
