@@ -126,7 +126,11 @@ class PermissionView(ModelView):
 				if Scope.DELETE not in scopes:
 					raise PermissionError('No delete scoping done!')
 			else:
-				if Scope.ADD not in scopes and Scope.CHANGE not in scopes:
+				# NOTE: The DELETE here is actually for undeletes.  We
+				# could use CHANGE scope in delete() if undelete=True,
+				# but it makes more sense that delete and undelete are
+				# both allowed iff you have "delete" permission.
+				if Scope.ADD not in scopes and Scope.CHANGE not in scopes and Scope.DELETE not in scopes:
 					raise PermissionError('No change or add scoping done!')
 		return result
 
