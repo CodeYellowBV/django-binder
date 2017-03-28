@@ -30,6 +30,7 @@ settings.configure(**{
 		'contenttypes': None,
 		'binder': None,
 	},
+	'USE_TZ': True,
 	'ROOT_URLCONF': 'tests.testapp.urls',
 	'LOGGING': {
 		'version': 1,

@@ -374,8 +374,7 @@ class ModelView(View):
 
 		clean_value = []
 
-		# FIXME: Support __isnull?
-		if qualifier in ('in', 'range'):
+		if qualifier in ('in', 'range', 'isnull'):
 			values = value.split(',')
 			if qualifier == 'range':
 				if len(values) != 2:
@@ -385,9 +384,9 @@ class ModelView(View):
 			values = [value]
 
 		if isinstance(field, models.IntegerField) or isinstance(field, models.ForeignKey) or isinstance(field, models.AutoField):
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
 			for v in values:
-				# Filter out empty strings, they make no sense in this context, and are likely caused by ?.some_int:in=
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
 				if v == '':
 					continue
 				try:
@@ -396,9 +395,9 @@ class ModelView(View):
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
 		elif isinstance(field, models.FloatField):
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
 			for v in values:
-				# Filter out empty strings
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
 				if v == '':
 					continue
 				try:
@@ -406,17 +405,34 @@ class ModelView(View):
 				except ValueError:
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
-		elif isinstance(field, models.DateField) or isinstance(field, models.DateTimeField):
-			# FIXME: fix date/datetime issues. Maybe allow __startswith? And __year etc?
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
+		elif isinstance(field, models.DateTimeField):
+			# Maybe allow __startswith? And __year etc?
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
 			for v in values:
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
+				if v == '':
+					continue
+				if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})?)?$', v):
+					raise BinderRequestError('Invalid YYYY-MM-DDTHH:MM:SS(.mmm)ZONE value {{{}}} for {} {{{}}}.{{{}}}.'
+							.format(v, field.__class__.__name__, self.model.__name__, head))
+			clean_value = values
+		elif isinstance(field, models.DateField):
+			# Maybe allow __startswith? And __year etc?
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+			for v in values:
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
+				if v == '':
+					continue
 				if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', v):
 					raise BinderRequestError('Invalid YYYY-MM-DD value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
 			clean_value = values
 		elif isinstance(field, models.BooleanField):
-			allowed_qualifiers = (None,)
+			allowed_qualifiers = (None, 'isnull')
 			for v in values:
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
+				if v == '':
+					continue
 				if v == 'true':
 					clean_value.append(True)
 				elif v == 'false':
@@ -425,14 +441,21 @@ class ModelView(View):
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
 		elif isinstance(field, models.CharField) or isinstance(field, models.TextField):
-			allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search')
+			allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search', 'isnull')
 			clean_value = values
 		else:
 			raise BinderRequestError('Filtering not supported for type {} ({{{}}}.{{{}}}).'
 					.format(field.__class__.__name__, self.model.__name__, head))
 
-		if qualifier not in ('in', 'range'):
-			clean_value = clean_value[0]
+		if qualifier == 'isnull':
+			clean_value=True
+		elif qualifier in ('in', 'range'):
+			pass
+		else:
+			try:
+				clean_value = clean_value[0]
+			except IndexError:
+				raise BinderRequestError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.model.__name__, head))
 
 		if qualifier not in allowed_qualifiers:
 			raise BinderRequestError('Qualifier {} not supported for type {} ({{{}}}.{{{}}}).'
@@ -534,8 +557,12 @@ class ModelView(View):
 
 		return queryset
 
+
+
 	def get_queryset(self, request):
 		return self.model.objects.all()
+
+
 
 	def get(self, request, pk=None, withs=None):
 		meta = {}
@@ -1046,7 +1073,11 @@ class ModelView(View):
 			if not obj.deleted and undelete:
 				raise BinderIsNotDeleted()
 		except AttributeError:
-			raise BinderMethodNotAllowed()
+			if undelete: # Should never happen
+				raise BinderMethodNotAllowed()
+			else:
+				obj.delete()
+				return
 
 		obj.deleted = not undelete
 		obj.save()
