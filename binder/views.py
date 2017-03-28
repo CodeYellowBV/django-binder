@@ -177,6 +177,7 @@ class ModelView(View):
 		except BinderException as e:
 			e.log()
 			response = e.response(request=request)
+			history.abort()
 
 		logger.info('request response; status={} time={}ms bytes={} queries={}'.
 				format(
