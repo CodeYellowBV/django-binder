@@ -255,7 +255,7 @@ class PermissionView(ModelView):
 		if len(object) == 0:
 			raise BinderNotFound()
 
-		self.scope_delete(request, object, [])
+		self.scope_delete(request, object, {})
 
 		return super().delete(request, pk, undelete)
 
