@@ -225,6 +225,8 @@ class PermissionView(ModelView):
 	def scope_change_list(self, request, objects, values):
 		for o in objects:
 			self.scope_change(request, o, values)
+		else:
+			setattr(request, '_has_permission_check', True)
 		self._save_scope(request, Scope.CHANGE)
 
 	def scope_view(self, request, queryset):
