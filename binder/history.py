@@ -156,6 +156,14 @@ def commit():
 
 
 
+def abort():
+	if not Transaction.started:
+		logger.error('Transaction abort: no open transaction')
+	Transaction.started = False
+	Transaction.changes.clear()
+
+
+
 def view_changesets(request, changesets):
 	data = []
 	userids = set()
