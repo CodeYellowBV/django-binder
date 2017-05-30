@@ -211,7 +211,7 @@ class ModelView(View):
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_objs(self, queryset, request=None):
+	def _get_objs(self, queryset, request):
 		# Create a dictionary of {field name: {this object id: [related object ids]}}
 		# (one query per field for performance)
 		m2m_ids = {}
@@ -261,7 +261,7 @@ class ModelView(View):
 	# Kinda like model_to_dict()
 	# Fetches the object specified by <id>, and returns a dictionary.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_obj(self, id, request=None):
+	def _get_obj(self, id, request):
 		return self._get_objs(self.model.objects.filter(pk=id), request=request)[0]
 
 
@@ -270,7 +270,7 @@ class ModelView(View):
 	# returns two dictionaries:
 	# - withs: { related_modal_name: [ids]}
 	# - mappings: { with_name: related_model_name}
-	def _get_withs(self, ids, withs=None, request=None):
+	def _get_withs(self, ids, withs, request):
 		if withs is None and request is not None:
 			withs = list(filter(None, request.GET.get('with', '').split(',')))
 
@@ -298,7 +298,7 @@ class ModelView(View):
 		# FIXME: delegate this to a router or something
 		for view, with_ids in extras.items():
 			view = view()
-			os = view._get_objs(view.model.objects.filter(id__in=with_ids))
+			os = view._get_objs(view.model.objects.filter(id__in=with_ids), request=request)
 			extras_dict[view._model_name()] = os
 		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
 
@@ -334,7 +334,7 @@ class ModelView(View):
 
 
 
-	def _get_with(self, wth, ids, request=None):
+	def _get_with(self, wth, ids, request):
 		head, *tail = wth.split('.')
 
 		next = self._follow_related(head)[0].model
@@ -487,7 +487,7 @@ class ModelView(View):
 
 
 
-	def search(self, queryset, search, request=None):
+	def search(self, queryset, search, request):
 		if not search:
 			return queryset
 
@@ -507,7 +507,7 @@ class ModelView(View):
 
 
 
-	def filter_deleted(self, queryset, pk, deleted, request=None):
+	def filter_deleted(self, queryset, pk, deleted, request):
 		if pk:
 			return queryset
 
@@ -1001,7 +1001,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
@@ -1030,7 +1030,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
@@ -1067,7 +1067,7 @@ class ModelView(View):
 
 
 
-	def soft_delete(self, obj, undelete=False, request=None):
+	def soft_delete(self, obj, undelete, request):
 		try:
 			if obj.deleted and not undelete:
 				raise BinderIsDeleted()
