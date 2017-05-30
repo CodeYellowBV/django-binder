@@ -22,7 +22,7 @@ from django.db import transaction
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from .router import Router
 from . import history
-from .json import JsonResponse, jsonloads, jsondumps
+from .json import JsonResponse, jsonloads, jsondumps  # noqa: F401
 
 
 
@@ -449,7 +449,7 @@ class ModelView(View):
 					.format(field.__class__.__name__, self.model.__name__, head))
 
 		if qualifier == 'isnull':
-			clean_value=True
+			clean_value = True
 		elif qualifier in ('in', 'range'):
 			pass
 		else:
@@ -703,7 +703,7 @@ class ModelView(View):
 					if obj_field.field.null:
 						setattr(rmobj, obj_field.field.name, None)
 					elif hasattr(rmobj, 'deleted'):
-						if rmobj.deleted == False:
+						if not rmobj.deleted:
 							rmobj.deleted = True
 							rmobj.save()
 					else:
@@ -1074,7 +1074,7 @@ class ModelView(View):
 			if not obj.deleted and undelete:
 				raise BinderIsNotDeleted()
 		except AttributeError:
-			if undelete: # Should never happen
+			if undelete:  # Should never happen
 				raise BinderMethodNotAllowed()
 			else:
 				obj.delete()
