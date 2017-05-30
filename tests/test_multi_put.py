@@ -250,5 +250,5 @@ class MultiPutTest(TestCase):
 
 		self.assertEqual(response.status_code, 200)
 
-		scooby = Animal.objects.get(pk=scooby_pk).refresh_from_db()
+		scooby = Animal.objects.get(pk=scooby_pk)
 		self.assertEqual(None, scooby.zoo)
