@@ -1174,7 +1174,7 @@ class ModelView(View):
 
 
 
-	def filefield_get_name(self, instance=None, file_field=None):
+	def filefield_get_name(self, instance=None, request=None, file_field=None):
 		try:
 			method = getattr(self, 'filefield_get_name_' + file_field.field.name)
 		except AttributeError:
