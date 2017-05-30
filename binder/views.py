@@ -13,6 +13,7 @@ import django
 from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
+from django.http.request import RawPostDataException
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -153,7 +154,7 @@ class ModelView(View):
 					body = ': ' + ellipsize(request.body, length=65536)
 				else:
 					body = ': ' + ellipsize(request.body, length=64)
-			except ValueError:
+			except RawPostDataException:
 				body = ' unavailable.'
 
 		logger.debug('body (content-type={}){}'.format(request.META.get('CONTENT_TYPE'), body))
@@ -180,6 +181,7 @@ class ModelView(View):
 		except BinderException as e:
 			e.log()
 			response = e.response(request=request)
+			history.abort()
 
 		logger.info('request response; status={} time={}ms bytes={} queries={}'.
 				format(
@@ -269,8 +271,13 @@ class ModelView(View):
 
 
 	# Find which objects of which models to include according to <withs> for the objects in <queryset>.
-	# returns a dictionary of {related view class: {ids}}.
-	def _get_withs(self, withs, ids, request=None):
+	# returns two dictionaries:
+	# - withs: { related_modal_name: [ids]}
+	# - mappings: { with_name: related_model_name}
+	def _get_withs(self, ids, withs=None, request=None):
+		if withs is None and request is not None:
+			withs = list(filter(None, request.GET.get('with', '').split(',')))
+
 		if isinstance(ids, django.db.models.query.QuerySet):
 			ids = ids.values_list('id', flat=True)
 		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
@@ -291,7 +298,15 @@ class ModelView(View):
 				extras_mapping[w] = view
 				extras[view].update(set(new_ids))
 
-		return (extras, extras_mapping)
+		extras_dict = {}
+		# FIXME: delegate this to a router or something
+		for view, with_ids in extras.items():
+			view = view()
+			os = view._get_objs(view.model.objects.filter(id__in=with_ids))
+			extras_dict[view._model_name()] = os
+		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
+
+		return (extras_dict, extras_mapping_dict)
 
 
 
@@ -364,8 +379,7 @@ class ModelView(View):
 
 		clean_value = []
 
-		# FIXME: Support __isnull?
-		if qualifier in ('in', 'range'):
+		if qualifier in ('in', 'range', 'isnull'):
 			values = value.split(',')
 			if qualifier == 'range':
 				if len(values) != 2:
@@ -375,9 +389,9 @@ class ModelView(View):
 			values = [value]
 
 		if isinstance(field, models.IntegerField) or isinstance(field, models.ForeignKey) or isinstance(field, models.AutoField):
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
 			for v in values:
-				# Filter out empty strings, they make no sense in this context, and are likely caused by ?.some_int:in=
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
 				if v == '':
 					continue
 				try:
@@ -386,9 +400,9 @@ class ModelView(View):
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
 		elif isinstance(field, models.FloatField):
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
 			for v in values:
-				# Filter out empty strings
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
 				if v == '':
 					continue
 				try:
@@ -396,17 +410,34 @@ class ModelView(View):
 				except ValueError:
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
-		elif isinstance(field, models.DateField) or isinstance(field, models.DateTimeField):
-			# FIXME: fix date/datetime issues. Maybe allow __startswith? And __year etc?
-			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range')
+		elif isinstance(field, models.DateTimeField):
+			# Maybe allow __startswith? And __year etc?
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
 			for v in values:
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
+				if v == '':
+					continue
+				if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})?)?$', v):
+					raise BinderRequestError('Invalid YYYY-MM-DDTHH:MM:SS(.mmm)ZONE value {{{}}} for {} {{{}}}.{{{}}}.'
+							.format(v, field.__class__.__name__, self.model.__name__, head))
+			clean_value = values
+		elif isinstance(field, models.DateField):
+			# Maybe allow __startswith? And __year etc?
+			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+			for v in values:
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
+				if v == '':
+					continue
 				if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', v):
 					raise BinderRequestError('Invalid YYYY-MM-DD value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
 			clean_value = values
 		elif isinstance(field, models.BooleanField):
-			allowed_qualifiers = (None,)
+			allowed_qualifiers = (None, 'isnull')
 			for v in values:
+				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
+				if v == '':
+					continue
 				if v == 'true':
 					clean_value.append(True)
 				elif v == 'false':
@@ -415,14 +446,21 @@ class ModelView(View):
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
 		elif isinstance(field, models.CharField) or isinstance(field, models.TextField):
-			allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search')
+			allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search', 'isnull')
 			clean_value = values
 		else:
 			raise BinderRequestError('Filtering not supported for type {} ({{{}}}.{{{}}}).'
 					.format(field.__class__.__name__, self.model.__name__, head))
 
-		if qualifier not in ('in', 'range'):
-			clean_value = clean_value[0]
+		if qualifier == 'isnull':
+			clean_value=True
+		elif qualifier in ('in', 'range'):
+			pass
+		else:
+			try:
+				clean_value = clean_value[0]
+			except IndexError:
+				raise BinderRequestError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.model.__name__, head))
 
 		if qualifier not in allowed_qualifiers:
 			raise BinderRequestError('Qualifier {} not supported for type {} ({{{}}}.{{{}}}).'
@@ -524,8 +562,12 @@ class ModelView(View):
 
 		return queryset
 
+
+
 	def get_queryset(self, request):
 		return self.model.objects.all()
+
+
 
 	def get(self, request, pk=None, withs=None):
 		meta = {}
@@ -569,16 +611,7 @@ class ModelView(View):
 		queryset = self._paginate(queryset, request)
 
 		#### with
-		if withs is None:
-			withs = list(filter(None, request.GET.get('with', '').split(',')))
-		raw_extras, extras_mapping = self._get_withs(withs, queryset, request=request)
-		extras = {}
-		# FIXME: delegate this to a router or something
-		for view, with_ids in raw_extras.items():
-			view = view()
-			os = view._get_objs(view.model.objects.filter(id__in=with_ids))
-			extras[view._model_name()] = os
-		extras_mapping = {fk: view()._model_name() for fk, view in extras_mapping.items()}
+		extras, extras_mapping = self._get_withs(queryset, withs, request=request)
 
 		data = self._get_objs(queryset, request=request)
 		if pk:
@@ -727,6 +760,13 @@ class ModelView(View):
 							value = int(value)
 						except ValueError:
 							raise BinderValidationError({f.name: ['This value must be an integral number.']}, object=obj)
+					setattr(obj, f.attname, value)
+				elif isinstance(f, models.TextField):
+					# Django doesn't enforce max_length on TextFields, so we do.
+					if f.max_length is not None:
+						if len(value) > f.max_length:
+							msg = 'Ensure this value has at most {} characters (it has {}).'.format(f.max_length, len(value))
+							raise BinderValidationError({f.name: [msg]}, object=obj)
 					setattr(obj, f.attname, value)
 				else:
 					try:
@@ -878,18 +918,23 @@ class ModelView(View):
 						if (model, mid) != (r_model, r_id):
 							dependencies[(model, mid)].add((r_model, r_id))
 
+		# Actually sort the objects by dependency (and within dependency layer by model/id)
 		ordered_objects = []
 		while dependencies:
-			before = len(dependencies)
-			for obj, deps in list(dependencies.items()):
+			this_batch = []
+			# NOTE: careful. This code makes a deep copy of the dependency list, so the dependency
+			# data the for iterates over is stable. The body of the loop modifies <dependencies>,
+			# so without the deep copy this leads to nasty surprises.
+			for obj, deps in [(k, set(v)) for k, v in dependencies.items()]:
 				if not deps:
-					ordered_objects.append(obj)
+					this_batch.append(obj)
 					del dependencies[obj]
 					for d in dependencies.values():
 						if obj in d:
 							d.remove(obj)
-			if len(dependencies) == before:
+			if len(this_batch) == 0:
 				raise BinderRequestError('No progress in dependency resolution! Cyclic dependencies?')
+			ordered_objects += sorted(this_batch, key=lambda obj: (obj[0].__name__, obj[1]))
 
 		new_id_map = {}
 		for model, oid in ordered_objects:
@@ -958,6 +1003,10 @@ class ModelView(View):
 
 		new = dict(data)
 		new.pop('_meta', None)
+
+		meta = data.setdefault('_meta', {})
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
+
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
 			logger.debug('PUT ' + c)
@@ -983,6 +1032,10 @@ class ModelView(View):
 
 		new = dict(data)
 		new.pop('_meta', None)
+
+		meta = data.setdefault('_meta', {})
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
+
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
 			logger.debug('POST ' + c)
@@ -1025,7 +1078,11 @@ class ModelView(View):
 			if not obj.deleted and undelete:
 				raise BinderIsNotDeleted()
 		except AttributeError:
-			raise BinderMethodNotAllowed()
+			if undelete: # Should never happen
+				raise BinderMethodNotAllowed()
+			else:
+				obj.delete()
+				return
 
 		obj.deleted = not undelete
 		obj.save()
@@ -1166,12 +1223,14 @@ class ModelView(View):
 		if request.method != 'GET':
 			raise BinderMethodNotAllowed()
 
-		if not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
+		debug = kwargs['history'] == 'debug'
+
+		if debug and not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
 			logger.warning('Debug endpoints disabled.')
 			return HttpResponseForbidden('Debug endpoints disabled.')
 
 		changesets = history.Changeset.objects.filter(id__in=set(history.Change.objects.filter(model=self.model.__name__, oid=pk).values_list('changeset_id', flat=True)))
-		if kwargs['history'] == 'debug':
+		if debug:
 			return history.view_changesets_debug(request, changesets.order_by('-id'))
 		else:
 			return history.view_changesets(request, changesets.order_by('-id'))
@@ -1202,3 +1261,13 @@ def debug_changesets_24h(request):
 
 	changesets = history.Changeset.objects.filter(date__gte=timezone.now() - datetime.timedelta(days=1))
 	return history.view_changesets_debug(request, changesets.order_by('-id'))
+
+
+
+def handler500(request):
+	try:
+		request_id = request.request_id
+	except Exception as e:
+		request_id = str(e)
+
+	return HttpResponse('{"code": "InternalServerError", "debug": {"request_id": "' + request_id + '"}}', status=500)

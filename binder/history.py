@@ -126,9 +126,11 @@ def commit():
 	if not Transaction.changes:
 		return
 
+	user = Transaction.user if Transaction.user and not Transaction.user.is_anonymous else None
+
 	changeset = Changeset(
 		source=Transaction.source,
-		user=Transaction.user,
+		user=user,
 		date=Transaction.date,
 		uuid=Transaction.uuid,
 	)
@@ -150,6 +152,14 @@ def commit():
 		)
 		change.save()
 
+	Transaction.changes.clear()
+
+
+
+def abort():
+	if not Transaction.started:
+		logger.error('Transaction abort: no open transaction')
+	Transaction.started = False
 	Transaction.changes.clear()
 
 
