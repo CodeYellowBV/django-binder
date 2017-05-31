@@ -78,7 +78,7 @@ class VersionHeaderMiddleware:
 	The header is "Cy-Backend-Version", and its value is a JSON object
 	containing the version number and the commit hash. e.g.:
 
-	  Cy-Backend-Version: {"version": "2.0.1", "commit_hash": "2b50dfb"}
+	Cy-Backend-Version: {"version": "2.0.1", "commit_hash": "2b50dfb"}
 
 	Simply including this middleware is enough to gain this functionality.
 	"""

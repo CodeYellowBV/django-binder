@@ -20,7 +20,7 @@ class BinderJSONEncoder(json.JSONEncoder):
 		elif isinstance(obj, datetime.date):
 			return obj.isoformat()
 		elif isinstance(obj, UUID):
-			return str(obj) # Standard string notation
+			return str(obj)  # Standard string notation
 		elif isinstance(obj, set):
 			return list(obj)
 		return json.JSONEncoder.default(self, obj)
