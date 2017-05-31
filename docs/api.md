@@ -255,29 +255,6 @@ accept the following keyword options:
 - `extra_route`: An optional string suffix to append to the route. You can use named capturing groups here, just like in `urls.py`.
 
 
-## Abstract views
-Sometimes you need to define some logic in the API in more than one model view. Of course copy pasting is bad. Therefore the best solution 
-is to extend the model view. Since the router automatically adds all views, you need to define the view abstract. This can be done in a similar
-manner as Django allows models to be abstract.
-
-```python
-# This view does not get added to the router
-class AbstractView(ModelView):
-	class Meta:
-		abstract=True
-		
-	# Put your custom logic here
-
-# This class uses the custom logic from the abstract view
-# Also it is added to the router
-class ConcreteView(AbstractView):
-	model = ConcreteModel
-
-```
-
-
-
-
 TODO:
 
 - how to add custom saving logic
