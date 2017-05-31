@@ -86,7 +86,7 @@ class PermissionView(ModelView):
 			if p in self._permission_definition:
 				for permission, scope in self._permission_definition[p]:
 					if permission not in _permission_class:
-						_permission_class[permission] = [] # Permission, without any scopes
+						_permission_class[permission] = []  # Permission, without any scopes
 					if scope is not None:
 						_permission_class[permission].append(scope)
 		request._permission = _permission_class
@@ -200,8 +200,7 @@ class PermissionView(ModelView):
 			can_add |= getattr(self, scope_name)(request, object, values)
 
 		if not can_add:
-			raise ScopingError(user=request.user,
-							   perm='You do not have a scope that allows you to add model={}'.format(self.model))
+			raise ScopingError(user=request.user, perm='You do not have a scope that allows you to add model={}'.format(self.model))
 
 		self._save_scope(request, Scope.ADD)
 
@@ -278,8 +277,7 @@ class PermissionView(ModelView):
 			can_change |= getattr(self, scope_name)(request, object, values)
 
 		if not can_change:
-			raise ScopingError(user=request.user,
-							   perm='You do not have a scope that allows you to delete model={}'.format(self.model))
+			raise ScopingError(user=request.user, perm='You do not have a scope that allows you to delete model={}'.format(self.model))
 
 		self._save_scope(request, Scope.DELETE)
 
