@@ -66,6 +66,8 @@ class Router(object):
 	# FIXME: this needs to be much much better defined
 	name_models = {}
 
+
+
 	def register(self, superclass):
 		for view in superclass.__subclasses__():
 			if view.register_for_model and view.model is not None:
@@ -93,7 +95,10 @@ class Router(object):
 							raise ValueError('Routing conflict for "{}": {} vs {}'.format(route.route, view, v))
 					self.route_views[route] = view
 
+			# Recurse subclasses of this subclass, so we register all descendants.
 			self.register(view)
+
+
 
 	def model_view(self, model):
 		try:
@@ -114,6 +119,8 @@ class Router(object):
 			return '{}{}/'.format(route, pk)
 
 		return route
+
+
 
 	@property
 	def urls(self):
