@@ -30,10 +30,10 @@ import binder.router
 import binder.views
 import binder.models
 
-binder.router.Router().register(binder.views.ModelView)
+router = binder.router.Router().register(binder.views.ModelView)
 
 urlpatterns = [
-	url(r'^', include(binder.router.Router().urls)),
+	url(r'^', include(router.urls)),
 	url(r'^', binder.views.api_catchall, name='catchall'),
 ]
 
