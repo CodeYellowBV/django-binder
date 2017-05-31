@@ -52,7 +52,7 @@ RelatedModel = namedtuple('RelatedModel', 'fieldname model')
 
 
 class ModelView(View):
-	# Model this is a view for. Mandatory.
+	# Model this is a view for. Use None for views not tied to a particular model.
 	model = None
 
 	# If True, Router().model_view(model) will return this view.
@@ -62,7 +62,7 @@ class ModelView(View):
 
 	# The route name to use in the URL. String, True, or None.
 	# If string, specifies the route name.
-	# If True, uses model._model_name()
+	# If True, uses model._model_name() (model=None -> no route)
 	# If None, doesn't add a route.
 	route = True
 

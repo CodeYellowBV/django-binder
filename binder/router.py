@@ -80,14 +80,18 @@ class Router(object):
 				elif isinstance(view.route, str):
 					route = Route(view.route)
 				elif view.route is True:
-					route = Route(view._model_name())
+					if view.model is None:
+						route = None
+					else:
+						route = Route(view._model_name())
 				else:
 					raise TypeError('{}.route'.format(view))
 
-				for r, v in self.route_views.items():
-					if r.route == route.route:
-						raise ValueError('Routing conflict for "{}": {} vs {}'.format(route.route, view, v))
-				self.route_views[route] = view
+				if route:
+					for r, v in self.route_views.items():
+						if r.route == route.route:
+							raise ValueError('Routing conflict for "{}": {} vs {}'.format(route.route, view, v))
+					self.route_views[route] = view
 
 			self.register(view)
 
