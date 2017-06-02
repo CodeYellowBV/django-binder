@@ -347,15 +347,15 @@ class ModelView(View):
 
 		next = self._follow_related(head)[0].model
 		ids = list(self.model.objects.filter(id__in=ids).values_list(head + '__id', flat=True))
-		view = self.router.model_view(next)
+		view_class = self.router.model_view(next)
 
 		if not tail:
-			return (view, ids)
+			return (view_class, ids)
 		else:
-			view_instance = view()
+			view = view_class()
 			# {router-view-instance}
-			view_instance.router = self.router
-			return view()._get_with('.'.join(tail), ids, request=request)
+			view.router = self.router
+			return view._get_with('.'.join(tail), ids, request=request)
 
 
 
@@ -365,6 +365,8 @@ class ModelView(View):
 		if tail:
 			next = self._follow_related(head)[0].model
 			view = self.router.model_view(next)()
+			# {router-view-instance}
+			view.router = self.router
 			return view._parse_filter(queryset, '.'.join(tail), value, partial + head + '__')
 
 		invert = False
