@@ -6,7 +6,12 @@ from django.http import HttpResponse
 
 from .exceptions import BinderRequestError
 
-
+try:
+	from dateutil.relativedelta import relativedelta
+	from relativedeltafield import format_relativedelta
+except ImportError:
+	class relativedelta:
+		pass
 
 class BinderJSONEncoder(json.JSONEncoder):
 	def default(self, obj):
@@ -23,6 +28,8 @@ class BinderJSONEncoder(json.JSONEncoder):
 			return str(obj)  # Standard string notation
 		elif isinstance(obj, set):
 			return list(obj)
+		elif isinstance(obj, relativedelta):
+			return format_relativedelta(obj)
 		return json.JSONEncoder.default(self, obj)
 
 
