@@ -243,6 +243,7 @@ class ModelView(View):
 				if isinstance(f, models.fields.files.FileField):
 					file = getattr(obj, f.attname)
 					if file:
+						# {router-view-instance}
 						data[f.name] = self.router.model_route(self.model, obj.id, f)
 					else:
 						data[f.name] = None
@@ -301,6 +302,8 @@ class ModelView(View):
 		# FIXME: delegate this to a router or something
 		for view, with_ids in extras.items():
 			view = view()
+			# {router-view-instance}
+			view.router = self.router
 			os = view._get_objs(view.model.objects.filter(id__in=with_ids), request=request)
 			extras_dict[view._model_name()] = os
 		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
