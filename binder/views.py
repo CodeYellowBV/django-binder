@@ -333,7 +333,12 @@ class ModelView(View):
 			# Forward relations
 			related_model = field.remote_field.model
 
-		return (RelatedModel(fieldname, related_model),) + self.router.model_view(related_model)()._follow_related(fieldspec)
+		# {router-view-instance}
+		# TODO: This should be refactored so that router
+		# returns an instance which has the router set on it.
+		view = self.router.model_view(related_model)()
+		view.router = self.router
+		return (RelatedModel(fieldname, related_model),) + view._follow_related(fieldspec)
 
 
 
@@ -347,6 +352,9 @@ class ModelView(View):
 		if not tail:
 			return (view, ids)
 		else:
+			view_instance = view()
+			# {router-view-instance}
+			view_instance.router = self.router
 			return view()._get_with('.'.join(tail), ids, request=request)
 
 
@@ -479,6 +487,8 @@ class ModelView(View):
 		if tail:
 			next = self._follow_related(head)[0].model
 			view = self.router.model_view(next)()
+			# {router-view-instance}
+			view.router = self.router
 			return view._parse_order_by(queryset, '.'.join(tail), partial + head + '__')
 
 		try:

@@ -337,6 +337,42 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['animal'])
 
 
+	def test_get_collection_filtering_following_nested_references(self):
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.full_clean()
+		emmen.save()
+
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		scrooge = Animal(name='Scrooge McDuck', zoo=gaia)
+		scrooge.full_clean()
+		scrooge.save()
+
+		frock = Costume(description="Gentleman's frock coat", animal=scrooge)
+		frock.full_clean()
+		frock.save()
+
+		donald = Animal(name='Donald Duck', zoo=emmen)
+		donald.full_clean()
+		donald.save()
+
+		sailor = Costume(description='Weird sailor costume', animal=donald)
+		sailor.full_clean()
+		sailor.save()
+
+
+		response = self.client.get('/costume/', data={'order_by': 'animal.zoo.name'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
+
+		self.assertEqual(frock.pk, result['data'][0]['id']) # G
+		self.assertEqual(sailor.pk, result['data'][1]['id']) # W
+
+
 	def test_post_new_model_with_foreign_key_value(self):
 		artis = Zoo(name='Artis')
 		artis.full_clean()
