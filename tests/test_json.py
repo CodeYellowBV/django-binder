@@ -57,4 +57,4 @@ class JsonTest(TestCase):
 
 	def test_decimals_dump_correctly(self):
 		u = Decimal('1.1')
-		self.assertEqual('[1.1]', binder_json.jsondumps([u]))
+		self.assertEqual('["1.1"]', binder_json.jsondumps([u]))

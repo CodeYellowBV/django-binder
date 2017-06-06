@@ -25,14 +25,12 @@ class BinderJSONEncoder(json.JSONEncoder):
 			return obj.strftime("%Y-%m-%dT%H:%M:%S.%f") + tz
 		elif isinstance(obj, datetime.date):
 			return obj.isoformat()
-		elif isinstance(obj, UUID):
+		elif isinstance(obj, (UUID, Decimal)):
 			return str(obj)  # Standard string notation
 		elif isinstance(obj, set):
 			return list(obj)
 		elif isinstance(obj, relativedelta):
 			return format_relativedelta(obj)
-		elif isinstance(obj, Decimal):
-			return float(obj)
 		return json.JSONEncoder.default(self, obj)
 
 
