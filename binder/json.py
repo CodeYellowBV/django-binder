@@ -1,6 +1,7 @@
 import json
 import datetime
 from uuid import UUID
+from decimal import Decimal
 
 from django.http import HttpResponse
 
@@ -30,6 +31,8 @@ class BinderJSONEncoder(json.JSONEncoder):
 			return list(obj)
 		elif isinstance(obj, relativedelta):
 			return format_relativedelta(obj)
+		elif isinstance(obj, Decimal):
+			return float(obj)
 		return json.JSONEncoder.default(self, obj)
 
 
