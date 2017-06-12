@@ -6,3 +6,4 @@ from ..models import Zoo
 class ZooView(ModelView):
 	m2m_fields = ['animals']
 	model = Zoo
+	file_fields = ['floor_plan']

@@ -76,3 +76,22 @@ class FileUploadTest(TestCase):
 		self.assertEqual(emmen.id, zoo['id'])
 		self.assertEqual(emmen.name, zoo['name'], 'Wildlands Adventure Zoo Emmen')
 		self.assertEqual('/zoo/%d/floor_plan/' % emmen.id, zoo['floor_plan'])
+
+
+	# Same as above, but in multi-put's code path
+	def test_multi_put_model_with_existing_file(self):
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+
+		file = temp_imagefile(100, 200, 'jpeg')
+		emmen.floor_plan.save('plan.jpg', File(file), save=False)
+		emmen.save()
+
+		model_data = {
+			'data': [{
+				'id': emmen.id,
+				'name': 'Wildlands!',
+			}]
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
