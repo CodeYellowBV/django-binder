@@ -983,7 +983,10 @@ class ModelView(View):
 				if field.name in values:
 					values[field.name] = [multiput_get_id(i) for i in values[field.name] if multiput_get_id(i) >= 0]
 
-			self.router.model_view(model)()._store(obj, values, request)
+			view = self.router.model_view(model)()
+			# {router-view-instance}
+			view.router = self.router
+			view._store(obj, values, request)
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))

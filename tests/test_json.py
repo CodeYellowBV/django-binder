@@ -2,6 +2,7 @@ import json as python_core_json
 
 from datetime import datetime, date
 from uuid import UUID
+from decimal import Decimal
 from django.test import TestCase
 
 import binder.json as binder_json
@@ -53,3 +54,7 @@ class JsonTest(TestCase):
 	def test_uuids_dump_correctly(self):
 		u = UUID('{12345678-1234-5678-1234-567812345678}')
 		self.assertEqual('["12345678-1234-5678-1234-567812345678"]', binder_json.jsondumps([u]))
+
+	def test_decimals_dump_correctly(self):
+		u = Decimal('1.1')
+		self.assertEqual('["1.1"]', binder_json.jsondumps([u]))
