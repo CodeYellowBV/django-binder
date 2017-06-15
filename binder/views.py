@@ -1111,7 +1111,7 @@ class ModelView(View):
 			raise BinderMethodNotAllowed()
 
 		try:
-			obj = self.model.objects.get(pk=int(pk))
+			obj = self.get_queryset(request).get(pk=int(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
