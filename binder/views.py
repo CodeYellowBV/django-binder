@@ -1111,7 +1111,6 @@ class ModelView(View):
 			raise BinderMethodNotAllowed()
 
 		try:
-			self._require_model_perm('view', request)
 			obj = self.get_queryset(request).get(pk=int(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
