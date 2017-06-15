@@ -1112,7 +1112,7 @@ class ModelView(View):
 
 		try:
 			self._require_model_perm('view', request)
-			obj = self.model.objects.get(pk=int(pk))
+			obj = self.get_queryset(request).get(pk=int(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
