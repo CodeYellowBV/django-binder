@@ -34,9 +34,6 @@ class PermissionView(ModelView):
 	def _permission_definition(self):
 		return settings.BINDER_PERMISSION
 
-	def _get_objs(self, queryset, request):
-		return super()._get_objs(queryset, request)
-
 	def get_queryset(self, request):
 		queryset = self.model.objects
 		return self.scope_view(request, queryset)
