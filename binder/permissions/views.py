@@ -30,9 +30,6 @@ class Scope(Enum):
 
 
 class PermissionView(ModelView):
-	class Meta:
-		abstract = True
-
 	@property
 	def _permission_definition(self):
 		return settings.BINDER_PERMISSION
