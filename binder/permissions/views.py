@@ -1,25 +1,32 @@
-from binder.views import ModelView
+import logging
+rom enum import Enum
+
 from django.db import transaction
 from django.db.models import Q
-from binder.exceptions import BinderForbidden, BinderNotFound
 from django.conf import settings
 
-import logging
+from binder.exceptions import BinderForbidden, BinderNotFound
+from binder.views import ModelView
 
-from enum import Enum
 
 
 logger = logging.getLogger(__name__)
 
+
+
 class PermissionNotCheckedError(Exception):
 	pass
+
+
 
 class ScopingError(BinderForbidden):
 	pass
 
 
+
 class UnexpectedScopeException(Exception):
 	pass
+
 
 
 class Scope(Enum):
@@ -29,19 +36,24 @@ class Scope(Enum):
 	DELETE = 'delete'
 
 
+
 class PermissionView(ModelView):
 	@property
 	def _permission_definition(self):
 		return settings.BINDER_PERMISSION
 
+
+
 	def get_queryset(self, request):
 		queryset = self.model.objects
 		return self.scope_view(request, queryset)
 
+
+
 	def _require_model_perm(self, perm_type, request, pk=None):
-		'''
+		"""
 		Check if you have a model permission, and return the scopes
-		'''
+		"""
 		if hasattr(self, 'perms_via'):
 			model = self.perms_via
 		else:
@@ -67,10 +79,12 @@ class PermissionView(ModelView):
 							'change and delete'.format(perm_type))
 		return scopes
 
+
+
 	def _parse_permissions(self, request):
-		'''
+		"""
 		Translate high level permissions to low level permissions on the request
-		'''
+		"""
 		permissions = request.user.get_all_permissions()
 		permissions.add('default')
 
@@ -85,20 +99,24 @@ class PermissionView(ModelView):
 						_permission_class[permission].append(scope)
 		request._permission = _permission_class
 
+
+
 	def _has_one_of_permissions(self, request, permissions):
-		'''
+		"""
 		Check if we have one of a set of permissions
-		'''
+		"""
 		for p in permissions:
 			if request.user.has_perm(p):
 				logger.debug('passed permission check: {}'.format(p))
 				return True
 		return False
 
+
+
 	def dispatch(self, request, *args, **kwargs):
-		'''
-		make sure that permissions are checked, and scoping is done
-		'''
+		"""
+		Make sure that permissions are checked, and scoping is done
+		"""
 		setattr(request, '_has_permission_check', False)
 		with transaction.atomic():
 			result = super().dispatch(request, *args, **kwargs)
@@ -128,10 +146,12 @@ class PermissionView(ModelView):
 					raise PermissionError('No change or add scoping done!')
 		return result
 
+
+
 	def dispatch_file_field(self, request, pk=None, file_field=None):
-		'''
+		"""
 		GET requests are not permission checked in binder
-		'''
+		"""
 		if pk is not None:
 			# Check if we have permission for the object to get
 			objs = self._get_objs(self.get_queryset(request).filter(pk=pk), request)
@@ -145,33 +165,43 @@ class PermissionView(ModelView):
 
 		return super().dispatch_file_field(request, pk, file_field)
 
+
+
 	def _scope_view_all(self, request):
 		return self.model.objects
+
+
 
 	def _scope_add_all(self, request, object, values):
 		return True
 
+
+
 	def _scope_change_all(self, request, object, values):
 		return True
+
+
 
 	def _scope_delete_all(self, request, object, values):
 		return True
 
+
+
 	@staticmethod
 	def _save_scope(request, scope):
-		'''
+		"""
 		Save that we did a scoping on the request object. This allows us to check that scoping is done
-		'''
+		"""
 		if getattr(request, '_scopes', None) is None:
 			request._scopes = []
 		request._scopes.append(scope)
 
 
-	'''
-	Scope the creation/changing of an object
-	'''
-	def _store(self, obj, values, request, ignore_unknown_fields=False):
 
+	def _store(self, obj, values, request, ignore_unknown_fields=False):
+		"""
+		Scope the creation/changing of an object
+		"""
 		if obj.pk is None:
 			self.scope_add(request, obj, values)
 		else:
@@ -179,10 +209,12 @@ class PermissionView(ModelView):
 
 		return super()._store(obj, values, request, ignore_unknown_fields)
 
+
+
 	def scope_add(self, request, object, values):
-		'''
+		"""
 		Scope adding of an object. Raises binderforbidden error if the user does not have the scope to add a model
-		'''
+		"""
 		scopes = self._require_model_perm('add', request)
 		can_add = False
 
@@ -197,6 +229,8 @@ class PermissionView(ModelView):
 			raise ScopingError(user=request.user, perm='You do not have a scope that allows you to add model={}'.format(self.model))
 
 		self._save_scope(request, Scope.ADD)
+
+
 
 	def scope_change(self, request, object, values):
 		scopes = self._require_model_perm('change', request)
@@ -214,18 +248,24 @@ class PermissionView(ModelView):
 
 		self._save_scope(request, Scope.CHANGE)
 
-	'''Do a scoping on a possibly empty list'''
+
+
 	def scope_change_list(self, request, objects, values):
+		"""
+		Do a scoping on a possibly empty list
+		"""
 		for o in objects:
 			self.scope_change(request, o, values)
 		else:
 			setattr(request, '_has_permission_check', True)
 		self._save_scope(request, Scope.CHANGE)
 
+
+
 	def scope_view(self, request, queryset):
-		'''
+		"""
 		Performs the scopes for a get request
-		'''
+		"""
 		scopes = self._require_model_perm('view', request)
 		scope_queries = []
 		for s in scopes:
@@ -240,8 +280,9 @@ class PermissionView(ModelView):
 
 		self._save_scope(request, Scope.VIEW)
 
-
 		return queryset.filter(subfilter)
+
+
 
 	def delete(self, request, pk=None, undelete=False):
 		query = self.get_queryset(request)
@@ -255,10 +296,11 @@ class PermissionView(ModelView):
 		return super().delete(request, pk, undelete)
 
 
+
 	def scope_delete(self, request, object, values):
-		'''
+		"""
 		Performs the scopes for deletion of an obbject
-		'''
+		"""
 		scopes = self._require_model_perm('delete', request)
 
 		can_change = False
@@ -275,6 +317,8 @@ class PermissionView(ModelView):
 
 		self._save_scope(request, Scope.DELETE)
 
+
+
 	def view_history(self, request, pk=None, **kwargs):
 		if not pk:
 			raise BinderNotFound()
@@ -285,6 +329,7 @@ class PermissionView(ModelView):
 			raise BinderNotFound()
 
 		return super().view_history(request, pk, **kwargs)
+
 
 
 def no_scoping_required(*args, **kwargs):
