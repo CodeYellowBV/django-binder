@@ -149,21 +149,15 @@ class PermissionView(ModelView):
 
 
 	def dispatch_file_field(self, request, pk=None, file_field=None):
-		"""
-		GET requests are not permission checked in binder
-		"""
-		if pk is not None:
-			# Check if we have permission for the object to get
-			objs = self._get_objs(self.get_queryset(request).filter(pk=pk), request)
-			if len(objs) != 1:
-				raise BinderNotFound()
+		try:
+			obj = self.get_queryset(request).get(pk=int(pk))
+		except ObjectDoesNotExist:
+			raise BinderNotFound()
 
-		if request.method == 'POST':
-			self.scope_add(request, None, [])
-		elif request.method == 'PUT' or request.method == 'add':
-			self.scope_change(request, objs[0], [])
+		if request.method in {'POST', 'DELETE'}:
+			self.scope_change(request, obj, {file_field: ...})
 
-		return super().dispatch_file_field(request, pk, file_field)
+		return super().dispatch_file_field(request, pk=obj, file_field)
 
 
 

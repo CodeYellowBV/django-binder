@@ -1110,10 +1110,13 @@ class ModelView(View):
 		if not request.method in ('GET', 'POST', 'DELETE'):
 			raise BinderMethodNotAllowed()
 
-		try:
-			obj = self.get_queryset(request).get(pk=int(pk))
-		except ObjectDoesNotExist:
-			raise BinderNotFound()
+		if isinstance(pk, self.model):
+			obj = pk
+		else:
+			try:
+				obj = self.get_queryset(request).get(pk=int(pk))
+			except ObjectDoesNotExist:
+				raise BinderNotFound()
 
 		file_field_name = file_field
 		file_field = getattr(obj, file_field_name)
