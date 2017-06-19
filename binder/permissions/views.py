@@ -157,7 +157,7 @@ class PermissionView(ModelView):
 		if request.method in {'POST', 'DELETE'}:
 			self.scope_change(request, obj, {file_field: ...})
 
-		return super().dispatch_file_field(request, pk=obj, file_field)
+		return super().dispatch_file_field(request, obj, file_field)
 
 
 
