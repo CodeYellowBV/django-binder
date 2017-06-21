@@ -117,6 +117,16 @@ class ModelView(View):
 	# be set by dispatch().
 	router = None
 
+	# Images over this width/height get scaled down.
+	# None disables resizing.
+	# 123 limits size to 123x123 for all ImageFields on this model.
+	# (123,456) limits size to 123x456 on all ImageFields.
+	# {'foo': 123, 'bar': 456} limits size to 123x123 on field foo and 456x456 on bar.
+	# A dict will KeyError if you don't specify all ImageFields. Or use:
+	# collections.defaultdict(lambda: 512, foo=1024)
+	image_resize_threshold = 512
+
+
 
 	#### XXX WARNING XXX
 	# dispatch() ensures transactions. If overriding or circumventing dispatch(), you're on your own!
@@ -1168,10 +1178,21 @@ class ModelView(View):
 				if width > 4096 or height > 4096:
 					raise BinderImageSizeExceeded(4096, 4096)
 
-				# FIXME: hardcoded max
-				if width > 512 or height > 512:
-					img.thumbnail((512, 512), Image.ANTIALIAS)
-					logger.info('image dimensions ({}x{}) exceeded (512, 512), resizing.'.format(width, height))
+				# Determine resize threshold
+				try:
+					max_size = self.image_resize_threshold[file_field_name]
+				except TypeError:
+					max_size = self.image_resize_threshold
+				if max_size is None:
+					max_size = 65335
+				try:
+					max_width, max_height = max_size
+				except (TypeError, ValueError):
+					max_width, max_height = max_size, max_size
+
+				if width > max_width or height > max_height:
+					img.thumbnail((max_width, max_height), Image.ANTIALIAS)
+					logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
 					file = io.BytesIO()
 					if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
 						img = img.convert("RGB")
