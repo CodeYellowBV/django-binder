@@ -4,6 +4,7 @@ from enum import Enum
 from django.db import transaction
 from django.db.models import Q
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 
 from binder.exceptions import BinderForbidden, BinderNotFound
 from binder.views import ModelView
