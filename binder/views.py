@@ -665,7 +665,7 @@ class ModelView(View):
 	def _store(self, obj, values, request, ignore_unknown_fields=False):
 		deferred_m2ms = {}
 		ignored_fields = []
-		validation_errors = defaultdict(list)
+		validation_error = None
 
 		def store_field(obj, field, value, request):
 			try:
@@ -684,15 +684,24 @@ class ModelView(View):
 					raise
 			except BinderReadOnlyFieldError:
 				ignored_fields.append(field)
-			except BinderValidationError as ve:
-				for f, e in ve.validation_errors.items():
-					validation_errors[f] += e
+			except BinderValidationError as e:
+				validation_error = validation_error.merge(e) if validation_error else e
 
 		try:
 			obj.full_clean()
 		except ValidationError as ve:
-			for f, el in ve.error_dict.items():
-				validation_errors[f] += sum([e.messages for e in el], [])
+			e = BinderValidationError({
+				obj.__class__.__name__.lower(): {
+					obj.pk: {
+						f: [
+							{'code': e.code, 'message': e.messages[0]}
+							for e in el
+						]
+						for f, el in ve.error_dict.items()
+					}
+				}
+			})
+			validation_error = validation_error.merge(e) if validation_error else e
 
 		# full_clean() doesn't check nullability (WHY?), so do it here. See T2989.
 		for f in obj._meta.fields:
@@ -707,8 +716,8 @@ class ModelView(View):
 			if not f.primary_key and not f.null and getattr(obj, name) is None:
 				validation_errors[f.name] = ['This field cannot be null.']
 
-		if validation_errors:
-			raise BinderValidationError(validation_errors, object=obj)
+		if validation_error:
+			raise validation_error
 
 		obj.save()
 
@@ -783,14 +792,35 @@ class ModelView(View):
 						try:
 							value = int(value)
 						except ValueError:
-							raise BinderValidationError({f.name: ['This value must be an integral number.']}, object=obj)
+							raise BinderValidationError({
+								obj.__class__.__name__.lower(): {
+									obj.pk: {
+										f.name: [{
+											'code': 'int',
+											'message': 'This value must be an integral number.'
+										}]
+									}
+								}
+							})
 					setattr(obj, f.attname, value)
 				elif isinstance(f, models.TextField):
 					# Django doesn't enforce max_length on TextFields, so we do.
 					if f.max_length is not None:
 						if len(value) > f.max_length:
-							msg = 'Ensure this value has at most {} characters (it has {}).'.format(f.max_length, len(value))
-							raise BinderValidationError({f.name: [msg]}, object=obj)
+							raise BinderValidationError({
+								obj.__class__.__name__.lower(): {
+									obj.pk: {
+										f.name: [{
+											'code': 'maxlen',
+											'message': 'Ensure this value has at most {} characters (it has {}).'.format(f.max_length, len(value)),
+											'params': {
+												'len': len(value),
+												'max_len': f.max_length
+											}
+										}]
+									}
+								}
+							})
 					setattr(obj, f.attname, value)
 				else:
 					try:
@@ -816,7 +846,20 @@ class ModelView(View):
 				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
 				if ids:
 					field_name = obj._meta.get_field(field).remote_field.model.__name__
-					raise BinderValidationError({field: ['{} instances {} do not exist'.format(field_name, list(ids))]})
+					raise BinderValidationError({
+						obj.__class__.__name__.lower(): {
+							obj.pk: {
+								field: [{
+									'code': 'doesntexist',
+									'message': '{} instances {} do not exist'.format(field_name, list(ids)),
+									'params': {
+										'model': field_name,
+										'ids': list(ids)
+									}
+								}]
+							}
+						}
+					})
 				return value
 
 		raise BinderInvalidField(self.model.__name__, field)
@@ -873,6 +916,7 @@ class ModelView(View):
 		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
 
 		body = jsonloads(request.body)
+		validation_error = None
 
 		if not 'data' in body:
 			raise BinderRequestError('missing data')
@@ -889,7 +933,6 @@ class ModelView(View):
 
 		# Sort object values by model/id
 		objects = {}
-		prefixes = {}
 		for modelname, objs in data.items():
 			if not isinstance(objs, list):
 				raise BinderRequestError('with.{} value should be a list')
@@ -908,7 +951,6 @@ class ModelView(View):
 					raise BinderRequestError('non-numeric id in with.{}[{}]'.format(modelname, idx))
 
 				objects[(model, obj['id'])] = obj
-				prefixes[(model, obj['id'])] = modelname + '[' + str(idx) + '].'
 
 		# Figure out dependencies
 		logger.info('Resolving dependencies for {} objects'.format(len(objects)))
@@ -1001,14 +1043,13 @@ class ModelView(View):
 			try:
 				view._store(obj, values, request)
 			except BinderValidationError as e:
-				e.validation_errors = {
-					prefixes[(model, oid)] + f: error
-					for f, error in e.validation_errors.items()
-				}
-				raise e
+				validation_error = validation_error.merge(e) if validation_error else e
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))
+
+		if validation_error:
+			raise validation_error
 
 		bla = defaultdict(list)
 		for (model, oid), nid in new_id_map.items():
