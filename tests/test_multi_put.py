@@ -252,3 +252,56 @@ class MultiPutTest(TestCase):
 
 		scooby = Animal.objects.get(pk=scooby_pk)
 		self.assertEqual(None, scooby.zoo)
+
+	def test_put_nested_validation_errors(self):
+		model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Apenheul'
+			}],
+			'with': {
+				'animal': [{
+					'id': -2,
+					'name': 'Harambe',
+					'zoo': -1
+				}, {
+					'id': -3,
+					'zoo': -1
+				}]
+			}
+		}
+
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 400)
+
+		returned_data = jsonloads(response.content)
+		self.assertIn('animal[1].name', returned_data['error']['validation_errors'])
+
+	def test_put_reverse_ref(self):
+		model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Apenheul',
+				'animals': [-2, -3]
+			}],
+			'with': {
+				'animal': [{
+					'id': -2,
+					'name': 'Harambe',
+				}, {
+					'id': -3,
+					'name': 'Bokito'
+				}]
+			}
+		}
+
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		zoo_ids = {i for i, _ in returned_data['idmap']['zoo']}
+		animal_ids = {i for i, _ in returned_data['idmap']['animal']}
+
+		self.assertIn(-1, zoo_ids)
+		self.assertIn(-2, animal_ids)
+		self.assertIn(-3, animal_ids)
