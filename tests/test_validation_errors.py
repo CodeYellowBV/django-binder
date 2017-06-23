@@ -24,12 +24,10 @@ class TestValidationErrors(TestCase):
 
 		returned_data = jsonloads(response.content)
 		self.assertEqual(returned_data['code'], 'ValidationError')
-		for model, model_errors in returned_data['errors'].items():
-			self.assertEqual(model, 'animal')
-			for obj_id, obj_errors in model_errors.items():
-				for field, field_errors in obj_errors.items():
-					self.assertEqual(field, 'name')
-					for error in field_errors:
-						self.assertIn('code', error)
-						self.assertIn('message', error)
-						self.assertEqual('code', 'blank')
+		self.assertEqual(len(returned_data['errors']), 1)
+		self.assertEqual(len(returned_data['errors']['animal']), 1)
+		obj_id = list(returned_data['errors']['animal'])[0]
+		self.assertEqual(len(returned_data['errors']['animal'][obj_id]), 1)
+		self.assertEqual(len(returned_data['errors']['animal'][obj_id]['name']), 1)
+		self.assertEqual(returned_data['errors']['animal'][obj_id]['name'][0]['code'], 'blank')
+		self.assertIn('message', returned_data['errors']['animal'][obj_id]['name'][0])
