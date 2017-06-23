@@ -256,7 +256,7 @@ class MultiPutTest(TestCase):
 	def test_put_nested_validation_errors(self):
 		model_data = {
 			'data': [{
-				'id': -1,
+				'id': -1
 			}],
 			'with': {
 				'animal': [{
