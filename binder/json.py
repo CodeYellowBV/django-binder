@@ -9,22 +9,11 @@ from .exceptions import BinderRequestError
 
 
 
-# datetime serializer
-def serializer_datetime(value):
-	# FIXME: was .isoformat(), but that omits the microseconds if they
-	# are 0, which upsets our front-end devs. This is ugly.
-	# I hear .isoformat() might learn a timespec parameter in 3.6...
-	tz = value.strftime("%z")
-	tz = tz if tz else '+0000'
-	return value.strftime("%Y-%m-%dT%H:%M:%S.%f") + tz
-
-
-
 # Default Binder serializers; override these by doing
 # json.SERIALIZERS.update({}) in settings.py
 SERIALIZERS = {
 	set:                 list,
-	datetime.datetime:   serializer_datetime,
+	datetime.datetime:   lambda v: v.strftime('%Y-%m-%dT%H:%M:%S.%f%z'),   # .isoformat() can omit microseconds
 	datetime.date:       lambda v: v.isoformat(),
 	uuid.UUID:           str,
 	decimal.Decimal:     str,
