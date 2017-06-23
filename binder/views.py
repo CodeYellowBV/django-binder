@@ -874,7 +874,8 @@ class ModelView(View):
 
 		body = jsonloads(request.body)
 
-		validation_errors, error_objs = {}, []
+		validation_errors = {}
+		error_objs = []
 
 		if not 'data' in body:
 			raise BinderRequestError('missing data')
@@ -890,7 +891,8 @@ class ModelView(View):
 		data[self._model_name()] = body['data']
 
 		# Sort object values by model/id
-		objects, prefixes = {}, {}
+		objects = {}
+		prefixes = {}
 		for modelname, objs in data.items():
 			if not isinstance(objs, list):
 				raise BinderRequestError('with.{} value should be a list')
@@ -908,7 +910,8 @@ class ModelView(View):
 				if not isinstance(obj['id'], int):
 					raise BinderRequestError('non-numeric id in with.{}[{}]'.format(modelname, idx))
 
-				objects[(model, obj['id'])], prefixes[(model, obj['id'])] = obj, modelname+'['+str(idx)+'].'
+				objects[(model, obj['id'])] = obj
+				prefixes[(model, obj['id'])] = modelname + '[' + str(idx) + '].'
 
 		# Figure out dependencies
 		logger.info('Resolving dependencies for {} objects'.format(len(objects)))
