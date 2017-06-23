@@ -889,6 +889,7 @@ class ModelView(View):
 
 		# Sort object values by model/id
 		objects = {}
+		prefixes = {}
 		for modelname, objs in data.items():
 			if not isinstance(objs, list):
 				raise BinderRequestError('with.{} value should be a list')
@@ -907,6 +908,7 @@ class ModelView(View):
 					raise BinderRequestError('non-numeric id in with.{}[{}]'.format(modelname, idx))
 
 				objects[(model, obj['id'])] = obj
+				prefixes[(model, obj['id'])] = modelname + '[' + str(idx) + '].'
 
 		# Figure out dependencies
 		logger.info('Resolving dependencies for {} objects'.format(len(objects)))
@@ -996,7 +998,14 @@ class ModelView(View):
 			view = self.router.model_view(model)()
 			# {router-view-instance}
 			view.router = self.router
-			view._store(obj, values, request)
+			try:
+				view._store(obj, values, request)
+			except BinderValidationError as e:
+				e.validation_errors = {
+					prefixes[(model, oid)] + f: error
+					for f, error in e.validation_errors.items()
+				}
+				raise e
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))
