@@ -874,6 +874,9 @@ class ModelView(View):
 
 		body = jsonloads(request.body)
 
+		validation_errors = {}
+		error_objs = []
+
 		if not 'data' in body:
 			raise BinderRequestError('missing data')
 
@@ -1001,14 +1004,18 @@ class ModelView(View):
 			try:
 				view._store(obj, values, request)
 			except BinderValidationError as e:
-				e.validation_errors = {
-					prefixes[(model, oid)] + f: error
-					for f, error in e.validation_errors.items()
-				}
-				raise e
+				error_objs.append(e.object)
+				for f, error in e.validation_errors.items():
+					validation_errors[prefixes[(model, oid)]+f] = error
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))
+
+		if validation_errors:
+			e = BinderValidationError(validation_errors, error_objs)
+			if len(error_objs) == 1:
+				e.object = error_objs[0]
+			raise e
 
 		bla = defaultdict(list)
 		for (model, oid), nid in new_id_map.items():

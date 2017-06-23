@@ -256,8 +256,7 @@ class MultiPutTest(TestCase):
 	def test_put_nested_validation_errors(self):
 		model_data = {
 			'data': [{
-				'id': -1,
-				'name': 'Apenheul'
+				'id': -1
 			}],
 			'with': {
 				'animal': [{
@@ -267,6 +266,9 @@ class MultiPutTest(TestCase):
 				}, {
 					'id': -3,
 					'zoo': -1
+				}, {
+					'id': -4,
+					'zoo': -1
 				}]
 			}
 		}
@@ -275,7 +277,10 @@ class MultiPutTest(TestCase):
 		self.assertEqual(response.status_code, 400)
 
 		returned_data = jsonloads(response.content)
+		self.assertIn('zoo[0].name', returned_data['error']['validation_errors'])
+		self.assertNotIn('animal[0].name', returned_data['error']['validation_errors'])
 		self.assertIn('animal[1].name', returned_data['error']['validation_errors'])
+		self.assertIn('animal[2].name', returned_data['error']['validation_errors'])
 
 	def test_put_reverse_ref(self):
 		model_data = {
