@@ -25,7 +25,7 @@ SERIALIZERS = {
 try:
 	from dateutil.relativedelta import relativedelta
 	from relativedeltafield import format_relativedelta
-	DEFAULT_SERIALIZERS[relativedelta] = lambda e, v: format_relativedelta(v)
+	SERIALIZERS[relativedelta] = lambda e, v: format_relativedelta(v)
 except ImportError:
 	pass
 
