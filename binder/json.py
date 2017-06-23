@@ -22,12 +22,13 @@ def serializer_datetime(encoder, value):
 
 
 # Default Binder serializers; override these with settings.BINDER_JSON_SERIALIZERS
+# flake8: noqa
 DEFAULT_SERIALIZERS = {
-	set: lambda e, v: list(v),
-	datetime.datetime: serializer_datetime,
-	datetime.date: lambda e, v: v.isoformat(),
-	uuid.UUID: lambda e, v: str(v),
-	decimal.Decimal: lambda e, v: str(v),
+	set:                 lambda e, v: list(v),
+	datetime.datetime:   serializer_datetime,
+	datetime.date:       lambda e, v: v.isoformat(),
+	uuid.UUID:           lambda e, v: str(v),
+	decimal.Decimal:     lambda e, v: str(v),
 }
 
 
