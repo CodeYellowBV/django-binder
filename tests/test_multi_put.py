@@ -257,11 +257,11 @@ class MultiPutTest(TestCase):
 		model_data = {
 			'data': [{
 				'id': -1,
-				'name': 'hey'
 			}],
 			'with': {
 				'animal': [{
 					'id': -2,
+					'name': 'Harambe',
 					'zoo': -1
 				}, {
 					'id': -3,
@@ -277,8 +277,8 @@ class MultiPutTest(TestCase):
 		self.assertEqual(response.status_code, 400)
 
 		returned_data = jsonloads(response.content)
-		print(returned_data)
 		self.assertIn('zoo[0].name', returned_data['error']['validation_errors'])
+		self.assertNotIn('animal[0].name', returned_data['error']['validation_errors'])
 		self.assertIn('animal[1].name', returned_data['error']['validation_errors'])
 		self.assertIn('animal[2].name', returned_data['error']['validation_errors'])
 
