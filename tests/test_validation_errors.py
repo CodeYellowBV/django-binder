@@ -32,6 +32,25 @@ class TestValidationErrors(TestCase):
 		self.assertEqual(returned_data['errors']['animal'][obj_id]['name'][0]['code'], 'blank')
 		self.assertIn('message', returned_data['errors']['animal'][obj_id]['name'][0])
 
+	def test_post_validate_null(self):
+		model_data = {
+			'name': None
+		}
+		response = self.client.post('/animal/', data=json.dumps(model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 400)
+
+		returned_data = jsonloads(response.content)
+		print(returned_data)
+		self.assertEqual(returned_data['code'], 'ValidationError')
+		self.assertEqual(len(returned_data['errors']), 1)
+		self.assertEqual(len(returned_data['errors']['animal']), 1)
+		obj_id = list(returned_data['errors']['animal'])[0]
+		self.assertEqual(len(returned_data['errors']['animal'][obj_id]), 1)
+		self.assertEqual(len(returned_data['errors']['animal'][obj_id]['name']), 1)
+		self.assertEqual(returned_data['errors']['animal'][obj_id]['name'][0]['code'], 'null')
+		self.assertIn('message', returned_data['errors']['animal'][obj_id]['name'][0])
+
 	def test_put_validate_max_length(self):
 		model = Animal(name='Harambe')
 		model.full_clean()
@@ -76,7 +95,6 @@ class TestValidationErrors(TestCase):
 		self.assertEqual(response.status_code, 400)
 
 		returned_data = jsonloads(response.content)
-		print(returned_data)
 		self.assertEqual(returned_data['code'], 'ValidationError')
 		self.assertEqual(len(returned_data['errors']), 2)
 		self.assertEqual(len(returned_data['errors']['zoo']), 1)

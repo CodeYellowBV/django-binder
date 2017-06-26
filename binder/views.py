@@ -708,17 +708,27 @@ class ModelView(View):
 			validation_error = validation_error + e if validation_error else e
 
 		# full_clean() doesn't check nullability (WHY?), so do it here. See T2989.
-		for f in obj._meta.fields:
-			# Ok, this nullable check poses problems. For example, when using MPTT models, we subclass
-			# the MPTTModel, which defines not-NULL bookkeeping fields which it populates on save().
-			# However, for new objects, this check occurs *before* the super().save(), so it complains.
-			# See T9646. Current solution: these fields are strictly populated by the backend, so
-			# they're unwritable from the frontend. So, unwritable -> no NULL check.  ¯\_(ツ)_/¯
-			if f.name in self.unwritable_fields:
-				continue
-			name = f.name + ('_id' if isinstance(f, models.ForeignKey) or isinstance(f, models.OneToOneField) else '')
-			if not f.primary_key and not f.null and getattr(obj, name) is None:
-				validation_errors[f.name] = ['This field cannot be null.']
+		# for f in obj._meta.fields:
+		# 	# Ok, this nullable check poses problems. For example, when using MPTT models, we subclass
+		# 	# the MPTTModel, which defines not-NULL bookkeeping fields which it populates on save().
+		# 	# However, for new objects, this check occurs *before* the super().save(), so it complains.
+		# 	# See T9646. Current solution: these fields are strictly populated by the backend, so
+		# 	# they're unwritable from the frontend. So, unwritable -> no NULL check.  ¯\_(ツ)_/¯
+		# 	if f.name in self.unwritable_fields:
+		# 		continue
+		# 	name = f.name + ('_id' if isinstance(f, models.ForeignKey) or isinstance(f, models.OneToOneField) else '')
+		# 	if not f.primary_key and not f.null and getattr(obj, name) is None:
+		# 		e = BinderValidationError({
+		# 			obj.__class__.__name__.lower(): {
+		# 				obj.pk if pk is None else pk: {
+		# 					name: [{
+		# 						'code': 'null',
+		# 						'message': 'This field cannot be nullaaa.'
+		# 					}]
+		# 				}
+		# 			}
+		# 		})
+		# 		validation_error = validation_error + e if validation_error else e
 
 		if validation_error:
 			raise validation_error
@@ -811,7 +821,7 @@ class ModelView(View):
 				elif isinstance(f, models.TextField):
 					# Django doesn't enforce max_length on TextFields, so we do.
 					if f.max_length is not None:
-						if len(value) > f.max_length:
+						if isinstance(value, str) and len(value) > f.max_length:
 							setattr(obj, f.attname, value[:f.max_length])
 							raise BinderValidationError({
 								obj.__class__.__name__.lower(): {
