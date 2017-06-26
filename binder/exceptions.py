@@ -202,12 +202,13 @@ class BinderValidationError(BinderException):
 
 	def __add__(self, other):
 		errors = {}
-		for model in set(self.errors) + set(other.errors):
-			if model in self.errors and error in other.errors:
+		for model in set(self.errors) | set(other.errors):
+			if model in self.errors and model in other.errors:
 				errors[model] = {}
-				for pk in set(self.errors[model]) + set(other.errors[model]):
+				for pk in set(self.errors[model]) | set(other.errors[model]):
 					if pk in self.errors[model] and pk in other.errors[model]:
-						for field in set(self.errors[model][pk]) + set(other.errors[model][pk]):
+						errors[model][pk] = {}
+						for field in set(self.errors[model][pk]) | set(other.errors[model][pk]):
 							errors[model][pk][field] = (
 								self.errors[model][pk][field] if field in self.errors[model][pk] else []
 							) + (

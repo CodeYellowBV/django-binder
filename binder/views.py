@@ -8,6 +8,7 @@ import datetime
 import mimetypes
 from collections import defaultdict, namedtuple
 from PIL import Image
+from itertools import chain
 
 import django
 from django.views.generic import View
@@ -662,21 +663,21 @@ class ModelView(View):
 	# obj: Model object to update (for PUT), newly created object (for POST)
 	# values: Python dict of {field name: value} (parsed JSON)
 	# Output: Python dict representation of the updated object
-	def _store(self, obj, values, request, ignore_unknown_fields=False):
+	def _store(self, obj, values, request, ignore_unknown_fields=False, pk=None):
 		deferred_m2ms = {}
 		ignored_fields = []
 		validation_error = None
 
-		def store_field(obj, field, value, request):
+		def store_field(obj, field, value, request, pk=pk):
 			try:
 				func = getattr(self, '_store__' + field)
 			except AttributeError:
 				func = self._store_field
-			return func(obj, field, value, request)
+			return func(obj, field, value, request, pk=pk)
 
 		for field, value in values.items():
 			try:
-				res = store_field(obj, field, value, request)
+				res = store_field(obj, field, value, request, pk=pk)
 				if isinstance(res, list):
 					deferred_m2ms[field] = res
 			except BinderInvalidField:
@@ -692,9 +693,12 @@ class ModelView(View):
 		except ValidationError as ve:
 			e = BinderValidationError({
 				obj.__class__.__name__.lower(): {
-					obj.pk: {
+					obj.pk if pk is None else pk: {
 						f: [
-							{'code': e.code, 'message': e.messages[0]}
+							dict(chain(
+								{'code': e.code, 'message': e.messages[0]}.items(),
+								({} if e.params is None else e.params).items()
+							))
 							for e in el
 						]
 						for f, el in ve.error_dict.items()
@@ -773,7 +777,7 @@ class ModelView(View):
 	# If the field is a m2m, it should do all validation and then return a list of ids
 	# which will be actually set when the object is known to be saved.
 	# Otherwise, return False.
-	def _store_field(self, obj, field, value, request):
+	def _store_field(self, obj, field, value, request, pk=None):
 		# Unwritable fields
 		if field in self.unwritable_fields + ['id', 'pk', 'deleted', '_meta'] + self.file_fields:
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
@@ -794,10 +798,11 @@ class ModelView(View):
 						except ValueError:
 							raise BinderValidationError({
 								obj.__class__.__name__.lower(): {
-									obj.pk: {
+									obj.pk if pk is None else pk: {
 										f.name: [{
-											'code': 'int',
-											'message': 'This value must be an integral number.'
+											'code': 'not_int',
+											'message': 'This value must be an integral number.',
+											'value': value
 										}]
 									}
 								}
@@ -807,16 +812,16 @@ class ModelView(View):
 					# Django doesn't enforce max_length on TextFields, so we do.
 					if f.max_length is not None:
 						if len(value) > f.max_length:
+							setattr(obj, f.attname, value[:f.max_length])
 							raise BinderValidationError({
 								obj.__class__.__name__.lower(): {
-									obj.pk: {
+									obj.pk if pk is None else pk: {
 										f.name: [{
-											'code': 'maxlen',
+											'code': 'max_length',
 											'message': 'Ensure this value has at most {} characters (it has {}).'.format(f.max_length, len(value)),
-											'params': {
-												'len': len(value),
-												'max_len': f.max_length
-											}
+											'limit_value': f.max_length,
+											'show_value': len(value),
+											'value': value
 										}]
 									}
 								}
@@ -850,12 +855,10 @@ class ModelView(View):
 						obj.__class__.__name__.lower(): {
 							obj.pk: {
 								field: [{
-									'code': 'doesntexist',
+									'code': 'does_not_exist',
 									'message': '{} instances {} do not exist'.format(field_name, list(ids)),
-									'params': {
-										'model': field_name,
-										'ids': list(ids)
-									}
+									'model': field_name,
+									'values': list(ids)
 								}]
 							}
 						}
@@ -1041,7 +1044,7 @@ class ModelView(View):
 			# {router-view-instance}
 			view.router = self.router
 			try:
-				view._store(obj, values, request)
+				view._store(obj, values, request, pk=oid)
 			except BinderValidationError as e:
 				validation_error = validation_error + e if validation_error else e
 			if oid < 0:
