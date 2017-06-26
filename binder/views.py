@@ -685,7 +685,7 @@ class ModelView(View):
 			except BinderReadOnlyFieldError:
 				ignored_fields.append(field)
 			except BinderValidationError as e:
-				validation_error = validation_error.merge(e) if validation_error else e
+				validation_error = validation_error + e if validation_error else e
 
 		try:
 			obj.full_clean()
@@ -701,7 +701,7 @@ class ModelView(View):
 					}
 				}
 			})
-			validation_error = validation_error.merge(e) if validation_error else e
+			validation_error = validation_error + e if validation_error else e
 
 		# full_clean() doesn't check nullability (WHY?), so do it here. See T2989.
 		for f in obj._meta.fields:
@@ -1043,7 +1043,7 @@ class ModelView(View):
 			try:
 				view._store(obj, values, request)
 			except BinderValidationError as e:
-				validation_error = validation_error.merge(e) if validation_error else e
+				validation_error = validation_error + e if validation_error else e
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))

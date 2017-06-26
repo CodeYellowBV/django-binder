@@ -200,7 +200,7 @@ class BinderValidationError(BinderException):
 		data['errors'] = self.errors
 		return data
 
-	def merge(self, other):
+	def __add__(self, other):
 		errors = {}
 		for model in set(self.errors) + set(other.errors):
 			if model in self.errors and error in other.errors:
