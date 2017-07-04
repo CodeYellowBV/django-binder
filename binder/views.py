@@ -691,8 +691,9 @@ class ModelView(View):
 		try:
 			obj.full_clean()
 		except ValidationError as ve:
+			model_name = self.router.model_view(obj.__class__)()._model_name()
 			e = BinderValidationError({
-				obj.__class__.__name__.lower(): {
+				model_name: {
 					obj.pk if pk is None else pk: {
 						f: [
 							dict(chain(
@@ -806,8 +807,9 @@ class ModelView(View):
 						try:
 							value = int(value)
 						except ValueError:
+							model_name = self.router.model_view(obj.__class__)()._model_name()
 							raise BinderValidationError({
-								obj.__class__.__name__.lower(): {
+								model_name: {
 									obj.pk if pk is None else pk: {
 										f.name: [{
 											'code': 'not_int',
@@ -823,8 +825,9 @@ class ModelView(View):
 					if f.max_length is not None:
 						if isinstance(value, str) and len(value) > f.max_length:
 							setattr(obj, f.attname, value[:f.max_length])
+							model_name = self.router.model_view(obj.__class__)()._model_name()
 							raise BinderValidationError({
-								obj.__class__.__name__.lower(): {
+								model_name: {
 									obj.pk if pk is None else pk: {
 										f.name: [{
 											'code': 'max_length',
@@ -861,8 +864,9 @@ class ModelView(View):
 				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
 				if ids:
 					field_name = obj._meta.get_field(field).remote_field.model.__name__
+					model_name = self.router.model_view(obj.__class__)()._model_name()
 					raise BinderValidationError({
-						obj.__class__.__name__.lower(): {
+						model_name: {
 							obj.pk: {
 								field: [{
 									'code': 'does_not_exist',
