@@ -4,7 +4,7 @@ import json
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-from .testapp.models import Animal, Zoo
+from .testapp.models import Animal
 
 class TestValidationErrors(TestCase):
 	def setUp(self):
@@ -112,3 +112,16 @@ class TestValidationErrors(TestCase):
 		self.assertEqual(returned_data['errors']['animal']['-2']['name'][0]['show_value'], 70)
 		self.assertEqual(returned_data['errors']['animal']['-2']['name'][0]['value'], 'HarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambe')
 		self.assertEqual(returned_data['errors']['animal']['-3']['name'][0]['code'], 'blank')
+
+	def test_multiput_validate_snake_cased_model(self):
+		model_data = {
+			'id': None,
+		}
+
+		response = self.client.post('/contact_person/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 400)
+
+		returned_data = jsonloads(response.content)
+		self.assertEqual(len(returned_data['errors']), 1)
+		# Important detail: we expect the name of the model to be `contact_person` (snake-cased), NOT `contactperson`
+		self.assertEqual(len(returned_data['errors']['contact_person']), 1)
