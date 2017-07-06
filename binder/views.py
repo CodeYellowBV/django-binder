@@ -310,11 +310,11 @@ class ModelView(View):
 
 		extras_dict = {}
 		# FIXME: delegate this to a router or something
-		for view, with_ids in extras.items():
+		for view, with_pks in extras.items():
 			view = view()
 			# {router-view-instance}
 			view.router = self.router
-			os = view._get_objs(view.model.objects.filter(id__in=with_ids), request=request)
+			os = view._get_objs(view.model.objects.filter(pk__in=with_pks), request=request)
 			extras_dict[view._model_name()] = os
 		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
 
@@ -355,20 +355,33 @@ class ModelView(View):
 
 
 
-	def _get_with(self, wth, ids, request):
+	def _get_with(self, wth, pks, request):
 		head, *tail = wth.split('.')
 
 		next = self._follow_related(head)[0].model
-		ids = list(self.model.objects.filter(id__in=ids).values_list(head + '__id', flat=True))
+
+		# In most binder apps we use the Profile model which doesn't have an id,
+		# but it references the User model.
+		#
+		# This code normally checks for the foreign key to the related model on this model.
+		# This fails as a User doesn't have a profile_id.
+		# Instead, a profile has no own foreign key, and uses its user_id as fk.
+		#
+		# If the related model has no `id` as pk, and it uses the foreign key to this model as private key:
+		# use the ids of this model as pks
+		if next._meta.pk.name != 'id' and next._meta.pk.related_model == self.model:
+			pks = list(self.model.objects.filter(pk__in=pks).values_list('id', flat=True))
+		else:
+			pks = list(self.model.objects.filter(pk__in=pks).values_list(head + '__id', flat=True))
 		view_class = self.router.model_view(next)
 
 		if not tail:
-			return (view_class, ids)
+			return (view_class, pks)
 		else:
 			view = view_class()
 			# {router-view-instance}
 			view.router = self.router
-			return view._get_with('.'.join(tail), ids, request=request)
+			return view._get_with('.'.join(tail), pks, request=request)
 
 
 
