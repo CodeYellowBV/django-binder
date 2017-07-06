@@ -9,7 +9,7 @@ from binder.models import BinderModel
 # might switch and require Postgres for tests, if we need many
 # Postgres-specific things.
 class Animal(BinderModel):
-	name=models.TextField()
+	name=models.TextField(max_length=64)
 	zoo=models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 	caretaker=models.ForeignKey('Caretaker', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 	deleted=models.BooleanField(default=False) # Softdelete
