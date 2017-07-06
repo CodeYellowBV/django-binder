@@ -4,4 +4,4 @@ import binder.models
 from binder.models import BinderModel
 
 class ContactPerson(BinderModel):
-	name=models.TextField()
+	name = models.TextField(unique=True)
