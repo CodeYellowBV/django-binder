@@ -4,7 +4,7 @@ import json
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-from .testapp.models import Animal, Costume, Zoo
+from .testapp.models import Animal, Costume, Zoo, Caretaker, Gate
 
 class ModelViewBasicsTest(TestCase):
 	def setUp(self):
@@ -336,6 +336,29 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(scrooge.pk, costume_by_id[frock.pk]['animal'])
 		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['animal'])
 
+	def test_get_model_with_relation_without_id(self):
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		fabbby = Caretaker(name='fabbby')
+		fabbby.full_clean()
+		fabbby.save()
+
+		door = Gate(zoo=gaia, keeper=fabbby)
+		door.full_clean()
+		door.save()
+
+		response = self.client.get('/zoo/{}/'.format(gaia.id), data={'with': 'gate.keeper'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual('GaiaZOO', result['data']['name'])
+		self.assertEqual(1, len(result['with']['gate']))
+		self.assertEqual(1, len(result['with']['caretaker']))
+		self.assertEqual('gate', result['with_mapping']['gate'])
+		self.assertEqual('caretaker', result['with_mapping']['gate.keeper'])
+		self.assertEqual('fabbby', result['with']['caretaker'][0]['name'])
 
 	def test_get_collection_filtering_following_nested_references(self):
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
