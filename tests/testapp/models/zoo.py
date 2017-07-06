@@ -17,9 +17,9 @@ def delete_files(sender, instance=None, **kwargs):
 # From the api docs: a zoo with a name.  It also has a founding date,
 # which is nullable (representing "unknown").
 class Zoo(BinderModel):
-	name=models.TextField()
-	founding_date=models.DateField(null=True, blank=True)
-	floor_plan=models.ImageField(upload_to='floor-plans', null=True, blank=True)
+	name = models.TextField()
+	founding_date = models.DateField(null=True, blank=True)
+	floor_plan = models.ImageField(upload_to='floor-plans', null=True, blank=True)
 
 	def __str__(self):
 		return 'zoo %d: %s' % (self.pk or 0, self.name)
