@@ -684,7 +684,7 @@ class ModelView(View):
 			except BinderReadOnlyFieldError:
 				ignored_fields.append(field)
 			except BinderValidationError as e:
-				validation_error = validation_error + e if validation_error else e
+				validation_error += e
 
 		try:
 			obj.full_clean()
@@ -702,7 +702,7 @@ class ModelView(View):
 					}
 				}
 			})
-			validation_error = validation_error + e if validation_error else e
+			validation_error += e
 
 		# full_clean() doesn't complain when CharField(blank=True, null=False) = None
 		# This causes save() to explode with a django.db.IntegrityError because the 
@@ -727,7 +727,7 @@ class ModelView(View):
 							}
 						}
 					})
-					validation_error = validation_error + e if validation_error else e
+					validation_error += e
 
 		if validation_error:
 			raise validation_error
@@ -1058,7 +1058,7 @@ class ModelView(View):
 			try:
 				view._store(obj, values, request, pk=oid)
 			except BinderValidationError as e:
-				validation_error = validation_error + e if validation_error else e
+				validation_error += e
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))
