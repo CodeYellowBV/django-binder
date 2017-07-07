@@ -706,7 +706,7 @@ class ModelView(View):
 			validation_errors.append(e)
 
 		# full_clean() doesn't complain when CharField(blank=True, null=False) = None
-		# This causes save() to explode with a django.db.IntegrityError because the 
+		# This causes save() to explode with a django.db.IntegrityError because the
 		# column is NOT NULL. Tyvm, Django.
 		# So we check this case here.
 		for f in obj._meta.fields:
