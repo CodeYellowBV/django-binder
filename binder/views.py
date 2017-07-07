@@ -8,8 +8,6 @@ import datetime
 import mimetypes
 from collections import defaultdict, namedtuple
 from PIL import Image
-from itertools import chain
-
 import django
 from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
@@ -692,7 +690,6 @@ class ModelView(View):
 			obj.full_clean()
 		except ValidationError as ve:
 			model_name = self.router.model_view(obj.__class__)()._model_name()
-			field_errors = []
 
 			e = BinderValidationError({
 				model_name: {
