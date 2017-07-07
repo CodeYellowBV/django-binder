@@ -9,6 +9,8 @@ from binder.json import jsonloads
 from .compare import assert_json, MAYBE, ANY, EXTRA
 from .testapp.models import Animal
 
+
+
 class TestValidationErrors(TestCase):
 	def setUp(self):
 		super().setUp()
@@ -18,6 +20,9 @@ class TestValidationErrors(TestCase):
 		self.client = Client()
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
+		a = Animal(id=1, name='Test animal so FKs work').save()
+
+
 
 	def test_post_validate_blank(self):
 		model_data = {}
@@ -35,14 +40,13 @@ class TestValidationErrors(TestCase):
 		self.assertEqual(returned_data['errors']['animal'][obj_id]['name'][0]['code'], 'blank')
 		self.assertIn('message', returned_data['errors']['animal'][obj_id]['name'][0])
 
-	def test_post_validate_null(self):
-		model_data = {
-			'name': None
-		}
+
+
+	def test_post_validate_notblank_notnull_getsblank(self):
+		model_data = { 'name': '' }
+
 		response = self.client.post('/animal/', data=json.dumps(model_data), content_type='application/json')
-
 		self.assertEqual(response.status_code, 400)
-
 		returned_data = jsonloads(response.content)
 
 		assert_json(returned_data, {
@@ -50,7 +54,7 @@ class TestValidationErrors(TestCase):
 				'animal': {
 					'null': {
 						'name': [
-							{'message': 'This field cannot be null.', 'code': 'null'}
+							{'code': 'blank', MAYBE('message'): ANY(str)}
 						]
 					}
 				}
@@ -59,14 +63,77 @@ class TestValidationErrors(TestCase):
 			MAYBE('debug'): ANY(),
 		})
 
-		self.assertEqual(returned_data['code'], 'ValidationError')
-		self.assertEqual(len(returned_data['errors']), 1)
-		self.assertEqual(len(returned_data['errors']['animal']), 1)
-		obj_id = list(returned_data['errors']['animal'])[0]
-		self.assertEqual(len(returned_data['errors']['animal'][obj_id]), 1)
-		self.assertEqual(len(returned_data['errors']['animal'][obj_id]['name']), 1)
-		self.assertEqual(returned_data['errors']['animal'][obj_id]['name'][0]['code'], 'null')
-		self.assertIn('message', returned_data['errors']['animal'][obj_id]['name'][0])
+
+
+	def test_post_validate_notblank_notnull_getsnull(self):
+		model_data = { 'name': None }
+
+		response = self.client.post('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 400)
+		returned_data = jsonloads(response.content)
+
+		assert_json(returned_data, {
+			'errors': {
+				'animal': {
+					'null': {
+						'name': [
+							{'code': 'null', MAYBE('message'): ANY(str)}
+						]
+					}
+				}
+			},
+			'code': 'ValidationError',
+			MAYBE('debug'): ANY(),
+		})
+
+
+
+	def test_post_validate_blank_null_getsblank(self):
+		model_data = { 'animal': 1, 'description': '' }
+
+		response = self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+
+
+	def test_post_validate_blank_null_getsnull(self):
+		model_data = { 'animal': 1, 'description': None }
+
+		response = self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+
+
+	def test_post_validate_blank_notnull_getsblank(self):
+		model_data = { 'animal': 1, 'nickname': '' }
+
+		response = self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+
+
+	def test_post_validate_blank_notnull_getsnull(self):
+		model_data = { 'animal': 1, 'nickname': None }
+
+		response = self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 400)
+		returned_data = jsonloads(response.content)
+
+		assert_json(returned_data, {
+			'errors': {
+				'costume': {
+					'null': {
+						'nickname': [
+							{'code': 'null', MAYBE('message'): ANY(str)}
+						]
+					}
+				}
+			},
+			'code': 'ValidationError',
+			MAYBE('debug'): ANY(),
+		})
+
+
 
 	def test_put_validate_max_length(self):
 		model = Animal(name='Harambe')
@@ -91,6 +158,8 @@ class TestValidationErrors(TestCase):
 		self.assertEqual(returned_data['errors']['animal'][obj_id]['name'][0]['limit_value'], 64)
 		self.assertEqual(returned_data['errors']['animal'][obj_id]['name'][0]['show_value'], 70)
 		self.assertEqual(returned_data['errors']['animal'][obj_id]['name'][0]['value'], 'HarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambe')
+
+
 
 	def test_multiput_validate(self):
 		model_data = {
@@ -130,6 +199,8 @@ class TestValidationErrors(TestCase):
 		self.assertEqual(returned_data['errors']['animal']['-2']['name'][0]['value'], 'HarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambe')
 		self.assertEqual(returned_data['errors']['animal']['-3']['name'][0]['code'], 'blank')
 
+
+
 	def test_multiput_validate_snake_cased_model(self):
 		model_data = {
 			'id': None,
@@ -142,6 +213,8 @@ class TestValidationErrors(TestCase):
 		self.assertEqual(len(returned_data['errors']), 1)
 		# Important detail: we expect the name of the model to be `contact_person` (snake-cased), NOT `contactperson`
 		self.assertEqual(len(returned_data['errors']['contact_person']), 1)
+
+
 
 	def test_multiput_validate_unique_constraint_fail(self):
 		model_data = {
