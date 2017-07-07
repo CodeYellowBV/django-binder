@@ -692,14 +692,13 @@ class ModelView(View):
 			obj.full_clean()
 		except ValidationError as ve:
 			model_name = self.router.model_view(obj.__class__)()._model_name()
+			field_errors = []
+
 			e = BinderValidationError({
 				model_name: {
 					obj.pk if pk is None else pk: {
 						f: [
-							dict(chain(
-								{'code': e.code, 'message': e.messages[0]}.items(),
-								({} if e.params is None else e.params).items()
-							))
+							{'code': e.code, 'message': e.messages[0]}
 							for e in el
 						]
 						for f, el in ve.error_dict.items()
