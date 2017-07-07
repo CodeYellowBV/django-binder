@@ -704,28 +704,30 @@ class ModelView(View):
 			})
 			validation_error = validation_error + e if validation_error else e
 
-		# full_clean() doesn't check nullability (WHY?), so do it here. See T2989.
-		# for f in obj._meta.fields:
-		# 	# Ok, this nullable check poses problems. For example, when using MPTT models, we subclass
-		# 	# the MPTTModel, which defines not-NULL bookkeeping fields which it populates on save().
-		# 	# However, for new objects, this check occurs *before* the super().save(), so it complains.
-		# 	# See T9646. Current solution: these fields are strictly populated by the backend, so
-		# 	# they're unwritable from the frontend. So, unwritable -> no NULL check.  ¯\_(ツ)_/¯
-		# 	if f.name in self.unwritable_fields:
-		# 		continue
-		# 	name = f.name + ('_id' if isinstance(f, models.ForeignKey) or isinstance(f, models.OneToOneField) else '')
-		# 	if not f.primary_key and not f.null and getattr(obj, name) is None:
-		# 		e = BinderValidationError({
-		# 			obj.__class__.__name__.lower(): {
-		# 				obj.pk if pk is None else pk: {
-		# 					name: [{
-		# 						'code': 'null',
-		# 						'message': 'This field cannot be nullaaa.'
-		# 					}]
-		# 				}
-		# 			}
-		# 		})
-		# 		validation_error = validation_error + e if validation_error else e
+		# full_clean() doesn't complain when CharField(blank=True, null=False) = None
+		# This causes save() to explode with a django.db.IntegrityError because the 
+		# column is NOT NULL. Tyvm, Django.
+		# So we check this case here.
+		for f in obj._meta.fields:
+			# Primary keys are a bit special, they're NOT NULL, but .save() populates them.
+			# So we ignore primary keys.
+			if (f.blank and not f.null) and not f.primary_key:
+				# gettattr on a foreignkey foo gets the related model, while foo_id just gets the id.
+				# We don't need or want the model (nor the DB query), we'll take the id thankyouverymuch.
+				name = f.name + ('_id' if isinstance(f, models.ForeignKey) else '')
+
+				if getattr(obj, name) is None:
+					e = BinderValidationError({
+						self._model_name(): {
+							obj.pk if pk is None else pk: {
+								f.name: [{
+									'code': 'null',
+									'message': 'This field cannot be null.'
+								}]
+							}
+						}
+					})
+					validation_error = validation_error + e if validation_error else e
 
 		if validation_error:
 			raise validation_error
