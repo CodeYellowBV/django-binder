@@ -8,6 +8,7 @@ import datetime
 import mimetypes
 from collections import defaultdict, namedtuple
 from PIL import Image
+
 import django
 from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
@@ -664,7 +665,7 @@ class ModelView(View):
 	def _store(self, obj, values, request, ignore_unknown_fields=False, pk=None):
 		deferred_m2ms = {}
 		ignored_fields = []
-		validation_error = None
+		validation_errors = []
 
 		def store_field(obj, field, value, request, pk=pk):
 			try:
@@ -684,7 +685,7 @@ class ModelView(View):
 			except BinderReadOnlyFieldError:
 				ignored_fields.append(field)
 			except BinderValidationError as e:
-				validation_error += e
+				validation_errors.append(e)
 
 		try:
 			obj.full_clean()
@@ -702,7 +703,7 @@ class ModelView(View):
 					}
 				}
 			})
-			validation_error += e
+			validation_errors.append(e)
 
 		# full_clean() doesn't complain when CharField(blank=True, null=False) = None
 		# This causes save() to explode with a django.db.IntegrityError because the 
@@ -727,10 +728,10 @@ class ModelView(View):
 							}
 						}
 					})
-					validation_error += e
+					validation_errors.append(e)
 
-		if validation_error:
-			raise validation_error
+		if validation_errors:
+			raise sum(validation_errors, None)
 
 		obj.save()
 
@@ -931,7 +932,7 @@ class ModelView(View):
 		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
 
 		body = jsonloads(request.body)
-		validation_error = None
+		validation_errors = []
 
 		if not 'data' in body:
 			raise BinderRequestError('missing data')
@@ -1058,13 +1059,13 @@ class ModelView(View):
 			try:
 				view._store(obj, values, request, pk=oid)
 			except BinderValidationError as e:
-				validation_error += e
+				validation_errors.append(e)
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))
 
-		if validation_error:
-			raise validation_error
+		if validation_errors:
+			raise sum(validation_errors, None)
 
 		bla = defaultdict(list)
 		for (model, oid), nid in new_id_map.items():
