@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
+from .compare import assert_json, MAYBE, ANY, EXTRA
 from .testapp.models import Animal
 
 class TestValidationErrors(TestCase):
@@ -43,7 +44,21 @@ class TestValidationErrors(TestCase):
 		self.assertEqual(response.status_code, 400)
 
 		returned_data = jsonloads(response.content)
-		print(returned_data)
+
+		assert_json(returned_data, {
+			'errors': {
+				'animal': {
+					'null': {
+						'name': [
+							{'message': 'This field cannot be null.', 'code': 'null'}
+						]
+					}
+				}
+			},
+			'code': 'ValidationError',
+			MAYBE('debug'): ANY(),
+		})
+
 		self.assertEqual(returned_data['code'], 'ValidationError')
 		self.assertEqual(len(returned_data['errors']), 1)
 		self.assertEqual(len(returned_data['errors']['animal']), 1)
