@@ -193,7 +193,7 @@ class PermissionView(ModelView):
 
 
 
-	def _store(self, obj, values, request, ignore_unknown_fields=False):
+	def _store(self, obj, values, request, **kwargs):
 		"""
 		Scope the creation/changing of an object
 		"""
@@ -202,7 +202,7 @@ class PermissionView(ModelView):
 		else:
 			self.scope_change(request, obj, values)
 
-		return super()._store(obj, values, request, ignore_unknown_fields)
+		return super()._store(obj, values, request, **kwargs)
 
 
 
