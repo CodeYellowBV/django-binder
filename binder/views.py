@@ -29,7 +29,11 @@ from .json import JsonResponse, jsonloads
 def multiput_get_id(bla):
 	return bla['id'] if isinstance(bla, dict) else bla
 
-
+# Primary keys are a bit special, they're NOT NULL, but .save() populates them.
+# So when checking for not null constraint fails, we ignore primary keys.
+# The same holds for auto_now and auto_now_add fields. (like created_at and updated_at)
+def is_filled_upon_save(field):
+	return field.primary_key or getattr(field, 'auto_now_add', False) or getattr(field, 'auto_now', False)
 
 logger = logging.getLogger(__name__)
 
@@ -710,9 +714,7 @@ class ModelView(View):
 		# column is NOT NULL. Tyvm, Django.
 		# So we check this case here.
 		for f in obj._meta.fields:
-			# Primary keys are a bit special, they're NOT NULL, but .save() populates them.
-			# So we ignore primary keys.
-			if (f.blank and not f.null) and not f.primary_key:
+			if (f.blank and not f.null) and not is_filled_upon_save(f):
 				# gettattr on a foreignkey foo gets the related model, while foo_id just gets the id.
 				# We don't need or want the model (nor the DB query), we'll take the id thankyouverymuch.
 				name = f.name + ('_id' if isinstance(f, models.ForeignKey) else '')
