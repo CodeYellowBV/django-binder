@@ -214,7 +214,17 @@ class TestValidationErrors(TestCase):
 		# Important detail: we expect the name of the model to be `contact_person` (snake-cased), NOT `contactperson`
 		self.assertEqual(len(returned_data['errors']['contact_person']), 1)
 
+	def test_multiput_created_at(self):
+		model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Henk',
+			}],
+			'with': {}
+		}
 
+		response = self.client.put('/contact_person/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
 
 	def test_multiput_validate_unique_constraint_fail(self):
 		model_data = {
