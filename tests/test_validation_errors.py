@@ -214,7 +214,7 @@ class TestValidationErrors(TestCase):
 		# Important detail: we expect the name of the model to be `contact_person` (snake-cased), NOT `contactperson`
 		self.assertEqual(len(returned_data['errors']['contact_person']), 1)
 
-	def test_multiput_created_at(self):
+	def test_multiput_auto_now(self):
 		model_data = {
 			'data': [{
 				'id': -1,
