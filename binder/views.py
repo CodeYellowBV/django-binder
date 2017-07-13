@@ -414,7 +414,8 @@ class ModelView(View):
 		else:
 			values = [value]
 
-		if isinstance(field, models.IntegerField) or isinstance(field, models.ForeignKey) or isinstance(field, models.AutoField):
+		if isinstance(field, (models.IntegerField, models.AutoField, models.ForeignKey)) \
+				or isinstance(field, (models.ManyToOneRel, models.ManyToManyField, models.ManyToManyRel)):
 			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
 			for v in values:
 				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
@@ -471,7 +472,7 @@ class ModelView(View):
 				else:
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
-		elif isinstance(field, models.CharField) or isinstance(field, models.TextField):
+		elif isinstance(field, (models.CharField, models.TextField)):
 			allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search', 'isnull')
 			clean_value = values
 		else:
