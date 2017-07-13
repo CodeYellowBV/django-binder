@@ -20,6 +20,7 @@ class Zoo(BinderModel):
 	name = models.TextField()
 	founding_date = models.DateField(null=True, blank=True)
 	floor_plan = models.ImageField(upload_to='floor-plans', null=True, blank=True)
+	contacts = models.ManyToManyField('ContactPerson', blank=True, related_name='zoos')
 
 	def __str__(self):
 		return 'zoo %d: %s' % (self.pk or 0, self.name)
