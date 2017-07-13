@@ -414,7 +414,8 @@ class ModelView(View):
 		else:
 			values = [value]
 
-		if isinstance(field, models.IntegerField) or isinstance(field, models.ForeignKey) or isinstance(field, models.AutoField):
+		if isinstance(field, (models.IntegerField, models.AutoField, models.ForeignKey)) \
+				or isinstance(field, (models.ManyToOneRel, models.ManyToManyField, models.ManyToManyRel)):
 			allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
 			for v in values:
 				# Filter out empty strings, they make no sense in this context, and are likely caused by :in or :isnull
@@ -471,7 +472,7 @@ class ModelView(View):
 				else:
 					raise BinderRequestError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'
 							.format(v, field.__class__.__name__, self.model.__name__, head))
-		elif isinstance(field, models.CharField) or isinstance(field, models.TextField):
+		elif isinstance(field, (models.CharField, models.TextField)):
 			allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search', 'isnull')
 			clean_value = values
 		else:
@@ -930,11 +931,9 @@ class ModelView(View):
 
 
 
-	def multi_put(self, request):
-		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
-
+	# Put data and with on one big pile, that's easier for us
+	def _multi_put_parse_request(self, request):
 		body = jsonloads(request.body)
-		validation_errors = []
 
 		if not 'data' in body:
 			raise BinderRequestError('missing data')
@@ -945,11 +944,15 @@ class ModelView(View):
 		if 'with' in body and not isinstance(body['with'], dict):
 			raise BinderRequestError('with should be a dict')
 
-		# Put data and with on one big pile, that's easier for us
 		data = body.get('with', {})
 		data[self._model_name()] = body['data']
 
-		# Sort object values by model/id
+		return data
+
+
+
+	# Sort object values by model/id
+	def _multi_put_collect_objects(self, data):
 		objects = {}
 		for modelname, objs in data.items():
 			if not isinstance(objs, list):
@@ -970,7 +973,11 @@ class ModelView(View):
 
 				objects[(model, obj['id'])] = obj
 
-		# Figure out dependencies
+		return objects
+
+
+
+	def _multi_put_calculate_dependencies(self, objects):
 		logger.info('Resolving dependencies for {} objects'.format(len(objects)))
 		dependencies = {}
 		for (model, mid), values in objects.items():
@@ -1004,7 +1011,12 @@ class ModelView(View):
 						if (model, mid) != (r_model, r_id):
 							dependencies[(model, mid)].add((r_model, r_id))
 
-		# Actually sort the objects by dependency (and within dependency layer by model/id)
+		return dependencies
+
+
+
+	# Actually sort the objects by dependency (and within dependency layer by model/id)
+	def _multi_put_order_dependencies(self, dependencies):
 		ordered_objects = []
 		while dependencies:
 			this_batch = []
@@ -1022,7 +1034,13 @@ class ModelView(View):
 				raise BinderRequestError('No progress in dependency resolution! Cyclic dependencies?')
 			ordered_objects += sorted(this_batch, key=lambda obj: (obj[0].__name__, obj[1]))
 
+		return ordered_objects
+
+
+
+	def _multi_put_save_objects(self, ordered_objects, objects, request):
 		new_id_map = {}
+		validation_errors = []
 		for model, oid in ordered_objects:
 			values = objects[(model, oid)]
 			logger.info('Saving {} {}'.format(model.__name__, oid))
@@ -1069,11 +1087,24 @@ class ModelView(View):
 		if validation_errors:
 			raise sum(validation_errors, None)
 
-		bla = defaultdict(list)
-		for (model, oid), nid in new_id_map.items():
-			bla[self.router.model_view(model)()._model_name()].append((oid, nid))
+		return new_id_map
 
-		return JsonResponse({'idmap': bla})
+
+
+	def multi_put(self, request):
+		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
+
+		data = self._multi_put_parse_request(request)
+		objects = self._multi_put_collect_objects(data)
+		dependencies = self._multi_put_calculate_dependencies(objects)
+		ordered_objects = self._multi_put_order_dependencies(dependencies)
+		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request)
+
+		output = defaultdict(list)
+		for (model, oid), nid in new_id_map.items():
+			output[self.router.model_view(model)()._model_name()].append((oid, nid))
+
+		return JsonResponse({'idmap': output})
 
 
 
