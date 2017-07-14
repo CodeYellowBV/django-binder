@@ -211,3 +211,73 @@ class MultiPutTest(TestCase):
 		jerry=Animal.objects.get(pk=animal_idmap[-4])
 		self.assertEqual('Jerry', jerry.name)
 		self.assertEqual(artis, jerry.zoo)
+
+
+	def test_put_remove_item(self):
+		with_model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Scooby Doo',
+				'zoo': -1,
+			}],
+			'with': {
+				'zoo': [{
+					'id': -1,
+					'name': 'Artis',
+				}],
+			},
+		}
+		response = self.client.put('/animal/', data=json.dumps(with_model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+
+		animal_idmap=dict(returned_data['idmap']['animal'])
+		scooby_pk = animal_idmap[-1]
+
+		scooby = Animal.objects.get(pk=scooby_pk)
+		self.assertEqual('Artis', scooby.zoo.name)
+
+		with_model_data = {
+			'data': [{
+				'id': scooby_pk,
+				'zoo': None,
+			}],
+			'with': {},
+		}
+		response = self.client.put('/animal/', data=json.dumps(with_model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
+
+		scooby = Animal.objects.get(pk=scooby_pk)
+		self.assertEqual(None, scooby.zoo)
+
+	def test_put_reverse_ref(self):
+		model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Apenheul',
+				'animals': [-2, -3]
+			}],
+			'with': {
+				'animal': [{
+					'id': -2,
+					'name': 'Harambe',
+				}, {
+					'id': -3,
+					'name': 'Bokito'
+				}]
+			}
+		}
+
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		zoo_ids = {i for i, _ in returned_data['idmap']['zoo']}
+		animal_ids = {i for i, _ in returned_data['idmap']['animal']}
+
+		self.assertIn(-1, zoo_ids)
+		self.assertIn(-2, animal_ids)
+		self.assertIn(-3, animal_ids)

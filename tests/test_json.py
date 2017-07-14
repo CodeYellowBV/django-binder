@@ -1,7 +1,8 @@
 import json as python_core_json
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from uuid import UUID
+from decimal import Decimal
 from django.test import TestCase
 
 import binder.json as binder_json
@@ -44,12 +45,30 @@ class JsonTest(TestCase):
 		self.assertEqual(plain, binder_json.jsonloads(bytes(python_core_json.dumps(plain), 'utf-8')))
 
 
-	# This assumes missing timezone is UTC
-	def test_nontimezoned_json_datetimes_dump_correctly(self):
-		t = datetime.strptime('2016-01-01 01:02:03', '%Y-%m-%d %H:%M:%S')
+	def test_json_datetimes_dump_correctly_notz_nous(self):
+		t = datetime(2016, 1, 1, 1, 2, 3)
+		self.assertEqual('["2016-01-01T01:02:03.000000"]', binder_json.jsondumps([t]))
+
+
+	def test_json_datetimes_dump_correctly_notz_us(self):
+		t = datetime(2016, 1, 1, 1, 2, 3, 313337)
+		self.assertEqual('["2016-01-01T01:02:03.313337"]', binder_json.jsondumps([t]))
+
+
+	def test_json_datetimes_dump_correctly_tz_nous(self):
+		t = datetime(2016, 1, 1, 1, 2, 3, tzinfo=timezone.utc)
 		self.assertEqual('["2016-01-01T01:02:03.000000+0000"]', binder_json.jsondumps([t]))
+
+
+	def test_json_datetimes_dump_correctly_tz_us(self):
+		t = datetime(2016, 1, 1, 1, 2, 3, 313337, tzinfo=timezone.utc)
+		self.assertEqual('["2016-01-01T01:02:03.313337+0000"]', binder_json.jsondumps([t]))
 
 
 	def test_uuids_dump_correctly(self):
 		u = UUID('{12345678-1234-5678-1234-567812345678}')
 		self.assertEqual('["12345678-1234-5678-1234-567812345678"]', binder_json.jsondumps([u]))
+
+	def test_decimals_dump_correctly(self):
+		u = Decimal('1.1')
+		self.assertEqual('["1.1"]', binder_json.jsondumps([u]))

@@ -337,6 +337,64 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['animal'])
 
 
+	def test_get_collection_filtering_following_nested_references(self):
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.full_clean()
+		emmen.save()
+
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		scrooge = Animal(name='Scrooge McDuck', zoo=gaia)
+		scrooge.full_clean()
+		scrooge.save()
+
+		frock = Costume(description="Gentleman's frock coat", animal=scrooge)
+		frock.full_clean()
+		frock.save()
+
+		donald = Animal(name='Donald Duck', zoo=emmen)
+		donald.full_clean()
+		donald.save()
+
+		sailor = Costume(description='Weird sailor costume', animal=donald)
+		sailor.full_clean()
+		sailor.save()
+
+
+		response = self.client.get('/costume/', data={'order_by': 'animal.zoo.name'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
+
+		self.assertEqual(frock.pk, result['data'][0]['id']) # G
+		self.assertEqual(sailor.pk, result['data'][1]['id']) # W
+
+		# Another regression due to the same bug we test
+		# above: the with would also break.
+		response = self.client.get('/costume/', data={'order_by': 'animal.zoo.name', 'with': 'animal.zoo'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
+		self.assertEqual(frock.pk, result['data'][0]['id']) # G
+		self.assertEqual(sailor.pk, result['data'][1]['id']) # W
+		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
+		self.assertEqual('Scrooge McDuck', animal_by_id[frock.pk]['name'])
+		self.assertEqual("Donald Duck", animal_by_id[sailor.pk]['name'])
+
+		# Another regression due to the same bug we test
+		# above: the related filter would also break.
+		response = self.client.get('/costume/', data={'order_by': 'animal.zoo.name', '.animal.zoo.name': 'GaiaZOO'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+		self.assertEqual(frock.pk, result['data'][0]['id'])
+
+
 	def test_post_new_model_with_foreign_key_value(self):
 		artis = Zoo(name='Artis')
 		artis.full_clean()

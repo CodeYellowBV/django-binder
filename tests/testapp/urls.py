@@ -5,13 +5,13 @@ import binder.views
 import binder.history
 import binder.models
 
-from .views import animal, caretaker, costume, custom, zoo
+from .views import animal, caretaker, costume, custom, zoo, contact_person
 
-binder.router.Router().register(binder.views.ModelView)
+router = binder.router.Router().register(binder.views.ModelView)
 
 urlpatterns = [
 	url(r'^custom/route', custom.custom, name='custom'),
-	url(r'^', include(binder.router.Router().urls)),
+	url(r'^', include(router.urls)),
 	url(r'^', binder.views.api_catchall, name='catchall'),
 ]
 

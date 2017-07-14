@@ -4,5 +4,6 @@ from ..models import Zoo
 
 # From the api docs
 class ZooView(ModelView):
-	m2m_fields = ['animals']
+	m2m_fields = ['animals', 'contacts']
 	model = Zoo
+	file_fields = ['floor_plan']
