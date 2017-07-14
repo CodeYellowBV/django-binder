@@ -72,7 +72,7 @@ def start(source=None, user=None, uuid=None, date=None):
 		date = timezone.now()
 
 	if Transaction.started:
-		logger.warning('Transaction start: discarding open transaction')
+		raise RuntimeError('called Transaction.start() while there is an open transaction')
 
 	Transaction.source = source
 	Transaction.user = user
@@ -109,7 +109,7 @@ def change(model, oid, field, old, new):
 # FIXME: use bulk inserts for efficiency.
 def commit():
 	if not Transaction.started:
-		logger.error('Transaction commit: no open transaction')
+		raise RuntimeError('called Transaction.commit() while there is no open transaction')
 	Transaction.started = False
 
 	# Fill in the deferred m2ms
@@ -158,7 +158,7 @@ def commit():
 
 def abort():
 	if not Transaction.started:
-		logger.error('Transaction abort: no open transaction')
+		raise RuntimeError('called Transaction.abort() while there is no open transaction')
 	Transaction.started = False
 	Transaction.changes.clear()
 
