@@ -364,19 +364,7 @@ class ModelView(View):
 
 		next = self._follow_related(head)[0].model
 
-		# In most binder apps we use the Profile model which doesn't have an id,
-		# but it references the User model.
-		#
-		# This code normally checks for the foreign key to the related model on this model.
-		# This fails as a User doesn't have a profile_id.
-		# Instead, a profile has no own foreign key, and uses its user_id as fk.
-		#
-		# If the related model has no `id` as pk, and it uses the foreign key to this model as private key:
-		# use the ids of this model as pks
-		if next._meta.pk.name != 'id' and next._meta.pk.related_model == self.model:
-			pks = list(self.model.objects.filter(pk__in=pks).values_list('id', flat=True))
-		else:
-			pks = list(self.model.objects.filter(pk__in=pks).values_list(head + '__id', flat=True))
+		pks = list(self.model.objects.filter(pk__in=pks).values_list(head + '__pk', flat=True))
 		view_class = self.router.model_view(next)
 
 		if not tail:
