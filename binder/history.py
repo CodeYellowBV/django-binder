@@ -1,4 +1,5 @@
 import logging
+import threading
 
 from django.db import models
 from django.utils import timezone
@@ -46,13 +47,18 @@ logger = logging.getLogger(__name__)
 
 
 
-class Transaction:
+class _Transaction(threading.local):
+	def __init__(self):
+		logger.info('Creating new Transaction for thread {}'.format(threading.current_thread().name))
+
 	user = None
 	uuid = None
 	date = None
 	source = None
 	started = False
 	changes = {}
+
+Transaction = _Transaction()
 
 
 
