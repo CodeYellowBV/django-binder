@@ -5,3 +5,4 @@ from .contact_person import ContactPerson
 from .costume import Costume
 from .gate import Gate
 from .zoo import Zoo
+from .zoo_employee import ZooEmployee

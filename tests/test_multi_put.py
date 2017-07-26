@@ -258,15 +258,15 @@ class MultiPutTest(TestCase):
 			'data': [{
 				'id': -1,
 				'name': 'Apenheul',
-				'animals': [-2, -3]
+				'zoo_employees': [-2, -3]
 			}],
 			'with': {
-				'animal': [{
+				'zoo_employee': [{
 					'id': -2,
 					'name': 'Harambe',
 				}, {
 					'id': -3,
-					'name': 'Bokito'
+					'name': 'Bokito',
 				}]
 			}
 		}
@@ -276,8 +276,7 @@ class MultiPutTest(TestCase):
 
 		returned_data = jsonloads(response.content)
 		zoo_ids = {i for i, _ in returned_data['idmap']['zoo']}
-		animal_ids = {i for i, _ in returned_data['idmap']['animal']}
+		zoo_employee_ids = {i for i, _ in returned_data['idmap']['zoo_employee']}
 
-		self.assertIn(-1, zoo_ids)
-		self.assertIn(-2, animal_ids)
-		self.assertIn(-3, animal_ids)
+		self.assertEqual(zoo_ids, {-1})
+		self.assertEqual(zoo_employee_ids, {-2, -3})
