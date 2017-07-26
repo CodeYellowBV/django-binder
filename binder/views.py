@@ -906,7 +906,7 @@ class ModelView(View):
 
 
 	def _obj_diff(self, old, new, name):
-		if isinstance(old, dict) or isinstance(new, dict):
+		if isinstance(old, dict) and isinstance(new, dict):
 			changes = []
 			for k, v in old.items():
 				if k in new:
@@ -918,7 +918,7 @@ class ModelView(View):
 					changes.append('  added {}.{}: {}'.format(name, k, repr(v)))
 			return changes
 
-		if isinstance(old, list) or isinstance(new, list):
+		if isinstance(old, list) and isinstance(new, list):
 			changes = []
 			for i in range(0, min(len(old), len(new))):
 				changes += self._obj_diff(old[i], new[i], '{}[{}]'.format(name, i))
