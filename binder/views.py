@@ -979,6 +979,14 @@ class ModelView(View):
 		return objects
 
 
+	def _multi_put_convert_backref_to_forwardref(self, objects):
+		for (model, mid), values in objects.items():
+			for field in filter(lambda f: f.one_to_many, model._meta.get_fields()):
+				if field.name in values:
+					for rid in values[field.name]:
+						objects[(field.related_model, rid)][field.remote_field.name] = mid
+		return objects
+
 
 	def _multi_put_calculate_dependencies(self, objects):
 		logger.info('Resolving dependencies for {} objects'.format(len(objects)))
@@ -1099,6 +1107,7 @@ class ModelView(View):
 
 		data = self._multi_put_parse_request(request)
 		objects = self._multi_put_collect_objects(data)
+		objects = self._multi_put_convert_backref_to_forwardref(objects)
 		dependencies = self._multi_put_calculate_dependencies(objects)
 		ordered_objects = self._multi_put_order_dependencies(dependencies)
 		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request)
