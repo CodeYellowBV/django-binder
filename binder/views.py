@@ -600,7 +600,19 @@ class ModelView(View):
 	def get_queryset(self, request):
 		return self.model.objects.all()
 
-
+	def order_by(self, request, queryset):
+		#### order_by
+		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
+		if order_bys:
+			orders = []
+			for o in order_bys:
+				if o.startswith('-'):
+					queryset, order = self._parse_order_by(queryset, o[1:], partial='-')
+				else:
+					queryset, order = self._parse_order_by(queryset, o)
+				orders.append(order)
+			queryset = queryset.order_by(*orders)
+		return queryset
 
 	def get(self, request, pk=None, withs=None):
 		meta = {}
@@ -626,17 +638,7 @@ class ModelView(View):
 		if 'search' in request.GET:
 			queryset = self.search(queryset, request.GET['search'], request)
 
-		#### order_by
-		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
-		if order_bys:
-			orders = []
-			for o in order_bys:
-				if o.startswith('-'):
-					queryset, order = self._parse_order_by(queryset, o[1:], partial='-')
-				else:
-					queryset, order = self._parse_order_by(queryset, o)
-				orders.append(order)
-			queryset = queryset.order_by(*orders)
+		queryset = self.order_by(request, queryset)
 
 		if not pk:
 			meta['total_records'] = queryset.count()
@@ -760,6 +762,7 @@ class ModelView(View):
 				for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
 					if obj_field.field.null:
 						setattr(rmobj, obj_field.field.name, None)
+						rmobj.save()
 					elif hasattr(rmobj, 'deleted'):
 						if not rmobj.deleted:
 							rmobj.deleted = True
@@ -907,7 +910,7 @@ class ModelView(View):
 
 
 	def _obj_diff(self, old, new, name):
-		if isinstance(old, dict) or isinstance(new, dict):
+		if isinstance(old, dict) and isinstance(new, dict):
 			changes = []
 			for k, v in old.items():
 				if k in new:
@@ -919,7 +922,7 @@ class ModelView(View):
 					changes.append('  added {}.{}: {}'.format(name, k, repr(v)))
 			return changes
 
-		if isinstance(old, list) or isinstance(new, list):
+		if isinstance(old, list) and isinstance(new, list):
 			changes = []
 			for i in range(0, min(len(old), len(new))):
 				changes += self._obj_diff(old[i], new[i], '{}[{}]'.format(name, i))
@@ -979,6 +982,15 @@ class ModelView(View):
 
 		return objects
 
+
+	def _multi_put_convert_backref_to_forwardref(self, objects):
+		for (model, mid), values in objects.items():
+			for field in filter(lambda f: f.one_to_many, model._meta.get_fields()):
+				if field.name in values:
+					for rid in values[field.name]:
+						if (field.related_model, rid) in objects:
+							objects[(field.related_model, rid)][field.remote_field.name] = mid
+		return objects
 
 
 	def _multi_put_calculate_dependencies(self, objects):
@@ -1100,6 +1112,7 @@ class ModelView(View):
 
 		data = self._multi_put_parse_request(request)
 		objects = self._multi_put_collect_objects(data)
+		objects = self._multi_put_convert_backref_to_forwardref(objects)
 		dependencies = self._multi_put_calculate_dependencies(objects)
 		ordered_objects = self._multi_put_order_dependencies(dependencies)
 		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request)

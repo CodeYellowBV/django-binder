@@ -1,6 +1,7 @@
 # Django-Binder
 
 [![Build Status](https://travis-ci.org/CodeYellowBV/django-binder.svg?branch=master)](https://travis-ci.org/CodeYellowBV/django-binder)
+[![codecov](https://codecov.io/gh/CodeYellowBV/django-binder/branch/master/graph/badge.svg)](https://codecov.io/gh/CodeYellowBV/django-binder)
 
 Code Yellow backend framework for SPA webapps with REST-like API.
 
