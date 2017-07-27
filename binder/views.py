@@ -983,14 +983,18 @@ class ModelView(View):
 		return objects
 
 
+
 	def _multi_put_convert_backref_to_forwardref(self, objects):
 		for (model, mid), values in objects.items():
 			for field in filter(lambda f: f.one_to_many, model._meta.get_fields()):
 				if field.name in values:
+					if not isinstance(values[field.name], list) or not all(isinstance(v, int) for v in values[field.name]):
+						raise BinderFieldTypeError(self.model.__name__, field.name)
 					for rid in values[field.name]:
 						if (field.related_model, rid) in objects:
 							objects[(field.related_model, rid)][field.remote_field.name] = mid
 		return objects
+
 
 
 	def _multi_put_calculate_dependencies(self, objects):
