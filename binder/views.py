@@ -195,6 +195,9 @@ class ModelView(View):
 			e.log()
 			response = e.response(request=request)
 			history.abort()
+		except:
+			history.abort()
+			raise
 
 		logger.info('request response; status={} time={}ms bytes={} queries={}'.
 				format(
