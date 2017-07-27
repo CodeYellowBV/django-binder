@@ -985,7 +985,8 @@ class ModelView(View):
 			for field in filter(lambda f: f.one_to_many, model._meta.get_fields()):
 				if field.name in values:
 					for rid in values[field.name]:
-						objects[(field.related_model, rid)][field.remote_field.name] = mid
+						if (field.related_model, rid) in objects:
+							objects[(field.related_model, rid)][field.remote_field.name] = mid
 		return objects
 
 
