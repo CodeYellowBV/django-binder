@@ -310,3 +310,33 @@ class MultiPutTest(TestCase):
 
 		returned_data = jsonloads(response.content)
 		self.assertEqual(returned_data['animals'], [])
+
+	def test_remove_relation_through_backref_non_nullable_soft_deletable(self):
+		model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Apenheul',
+				'zoo_employees': [-2, -3]
+			}],
+			'with': {
+				'zoo_employee': [{
+					'id': -2,
+					'name': 'Harambe',
+				}, {
+					'id': -3,
+					'name': 'Bokito',
+				}]
+			}
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		zoo_id = returned_data['idmap']['zoo'][0][1]
+
+		update_data = {'zoo_employees': []}
+		response = self.client.put('/zoo/{}/'.format(zoo_id), data=json.dumps(update_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		self.assertEqual(returned_data['zoo_employees'], [])
