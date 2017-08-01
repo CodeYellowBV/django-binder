@@ -600,7 +600,9 @@ class ModelView(View):
 	def get_queryset(self, request):
 		return self.model.objects.all()
 
-	def order_by(self, request, queryset):
+
+
+	def order_by(self, queryset, request):
 		#### order_by
 		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
 		if order_bys:
@@ -613,6 +615,8 @@ class ModelView(View):
 				orders.append(order)
 			queryset = queryset.order_by(*orders)
 		return queryset
+
+
 
 	def get(self, request, pk=None, withs=None):
 		meta = {}
@@ -638,7 +642,7 @@ class ModelView(View):
 		if 'search' in request.GET:
 			queryset = self.search(queryset, request.GET['search'], request)
 
-		queryset = self.order_by(request, queryset)
+		queryset = self.order_by(queryset, request)
 
 		if not pk:
 			meta['total_records'] = queryset.count()
