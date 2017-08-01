@@ -605,6 +605,12 @@ class ModelView(View):
 	def order_by(self, queryset, request):
 		#### order_by
 		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
+
+		# Append model default orders to the API orders, if not already in there
+		for do in queryset.model._meta.ordering:
+			if do.lstrip('-') not in set(x.lstrip('-') for x in order_bys):
+				order_bys.append(do)
+
 		if order_bys:
 			orders = []
 			for o in order_bys:
