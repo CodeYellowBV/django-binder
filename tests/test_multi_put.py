@@ -1,10 +1,14 @@
-from django.test import TestCase, Client
-
+import unittest
 import json
-from binder.json import jsonloads
+
+from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
+from binder.json import jsonloads
+
 from .testapp.models import Animal, Zoo
+
+
 
 class MultiPutTest(TestCase):
 	def setUp(self):
@@ -311,6 +315,7 @@ class MultiPutTest(TestCase):
 		returned_data = jsonloads(response.content)
 		self.assertEqual(returned_data['animals'], [])
 
+	@unittest.skip('#40')
 	def test_remove_relation_through_backref_non_nullable_soft_deletable(self):
 		model_data = {
 			'data': [{
