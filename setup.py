@@ -39,5 +39,8 @@ setup(
 		'Django >= 1.10',
 		'Pillow >= 3.2.0',
 		'django-request-id >= 1.0.0',
+		'gevent == 1.2.2',
+		'gevent-websocket == 0.10.1',
+		'Werkzeug == 0.12.2'
 	],
 )
