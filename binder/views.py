@@ -321,7 +321,7 @@ class ModelView(View):
 			view = view()
 			# {router-view-instance}
 			view.router = self.router
-			os = view._get_objs(view.model.objects.filter(pk__in=with_pks), request=request)
+			os = view._get_objs(view.get_queryset(request).filter(pk__in=with_pks), request=request)
 			extras_dict[view._model_name()] = os
 		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
 

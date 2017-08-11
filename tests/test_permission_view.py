@@ -3,7 +3,7 @@ from .compare import assert_json, EXTRA
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
-from binder.json import jsonloads, jsondumps
+from binder.json import jsonloads
 
 from .testapp.models import Animal, FeedingSchedule
 
@@ -81,7 +81,6 @@ class TestWithPermButOutOfScope(TestCase):
         ))
         self.assertEqual(res.status_code, 404)
         response_data = jsonloads(res.content)
-        print(response_data)
         assert_json(response_data, {
             'code': 'NotFound',
             EXTRA(): None,
@@ -96,7 +95,7 @@ class TestWithPermButOutOfScope(TestCase):
         assert_json(response_data, {
             'data': {
                 'id': self.animal.id,
-                EXTRA(): None
+                EXTRA(): None,
             },
             'with': {
                 'feeding_schedule': [],
