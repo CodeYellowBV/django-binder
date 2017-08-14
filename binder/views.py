@@ -506,7 +506,7 @@ class ModelView(View):
 
 
 	def _parse_order_by(self, queryset, field, partial=''):
-		head, *tail = (field, []) if '__' in field else field.split('.')
+		head, *tail = field.split('.')
 
 		if tail:
 			next = self._follow_related(head)[0].model
@@ -515,10 +515,11 @@ class ModelView(View):
 			view.router = self.router
 			return view._parse_order_by(queryset, '.'.join(tail), partial + head + '__')
 
-		try:
-			self.model._meta.get_field(head)
-		except models.fields.FieldDoesNotExist:
-			raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
+		if '__' not in head:
+			try:
+				self.model._meta.get_field(head)
+			except models.fields.FieldDoesNotExist:
+				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head)
 
