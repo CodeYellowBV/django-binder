@@ -129,7 +129,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('Wile E. Coyote', result['data'][2]['name'])
 
 		# Sorting by nonexistent field errors
-		response = self.client.get('/animal/', data={'order_by': 'zoo__name'})
+		response = self.client.get('/animal/', data={'order_by': 'zoo.foobar'})
 
 		self.assertEqual(response.status_code, 418)
 		result = jsonloads(response.content)
