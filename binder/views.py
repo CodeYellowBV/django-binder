@@ -506,7 +506,7 @@ class ModelView(View):
 
 
 	def _parse_order_by(self, queryset, field, partial=''):
-		head, *tail = re.split(r'\.|__', field)  # field.split('.')
+		head, *tail = (field, []) if '__' in field else field.split('.')
 
 		if tail:
 			next = self._follow_related(head)[0].model
