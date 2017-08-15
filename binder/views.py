@@ -515,11 +515,10 @@ class ModelView(View):
 			view.router = self.router
 			return view._parse_order_by(queryset, '.'.join(tail), partial + head + '__')
 
-		if '__' not in head:
-			try:
-				self.model._meta.get_field(head)
-			except models.fields.FieldDoesNotExist:
-				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
+		try:
+			self.model._meta.get_field(head)
+		except models.fields.FieldDoesNotExist:
+			raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head)
 
@@ -607,11 +606,6 @@ class ModelView(View):
 		#### order_by
 		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
 
-		# Append model default orders to the API orders, if not already in there
-		for do in queryset.model._meta.ordering:
-			if do.lstrip('-') not in set(x.lstrip('-') for x in order_bys):
-				order_bys.append(do)
-
 		if order_bys:
 			orders = []
 			for o in order_bys:
@@ -620,6 +614,9 @@ class ModelView(View):
 				else:
 					queryset, order = self._parse_order_by(queryset, o)
 				orders.append(order)
+			# Append model default orders to the API orders.
+			# This guarantees stable result sets when paging.
+			orders += queryset.model._meta.ordering
 			queryset = queryset.order_by(*orders)
 		return queryset
 

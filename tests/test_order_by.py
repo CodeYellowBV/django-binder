@@ -25,7 +25,7 @@ class CustomOrdering:
 
 
 
-class TestValidationErrors(TestCase):
+class TestOrderBy(TestCase):
 	def setUp(self):
 		super().setUp()
 		u = User(username='testuser', is_active=True, is_superuser=True)
@@ -136,6 +136,19 @@ class TestValidationErrors(TestCase):
 
 		data = [x['id'] for x in returned_data['data']]
 		self.assertEqual(data, [4, 1, 3, 2])
+
+
+	# Order by -description, custom model default on related model (-animal.name)
+	# This would break due to Django vs Binder related object syntax mismatch and
+	# missing views for non-Binder relations.
+	def test_order_revdescription_customdefault_related_model_name(self):
+		with CustomOrdering(Costume, 'animal__name'):
+			response = self.client.get('/costume/?order_by=-description')
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		data = [x['id'] for x in returned_data['data']]
+		self.assertEqual(data, [1, 4, 2, 3])
 
 
 
