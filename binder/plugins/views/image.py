@@ -1,11 +1,14 @@
-from binder.exceptions import BinderValidationError, BinderNotFound
-from django.core.exceptions import ValidationError, ObjectDoesNotExist
-from binder.json import jsondumps, jsonloads, JsonResponse
-from django.utils.translation import ugettext as _
-from binder.router import list_route
-from django import forms
 from PIL import Image
 from abc import ABCMeta
+
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
+from django.utils.translation import ugettext as _
+from django import forms
+
+from binder.json import jsonloads, JsonResponse
+from binder.exceptions import BinderValidationError
+from binder.router import list_route
+from binder.permissions.views import PermissionView
 
 class MultiIdField(forms.Field):
 	def validate(self, value):
@@ -127,6 +130,7 @@ class ImageView:
 					'ids': ['ImageObject with id {} not found'.format(i)]
 				})
 
-		self.scope_change_list(request, scans, {})
+		if isinstance(self, PermissionView):
+			self.scope_change_list(request, scans, {})
 		return scans
 

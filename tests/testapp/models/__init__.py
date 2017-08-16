@@ -7,3 +7,4 @@ from .feeding_schedule import FeedingSchedule
 from .gate import Gate
 from .zoo import Zoo
 from .zoo_employee import ZooEmployee
+from .picture import Picture
