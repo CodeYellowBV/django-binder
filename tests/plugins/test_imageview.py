@@ -1,4 +1,7 @@
 import json
+from PIL import Image
+from os import urandom
+from tempfile import NamedTemporaryFile
 
 from django.test import TestCase, Client
 from django.core.files import File
@@ -6,9 +9,6 @@ from django.contrib.auth.models import User
 
 from ..testapp.models import Picture, Animal
 
-from PIL import Image
-from tempfile import NamedTemporaryFile
-from os import urandom
 
 
 class ImageTest(TestCase):
