@@ -20,4 +20,3 @@ class ApiCatchallTest(TestCase):
 		self.assertEqual(body.get('message'), 'Undefined URI for this API.')
 		self.assertEqual(body.get('code'), 'InvalidURI')
 		self.assertEqual(body.get('path'), '/nonexistent/endpoint/')
-

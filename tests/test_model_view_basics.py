@@ -238,7 +238,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('GaiaZOO', zoo_by_id[gaia.pk]['name'])
 		self.assertEqual('Wildlands Adventure Zoo Emmen', zoo_by_id[emmen.pk]['name'])
 		self.assertSetEqual(set([coyote.pk, roadrunner.pk]),
-				    set(zoo_by_id[gaia.pk]['animals']))
+							set(zoo_by_id[gaia.pk]['animals']))
 		self.assertSetEqual(set([woody.pk]), set(zoo_by_id[emmen.pk]['animals']))
 
 
@@ -392,8 +392,8 @@ class ModelViewBasicsTest(TestCase):
 		result = jsonloads(response.content)
 		self.assertEqual(2, len(result['data']))
 
-		self.assertEqual(frock.pk, result['data'][0]['id']) # G
-		self.assertEqual(sailor.pk, result['data'][1]['id']) # W
+		self.assertEqual(frock.pk, result['data'][0]['id'])  # G
+		self.assertEqual(sailor.pk, result['data'][1]['id'])  # W
 
 		# Another regression due to the same bug we test
 		# above: the with would also break.
@@ -402,8 +402,8 @@ class ModelViewBasicsTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual(2, len(result['data']))
-		self.assertEqual(frock.pk, result['data'][0]['id']) # G
-		self.assertEqual(sailor.pk, result['data'][1]['id']) # W
+		self.assertEqual(frock.pk, result['data'][0]['id'])  # G
+		self.assertEqual(sailor.pk, result['data'][1]['id'])  # W
 		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
 		self.assertEqual('Scrooge McDuck', animal_by_id[frock.pk]['name'])
 		self.assertEqual("Donald Duck", animal_by_id[sailor.pk]['name'])
@@ -437,7 +437,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(artis.pk, returned_data.get('zoo'))
 
 		scooby = Animal.objects.get(id=returned_data.get('id'))
-		self.assertEqual(artis, scooby.zoo) # haha, Scooby Zoo!
+		self.assertEqual(artis, scooby.zoo)  # haha, Scooby Zoo!
 		self.assertEqual('Scooby Doo', scooby.name)
 
 
@@ -488,7 +488,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertIsNotNone(returned_data.get('id'))
 		self.assertEqual('Artis', returned_data.get('name'))
 		self.assertSetEqual(set([scooby.id, scrappy.id]),
-				    set(returned_data.get('animals')))
+							set(returned_data.get('animals')))
 
 		artis = Zoo.objects.get(id=returned_data.get('id'))
 		self.assertEqual('Artis', artis.name)

@@ -40,10 +40,10 @@ class TestOrderBy(TestCase):
 		Animal(id=3, name='a3').save()
 		Animal(id=4, name='a4').save()
 
-		Costume(id=2, animal_id=2, nickname='Foo', description='Bar').save()
-		Costume(id=3, animal_id=3, nickname='Bar', description='Bar').save()
-		Costume(id=1, animal_id=1, nickname='Foo', description='Foo').save()
-		Costume(id=4, animal_id=4, nickname='Bar', description='Foo').save()
+		Costume(animal_id=2, nickname='Foo', description='Bar').save()
+		Costume(animal_id=3, nickname='Bar', description='Bar').save()
+		Costume(animal_id=1, nickname='Foo', description='Foo').save()
+		Costume(animal_id=4, nickname='Bar', description='Foo').save()
 
 
 
@@ -154,7 +154,7 @@ class TestOrderBy(TestCase):
 
 	# Order by nickname, -id (overriding default model order)
 	def test_order_nickname(self):
-		response = self.client.get('/costume/?order_by=nickname,-id')
+		response = self.client.get('/costume/?order_by=nickname,-pk')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 
