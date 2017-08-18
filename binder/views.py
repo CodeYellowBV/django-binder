@@ -243,7 +243,7 @@ class ModelView(View):
 			# We could use an additional filter(**{field + '__isnull': False}), but that only seems slower?
 			# Hurgh. The queryset is annotated, and the annotation columns show up in the subquery -> Boom. Use list of IDs instead.
 			# for this, other in self.model.objects.filter(id__in=queryset).values_list('id', rfield):
-			for this, other in self.model.objects.filter(id__in=list(queryset.values_list('id', flat=True))).values_list('id', rfield):
+			for this, other in self.model.objects.filter(pk__in=list(queryset.values_list('pk', flat=True))).values_list('pk', rfield):
 				if other is not None:
 					idmap[this].append(other)
 			m2m_ids[field] = idmap
@@ -273,6 +273,7 @@ class ModelView(View):
 					data[field] = idmap[obj.id][0] if len(idmap[obj.id]) == 1 else None
 				else:
 					data[field] = idmap[obj.id]
+			data['id'] = data.pop(self.model._meta.pk.name)
 			datas.append(data)
 
 		return datas
@@ -291,14 +292,14 @@ class ModelView(View):
 	# returns two dictionaries:
 	# - withs: { related_modal_name: [ids]}
 	# - mappings: { with_name: related_model_name}
-	def _get_withs(self, ids, withs, request):
+	def _get_withs(self, pks, withs, request):
 		if withs is None and request is not None:
 			withs = list(filter(None, request.GET.get('with', '').split(',')))
 
-		if isinstance(ids, django.db.models.query.QuerySet):
-			ids = ids.values_list('id', flat=True)
+		if isinstance(pks, django.db.models.query.QuerySet):
+			pks = pks.values_list('pk', flat=True)
 		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
-		ids = list(ids)
+		pks = list(pks)
 
 		# Make sure to include A if A.B is specified.
 		for w in withs:
@@ -310,7 +311,7 @@ class ModelView(View):
 		extras_mapping = {}
 
 		for w in withs:
-			(view, new_ids) = self._get_with(w, ids, request=request)
+			(view, new_ids) = self._get_with(w, pks, request=request)
 			if view:
 				extras_mapping[w] = view
 				extras[view].update(set(new_ids))
@@ -518,7 +519,11 @@ class ModelView(View):
 		try:
 			self.model._meta.get_field(head)
 		except models.fields.FieldDoesNotExist:
-			raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
+			if head == 'id':
+				pk = self.model._meta.pk
+				head = pk.get_attname() if pk.one_to_one or pk.many_to_one else pk.name
+			else:
+				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head)
 

@@ -8,7 +8,7 @@ from binder.models import BinderModel
 class Costume(BinderModel):
 	class Meta:
 		ordering = ['animal_id']
-		
+
 	nickname = models.TextField(blank=True)
 	description = models.TextField(blank=True, null=True)
 	animal = models.OneToOneField('Animal', on_delete=models.CASCADE, related_name='costume', primary_key=True)

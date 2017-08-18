@@ -333,8 +333,8 @@ class ModelViewBasicsTest(TestCase):
 		costume_by_id = {costume['id']: costume for costume in result['with']['costume']}
 		self.assertEqual('Weird sailor costume', costume_by_id[sailor.pk]['description'])
 		self.assertEqual("Gentleman's frock coat", costume_by_id[frock.pk]['description'])
-		self.assertEqual(scrooge.pk, costume_by_id[frock.pk]['animal'])
-		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['animal'])
+		self.assertEqual(scrooge.pk, costume_by_id[frock.pk]['id'])
+		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['id'])
 
 	def test_get_model_with_relation_without_id(self):
 		gaia = Zoo(name='GaiaZOO')
@@ -456,9 +456,9 @@ class ModelViewBasicsTest(TestCase):
 		returned_data = jsonloads(response.content)
 		self.assertIsNotNone(returned_data.get('id'))
 		self.assertEqual('Weird sailor costume', returned_data.get('description'))
-		self.assertEqual(donald.pk, returned_data.get('animal'))
+		self.assertEqual(donald.pk, returned_data.get('id'))
 
-		sailor = Costume.objects.get(id=returned_data.get('id'))
+		sailor = Costume.objects.get(animal_id=returned_data.get('id'))
 		self.assertEqual(donald, sailor.animal)
 		self.assertEqual('Weird sailor costume', sailor.description)
 

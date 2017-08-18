@@ -1,12 +1,9 @@
-import unittest
-import json
-
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
-from binder.json import jsonloads
+from binder.json import jsonloads, jsondumps
 
-from .compare import assert_json, MAYBE, ANY, EXTRA
+# from .compare import assert_json, MAYBE, ANY, EXTRA
 from .testapp.models import Animal, Costume
 
 
@@ -17,11 +14,11 @@ class CustomOrdering:
 		self.order = order
 
 	def __enter__(self):
-		self.old = self.cls.Meta.ordering[0]
-		self.cls.Meta.ordering[0] = self.order
+		self.old = self.cls._meta.ordering[0]
+		self.cls._meta.ordering[0] = self.order
 
 	def __exit__(self, *args, **kwargs):
-		self.cls.Meta.ordering[0] = self.old
+		self.cls._meta.ordering[0] = self.old
 
 
 
@@ -117,7 +114,7 @@ class TestOrderBy(TestCase):
 
 	# Order by nickname, custom model default (-id)
 	def test_order_nickname_customdefault(self):
-		with CustomOrdering(Costume, '-id'):
+		with CustomOrdering(Costume, '-animal_id'):
 			response = self.client.get('/costume/?order_by=nickname')
 			self.assertEqual(response.status_code, 200)
 			returned_data = jsonloads(response.content)
@@ -129,7 +126,7 @@ class TestOrderBy(TestCase):
 
 	# Order by -description, custom model default (-id)
 	def test_order_revdescription_customdefault(self):
-		with CustomOrdering(Costume, '-id'):
+		with CustomOrdering(Costume, '-animal_id'):
 			response = self.client.get('/costume/?order_by=-description')
 			self.assertEqual(response.status_code, 200)
 			returned_data = jsonloads(response.content)
@@ -154,7 +151,7 @@ class TestOrderBy(TestCase):
 
 	# Order by nickname, -id (overriding default model order)
 	def test_order_nickname(self):
-		response = self.client.get('/costume/?order_by=nickname,-pk')
+		response = self.client.get('/costume/?order_by=nickname,-id')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 
