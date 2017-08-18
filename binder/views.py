@@ -273,7 +273,8 @@ class ModelView(View):
 					data[field] = idmap[obj.id][0] if len(idmap[obj.id]) == 1 else None
 				else:
 					data[field] = idmap[obj.id]
-			data['id'] = data.pop(self.model._meta.pk.name)
+			if self.model._meta.pk.name in data:
+				data['id'] = data.pop(self.model._meta.pk.name)
 			datas.append(data)
 
 		return datas
