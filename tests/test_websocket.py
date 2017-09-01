@@ -22,7 +22,6 @@ class WebsocketTest(TestCase):
 		]
 
 		user = MockUser([1337, 1338])
-		from pudb import set_trace; set_trace()
 
 		rooms = room_controller.list_rooms_for_user(user)
 		self.assertCountEqual(allowed_rooms, rooms)
