@@ -1,3 +1,6 @@
+from django.conf import settings
+import requests
+
 class RoomController(object):
 	def __init__(self):
 		self.room_listings = []
@@ -21,3 +24,13 @@ class RoomController(object):
 			rooms += l(user)
 
 		return rooms
+
+def trigger(data, rooms):
+	url = getattr(settings, 'HIGH_TEMPLAR_URL', 'localhost')
+	port = getattr(settings, 'HIGH_TEMPLAR_PORT', '8002')
+
+	base_url = 'http://{}:{}'.format(url, port)
+	return requests.post('{}/trigger/'.format(base_url), data={
+			'data': data,
+			'rooms': rooms,
+		})

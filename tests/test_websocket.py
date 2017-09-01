@@ -1,5 +1,11 @@
-from django.test import TestCase
+from django.test import TestCase, Client
+from django.contrib.auth.models import User
+from unittest import mock
+from binder.views import JsonResponse
 from .testapp.urls import room_controller
+from .testapp.models import Animal
+import requests
+import json
 
 
 class MockUser:
@@ -7,7 +13,20 @@ class MockUser:
 		self.costumes = costumes
 
 
+def mock_post_high_templar(*args, **kwargs):
+	return JsonResponse({'ok': True})
+
+
 class WebsocketTest(TestCase):
+	def setUp(self):
+		super().setUp()
+		u = User(username='testuser', is_active=True, is_superuser=True)
+		u.set_password('test')
+		u.save()
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
+
 	def test_room_controller_list_rooms_for_user(self):
 		allowed_rooms = [
 			{
@@ -25,3 +44,22 @@ class WebsocketTest(TestCase):
 
 		rooms = room_controller.list_rooms_for_user(user)
 		self.assertCountEqual(allowed_rooms, rooms)
+
+	@mock.patch('requests.post', side_effect=mock_post_high_templar)
+	def test_post_save_trigger(self, mock):
+		doggo = Animal(name='Woofer')
+		doggo.full_clean()
+		doggo.save()
+
+		model_data = {
+			'nickname': 'Gnarls Barker',
+			'description': 'Foo Bark',
+			'animal': doggo.id
+		}
+
+		self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(1, requests.post.call_count)
+		mock.assert_called_with('http://localhost:8002/trigger/', data={
+				'data': {'id': 1},
+				'rooms': [{'costume': 1}]
+			})
