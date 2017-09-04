@@ -1,5 +1,4 @@
 from django.db import models
-from django.db.models.signals import post_save
 from binder.models import BinderModel
 from binder.websocket import trigger
 
@@ -19,10 +18,5 @@ class Costume(BinderModel):
 			'costume': self.id,
 		}]
 
-
-def trigger_websocket(instance, created, **kwargs):
-	costume = instance
-	trigger({'id': costume.id}, costume.list_rooms())
-
-
-post_save.connect(trigger_websocket, sender=Costume)
+	def trigger_websocket(self):
+		trigger({'id': self.id}, self.list_rooms())

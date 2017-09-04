@@ -3,9 +3,8 @@ from django.contrib.auth.models import User
 from unittest import mock
 from binder.views import JsonResponse
 from .testapp.urls import room_controller
-from .testapp.models import Animal
+from .testapp.models import Animal, Costume
 import requests
-import json
 
 
 class MockUser:
@@ -51,13 +50,10 @@ class WebsocketTest(TestCase):
 		doggo.full_clean()
 		doggo.save()
 
-		model_data = {
-			'nickname': 'Gnarls Barker',
-			'description': 'Foo Bark',
-			'animal': doggo.id
-		}
-
-		self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
+		costume = Costume(nickname='Gnarls Barker', description='Foo Bark', animal=doggo)
+		costume.full_clean()
+		costume.save()
+		costume.trigger_websocket()
 		self.assertEqual(1, requests.post.call_count)
 		mock.assert_called_with('http://localhost:8002/trigger/', data={
 				'data': {'id': 1},
