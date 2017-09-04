@@ -15,8 +15,8 @@ class Costume(BinderModel):
 
 	def list_rooms(self):
 		return [{
-			'costume': self.id,
+			'costume': self.animal.id,
 		}]
 
 	def trigger_websocket(self):
-		trigger({'id': self.id}, self.list_rooms())
+		trigger({'id': self.animal.id}, self.list_rooms())

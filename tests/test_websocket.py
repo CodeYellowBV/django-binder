@@ -56,6 +56,6 @@ class WebsocketTest(TestCase):
 		costume.trigger_websocket()
 		self.assertEqual(1, requests.post.call_count)
 		mock.assert_called_with('http://localhost:8002/trigger/', data={
-				'data': {'id': 1},
-				'rooms': [{'costume': 1}]
+				'data': {'id': doggo.id},
+				'rooms': [{'costume': doggo.id}]
 			})
