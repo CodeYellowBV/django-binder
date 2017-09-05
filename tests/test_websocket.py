@@ -5,6 +5,7 @@ from binder.views import JsonResponse
 from .testapp.urls import room_controller
 from .testapp.models import Animal, Costume
 import requests
+import json
 
 
 class MockUser:
@@ -55,7 +56,7 @@ class WebsocketTest(TestCase):
 		costume.save()
 		costume.trigger_websocket()
 		self.assertEqual(1, requests.post.call_count)
-		mock.assert_called_with('http://localhost:8002/trigger/', data={
+		mock.assert_called_with('http://localhost:8002/trigger/', data=json.dumps({
 				'data': {'id': doggo.id},
 				'rooms': [{'costume': doggo.id}]
-			})
+			}))

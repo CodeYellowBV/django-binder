@@ -1,4 +1,5 @@
 from django.conf import settings
+from .json import jsondumps
 import requests
 
 class RoomController(object):
@@ -30,7 +31,7 @@ def trigger(data, rooms):
 	port = getattr(settings, 'HIGH_TEMPLAR_PORT', '8002')
 
 	base_url = 'http://{}:{}'.format(url, port)
-	return requests.post('{}/trigger/'.format(base_url), data={
+	return requests.post('{}/trigger/'.format(base_url), data=jsondumps({
 			'data': data,
 			'rooms': rooms,
-		})
+		}))
