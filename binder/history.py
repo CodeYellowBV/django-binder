@@ -32,6 +32,7 @@ class Change(models.Model):
 	model = models.CharField(max_length=64, db_index=True)
 	oid = models.IntegerField(db_index=True)
 	field = models.CharField(max_length=64, db_index=True)
+	diff = models.BooleanField(default=False)
 	before = models.TextField(blank=True, null=True)
 	after = models.TextField(blank=True, null=True)
 
@@ -108,7 +109,12 @@ def change(model, oid, field, old, new):
 		if hasattr(model, 'binder_serialize_m2m_field'):
 			old = model(id=oid).binder_serialize_m2m_field(field)
 
-	Transaction.changes[hid] = old, new
+	Transaction.changes[hid] = old, new, False
+
+
+
+def m2m_diff(old, new):
+	return sorted(old - new), sorted(new - old), True
 
 
 
@@ -119,15 +125,15 @@ def commit():
 	Transaction.started = False
 
 	# Fill in the deferred m2ms
-	for (model, oid, field), (old, new) in Transaction.changes.items():
+	for (model, oid, field), (old, new, diff) in Transaction.changes.items():
 		if new is DeferredM2M:
 			# The target model may be a non-Binder model (e.g. User), so lbyl.
 			if hasattr(model, 'binder_serialize_m2m_field'):
 				new = model(id=oid).binder_serialize_m2m_field(field)
-				Transaction.changes[model, oid, field] = old, new
+				Transaction.changes[model, oid, field] = m2m_diff(old, new)
 
 	# Filter non-changes
-	Transaction.changes = {idx: (old, new) for idx, (old, new) in Transaction.changes.items() if old != new}
+	Transaction.changes = {idx: (old, new, diff) for idx, (old, new, diff) in Transaction.changes.items() if old != new}
 
 	if not Transaction.changes:
 		return
@@ -142,7 +148,7 @@ def commit():
 	)
 	changeset.save()
 
-	for (model, oid, field), (old, new) in Transaction.changes.items():
+	for (model, oid, field), (old, new, diff) in Transaction.changes.items():
 		# New instances get None for all the before values
 		if old is NewInstanceField:
 			old = None
@@ -153,6 +159,7 @@ def commit():
 			model=model.__name__,
 			oid=oid,
 			field=field,
+			diff=diff,
 			before=jsondumps(old),
 			after=jsondumps(new),
 		)
@@ -176,7 +183,7 @@ def view_changesets(request, changesets):
 	for cs in changesets:
 		changes = []
 		for c in cs.changes.order_by('model', 'oid', 'field'):
-			changes.append({'model': c.model, 'oid': c.oid, 'field': c.field, 'before': c.before, 'after': c.after})
+			changes.append({'model': c.model, 'oid': c.oid, 'field': c.field, 'diff': c.diff, 'before': c.before, 'after': c.after})
 		data.append({'date': cs.date, 'uuid': cs.uuid, 'id': cs.id, 'source': cs.source, 'user': cs.user_id, 'changes': changes})
 		if cs.user_id:
 			userids.add(cs.user_id)
@@ -196,10 +203,10 @@ def view_changesets_debug(request, changesets):
 		body.append('<h3>Changeset {} by {}: {} on {} {{{}}}'.format(cs.id, cs.source, username, cs.date.strftime('%Y-%m-%d %H:%M:%S'), cs.uuid))
 		body.append('<br><br>')
 		body.append('<table>')
-		body.append('<tr><th>model</th><th>object id</th><th>field</th><th>before</th><th>after</th></tr>')
+		body.append('<tr><th>model</th><th>object id</th><th>field</th><th><diff</th><th>before</th><th>after</th></tr>')
 		for c in cs.changes.order_by('model', 'oid', 'field'):
-			body.append('<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
-				c.model, c.oid, c.field, c.before, c.after))
+			body.append('<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
+				c.model, c.oid, c.field, c.diff, c.before, c.after))
 		body.append('</table>')
 		body.append('<br><br>')
 	body.append('</body>')
