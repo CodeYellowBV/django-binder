@@ -79,6 +79,12 @@ class ModelView(View):
 	hidden_fields = []
 	m2m_fields = []
 
+	# Some models have derived properties that are not part of the fields of the model.
+	# Properties added to this shown property list are automatically added to the fields
+	# that are returned. Not that properties added here are read only. They can not be changed
+	# directly. Rather the fields they are derived need to be updated.
+	shown_properties = []
+
 	# Fields that cannot be written (PUT/POST). Writing them is not an error;
 	# their values are silently ignored.
 	# The following fields are always excluded for writes:
@@ -266,6 +272,10 @@ class ModelView(View):
 						data[f.name] = None
 				else:
 					data[f.name] = getattr(obj, f.attname)
+
+			for property in self.shown_properties:
+				data[property] = getattr(obj, property)
+
 			for field, idmap in m2m_ids.items():
 				# TODO: Don't require OneToOneFields in the m2m_fields list
 				if isinstance(self.model._meta.get_field(field), models.OneToOneRel):
