@@ -5,7 +5,7 @@ import logging
 import json
 
 from django.core.management.base import BaseCommand
-from django.db import migration, transaction, models, connection
+from django.db import migrations, transaction, models, connection
 from django.apps import apps
 
 from binder.history import Change
@@ -69,8 +69,13 @@ def remove_reverse_spam(apps, schema_editor):
 
 
 
+def nop(apps, schema_editor):
+	pass
+
+
+
 class Migration(migrations.Migration):
-	#atomic = False
+	atomic = False
 
 	dependencies = [
 		('binder', '0002_change_diff'),
