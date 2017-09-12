@@ -1,7 +1,7 @@
 import logging
 import json
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.db import transaction, models
 from django.apps import apps
 from django.db import connection
@@ -17,18 +17,13 @@ logger = logging.getLogger(__name__)
 class Command(BaseCommand):
 	help = 'Remove redundant FK/M2M binder history changes. See https://github.com/CodeYellowBV/django-binder/issues/76'
 
-	def add_arguments(self, parser):
-		parser.add_argument('app_name', type=str, metavar='<app name>', nargs=1, help='Django app to prune.')
-
-
 
 	def handle(self, *args, **options):
-		app_name = options['app_name'][0]
-		app = apps.get_app_config(app_name)
+		all_models = apps.get_models()
 
 		with transaction.atomic():
 			print('Reverse FKs')
-			for model in app.models.values():
+			for model in all_models:
 				for field in model._meta.get_fields():
 					if not isinstance(field, models.fields.reverse_related.ManyToOneRel):
 						continue
@@ -38,7 +33,7 @@ class Command(BaseCommand):
 			print()
 
 			print('Reverse M2Ms')
-			for model in app.models.values():
+			for model in all_models:
 				for field in model._meta.get_fields():
 					if not isinstance(field, models.fields.reverse_related.ManyToManyRel):
 						continue
@@ -48,7 +43,7 @@ class Command(BaseCommand):
 			print()
 
 			print('Forward M2Ms')
-			for model in app.models.values():
+			for model in all_models:
 				for field in model._meta.get_fields():
 					if not isinstance(field, models.fields.related.ManyToManyField):
 						continue
@@ -60,6 +55,7 @@ class Command(BaseCommand):
 						after = set(json.loads(change.after))
 						change.before = json.dumps(sorted(before - after))
 						change.after = json.dumps(sorted(after - before))
+						change.diff = True
 						change.save()
 
 					print('  cleaned {:>7} {}.{}'.format(ct, model.__name__, field.name))
