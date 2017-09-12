@@ -27,11 +27,9 @@ class RoomController(object):
 		return rooms
 
 def trigger(data, rooms):
-	url = getattr(settings, 'HIGH_TEMPLAR_URL', 'localhost')
-	port = getattr(settings, 'HIGH_TEMPLAR_PORT', '8002')
+	url = getattr(settings, 'HIGH_TEMPLAR_URL', 'http://localhost:8002')
 
-	base_url = 'http://{}:{}'.format(url, port)
-	return requests.post('{}/trigger/'.format(base_url), data=jsondumps({
+	return requests.post('{}/trigger/'.format(url), data=jsondumps({
 			'data': data,
 			'rooms': rooms,
 		}))
