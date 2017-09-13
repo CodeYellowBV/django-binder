@@ -81,8 +81,8 @@ class ModelView(View):
 
 	# Some models have derived properties that are not part of the fields of the model.
 	# Properties added to this shown property list are automatically added to the fields
-	# that are returned. Not that properties added here are read only. They can not be changed
-	# directly. Rather the fields they are derived need to be updated.
+	# that are returned. Note that properties added here are read only. They can not be changed
+	# directly. Rather the fields they are derived from need to be updated.
 	shown_properties = []
 
 	# Fields that cannot be written (PUT/POST). Writing them is not an error;
@@ -273,8 +273,8 @@ class ModelView(View):
 				else:
 					data[f.name] = getattr(obj, f.attname)
 
-			for property in self.shown_properties:
-				data[property] = getattr(obj, property)
+			for prop in self.shown_properties:
+				data[prop] = getattr(obj, prop)
 
 			for field, idmap in m2m_ids.items():
 				# TODO: Don't require OneToOneFields in the m2m_fields list
