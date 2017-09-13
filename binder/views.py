@@ -800,6 +800,10 @@ class ModelView(View):
 				for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
 					setattr(addobj, obj_field.field.name, obj)
 					addobj.save()
+			elif getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor:
+				remote_obj = obj._meta.get_field(field).related_model.objects.get(pk=value[0])
+				setattr(obj, field, remote_obj)
+				remote_obj.save()
 			elif field in [f.name for f in self._get_reverse_relations()]:
 				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
 				if any(v for v in value if v < 0):
@@ -888,6 +892,8 @@ class ModelView(View):
 		# m2ms
 		for f in list(self.model._meta.many_to_many) + list(self._get_reverse_relations()):
 			if f.name == field:
+				if isinstance(obj._meta.get_field(field), models.OneToOneRel):
+					value = [value]
 				if not (isinstance(value, list) and all(isinstance(v, int) for v in value)):
 					raise BinderFieldTypeError(self.model.__name__, field)
 				# FIXME
