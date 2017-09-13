@@ -1,10 +1,14 @@
-from django.test import TestCase, Client
-
+import unittest
 import json
-from binder.json import jsonloads
+
+from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
+from binder.json import jsonloads
+
 from .testapp.models import Animal, Zoo
+
+
 
 class MultiPutTest(TestCase):
 	def setUp(self):
@@ -258,15 +262,15 @@ class MultiPutTest(TestCase):
 			'data': [{
 				'id': -1,
 				'name': 'Apenheul',
-				'animals': [-2, -3]
+				'zoo_employees': [-2, -3]
 			}],
 			'with': {
-				'animal': [{
+				'zoo_employee': [{
 					'id': -2,
 					'name': 'Harambe',
 				}, {
 					'id': -3,
-					'name': 'Bokito'
+					'name': 'Bokito',
 				}]
 			}
 		}
@@ -276,8 +280,68 @@ class MultiPutTest(TestCase):
 
 		returned_data = jsonloads(response.content)
 		zoo_ids = {i for i, _ in returned_data['idmap']['zoo']}
-		animal_ids = {i for i, _ in returned_data['idmap']['animal']}
+		zoo_employee_ids = {i for i, _ in returned_data['idmap']['zoo_employee']}
 
-		self.assertIn(-1, zoo_ids)
-		self.assertIn(-2, animal_ids)
-		self.assertIn(-3, animal_ids)
+		self.assertEqual(zoo_ids, {-1})
+		self.assertEqual(zoo_employee_ids, {-2, -3})
+
+	def test_remove_relation_through_backref(self):
+		model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Apenheul',
+				'animals': [-2, -3]
+			}],
+			'with': {
+				'animal': [{
+					'id': -2,
+					'name': 'Harambe',
+				}, {
+					'id': -3,
+					'name': 'Bokito',
+				}]
+			}
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		zoo_id = returned_data['idmap']['zoo'][0][1]
+
+		update_data = {'animals': []}
+		response = self.client.put('/zoo/{}/'.format(zoo_id), data=json.dumps(update_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		self.assertEqual(returned_data['animals'], [])
+
+	@unittest.skip('#40')
+	def test_remove_relation_through_backref_non_nullable_soft_deletable(self):
+		model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Apenheul',
+				'zoo_employees': [-2, -3]
+			}],
+			'with': {
+				'zoo_employee': [{
+					'id': -2,
+					'name': 'Harambe',
+				}, {
+					'id': -3,
+					'name': 'Bokito',
+				}]
+			}
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		zoo_id = returned_data['idmap']['zoo'][0][1]
+
+		update_data = {'zoo_employees': []}
+		response = self.client.put('/zoo/{}/'.format(zoo_id), data=json.dumps(update_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		self.assertEqual(returned_data['zoo_employees'], [])

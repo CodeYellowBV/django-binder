@@ -29,11 +29,7 @@ from .json import JsonResponse, jsonloads
 def multiput_get_id(bla):
 	return bla['id'] if isinstance(bla, dict) else bla
 
-# Primary keys are a bit special, they're NOT NULL, but .save() populates them.
-# So when checking for not null constraint fails, we ignore primary keys.
-# The same holds for auto_now and auto_now_add fields. (like created_at and updated_at)
-def is_filled_upon_save(field):
-	return field.primary_key or getattr(field, 'auto_now_add', False) or getattr(field, 'auto_now', False)
+
 
 logger = logging.getLogger(__name__)
 
@@ -79,15 +75,18 @@ class ModelView(View):
 	hidden_fields = []
 	m2m_fields = []
 
+	# Some models have derived properties that are not part of the fields of the model.
+	# Properties added to this shown property list are automatically added to the fields
+	# that are returned. Note that properties added here are read only. They can not be changed
+	# directly. Rather the fields they are derived from need to be updated.
+	shown_properties = []
+
 	# Fields that cannot be written (PUT/POST). Writing them is not an error;
 	# their values are silently ignored.
 	# The following fields are always excluded for writes:
 	#  - id, pk, deleted, _meta
 	#  - reverse relations
 	#  - file fields (as specified in file_fields)
-	#
-	# NOTE: Unwritability also disables the in-Binder not-NULL check.
-	# See the nullability check in self._store() (search for T9646)
 	unwritable_fields = []
 
 	# Fields to use for ?search=foo. Empty tuple for disabled search.
@@ -195,6 +194,9 @@ class ModelView(View):
 			e.log()
 			response = e.response(request=request)
 			history.abort()
+		except:
+			history.abort()
+			raise
 
 		logger.info('request response; status={} time={}ms bytes={} queries={}'.
 				format(
@@ -240,7 +242,7 @@ class ModelView(View):
 			# We could use an additional filter(**{field + '__isnull': False}), but that only seems slower?
 			# Hurgh. The queryset is annotated, and the annotation columns show up in the subquery -> Boom. Use list of IDs instead.
 			# for this, other in self.model.objects.filter(id__in=queryset).values_list('id', rfield):
-			for this, other in self.model.objects.filter(id__in=list(queryset.values_list('id', flat=True))).values_list('id', rfield):
+			for this, other in self.model.objects.filter(pk__in=list(queryset.values_list('pk', flat=True))).values_list('pk', rfield):
 				if other is not None:
 					idmap[this].append(other)
 			m2m_ids[field] = idmap
@@ -263,6 +265,10 @@ class ModelView(View):
 						data[f.name] = None
 				else:
 					data[f.name] = getattr(obj, f.attname)
+
+			for prop in self.shown_properties:
+				data[prop] = getattr(obj, prop)
+
 			for field, idmap in m2m_ids.items():
 				# TODO: Don't require OneToOneFields in the m2m_fields list
 				if isinstance(self.model._meta.get_field(field), models.OneToOneRel):
@@ -270,6 +276,8 @@ class ModelView(View):
 					data[field] = idmap[obj.id][0] if len(idmap[obj.id]) == 1 else None
 				else:
 					data[field] = idmap[obj.id]
+			if self.model._meta.pk.name in data:
+				data['id'] = data.pop(self.model._meta.pk.name)
 			datas.append(data)
 
 		return datas
@@ -288,14 +296,14 @@ class ModelView(View):
 	# returns two dictionaries:
 	# - withs: { related_modal_name: [ids]}
 	# - mappings: { with_name: related_model_name}
-	def _get_withs(self, ids, withs, request):
+	def _get_withs(self, pks, withs, request):
 		if withs is None and request is not None:
 			withs = list(filter(None, request.GET.get('with', '').split(',')))
 
-		if isinstance(ids, django.db.models.query.QuerySet):
-			ids = ids.values_list('id', flat=True)
+		if isinstance(pks, django.db.models.query.QuerySet):
+			pks = pks.values_list('pk', flat=True)
 		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
-		ids = list(ids)
+		pks = list(pks)
 
 		# Make sure to include A if A.B is specified.
 		for w in withs:
@@ -307,7 +315,7 @@ class ModelView(View):
 		extras_mapping = {}
 
 		for w in withs:
-			(view, new_ids) = self._get_with(w, ids, request=request)
+			(view, new_ids) = self._get_with(w, pks, request=request)
 			if view:
 				extras_mapping[w] = view
 				extras[view].update(set(new_ids))
@@ -318,7 +326,7 @@ class ModelView(View):
 			view = view()
 			# {router-view-instance}
 			view.router = self.router
-			os = view._get_objs(view.model.objects.filter(pk__in=with_pks), request=request)
+			os = view._get_objs(view.get_queryset(request).filter(pk__in=with_pks), request=request)
 			extras_dict[view._model_name()] = os
 		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
 
@@ -515,7 +523,11 @@ class ModelView(View):
 		try:
 			self.model._meta.get_field(head)
 		except models.fields.FieldDoesNotExist:
-			raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
+			if head == 'id':
+				pk = self.model._meta.pk
+				head = pk.get_attname() if pk.one_to_one or pk.many_to_one else pk.name
+			else:
+				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head)
 
@@ -599,6 +611,26 @@ class ModelView(View):
 
 
 
+	def order_by(self, queryset, request):
+		#### order_by
+		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
+
+		if order_bys:
+			orders = []
+			for o in order_bys:
+				if o.startswith('-'):
+					queryset, order = self._parse_order_by(queryset, o[1:], partial='-')
+				else:
+					queryset, order = self._parse_order_by(queryset, o)
+				orders.append(order)
+			# Append model default orders to the API orders.
+			# This guarantees stable result sets when paging.
+			orders += queryset.model._meta.ordering
+			queryset = queryset.order_by(*orders)
+		return queryset
+
+
+
 	def get(self, request, pk=None, withs=None):
 		meta = {}
 		queryset = self.get_queryset(request)
@@ -623,17 +655,7 @@ class ModelView(View):
 		if 'search' in request.GET:
 			queryset = self.search(queryset, request.GET['search'], request)
 
-		#### order_by
-		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
-		if order_bys:
-			orders = []
-			for o in order_bys:
-				if o.startswith('-'):
-					queryset, order = self._parse_order_by(queryset, o[1:], partial='-')
-				else:
-					queryset, order = self._parse_order_by(queryset, o)
-				orders.append(order)
-			queryset = queryset.order_by(*orders)
+		queryset = self.order_by(queryset, request)
 
 		if not pk:
 			meta['total_records'] = queryset.count()
@@ -661,6 +683,17 @@ class ModelView(View):
 		response_data = {'data': data, 'with': extras, 'with_mapping': extras_mapping, 'meta': meta, 'debug': debug}
 
 		return JsonResponse(response_data)
+
+
+
+	# Determine if the field needs an extra nullability check.
+	# Expects the field object (not the field name)
+	def field_needs_nullability_check(self, field):
+		if isinstance(field, (models.CharField, models.TextField)):
+			if field.blank and not field.null:
+				return True
+
+		return False
 
 
 
@@ -711,12 +744,12 @@ class ModelView(View):
 			})
 			validation_errors.append(e)
 
-		# full_clean() doesn't complain when CharField(blank=True, null=False) = None
+		# full_clean() doesn't complain about some not-NULL fields being None.
 		# This causes save() to explode with a django.db.IntegrityError because the
 		# column is NOT NULL. Tyvm, Django.
-		# So we check this case here.
+		# So we perform an extra NULL check for some cases. See #66, T2989, T9646.
 		for f in obj._meta.fields:
-			if (f.blank and not f.null) and not is_filled_upon_save(f):
+			if self.field_needs_nullability_check(f):
 				# gettattr on a foreignkey foo gets the related model, while foo_id just gets the id.
 				# We don't need or want the model (nor the DB query), we'll take the id thankyouverymuch.
 				name = f.name + ('_id' if isinstance(f, models.ForeignKey) else '')
@@ -757,6 +790,7 @@ class ModelView(View):
 				for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
 					if obj_field.field.null:
 						setattr(rmobj, obj_field.field.name, None)
+						rmobj.save()
 					elif hasattr(rmobj, 'deleted'):
 						if not rmobj.deleted:
 							rmobj.deleted = True
@@ -910,7 +944,7 @@ class ModelView(View):
 
 
 	def _obj_diff(self, old, new, name):
-		if isinstance(old, dict) or isinstance(new, dict):
+		if isinstance(old, dict) and isinstance(new, dict):
 			changes = []
 			for k, v in old.items():
 				if k in new:
@@ -922,7 +956,7 @@ class ModelView(View):
 					changes.append('  added {}.{}: {}'.format(name, k, repr(v)))
 			return changes
 
-		if isinstance(old, list) or isinstance(new, list):
+		if isinstance(old, list) and isinstance(new, list):
 			changes = []
 			for i in range(0, min(len(old), len(new))):
 				changes += self._obj_diff(old[i], new[i], '{}[{}]'.format(name, i))
@@ -980,6 +1014,19 @@ class ModelView(View):
 
 				objects[(model, obj['id'])] = obj
 
+		return objects
+
+
+
+	def _multi_put_convert_backref_to_forwardref(self, objects):
+		for (model, mid), values in objects.items():
+			for field in filter(lambda f: f.one_to_many, model._meta.get_fields()):
+				if field.name in values:
+					if not isinstance(values[field.name], list) or not all(isinstance(v, int) for v in values[field.name]):
+						raise BinderFieldTypeError(self.model.__name__, field.name)
+					for rid in values[field.name]:
+						if (field.related_model, rid) in objects:
+							objects[(field.related_model, rid)][field.remote_field.name] = mid
 		return objects
 
 
@@ -1103,6 +1150,7 @@ class ModelView(View):
 
 		data = self._multi_put_parse_request(request)
 		objects = self._multi_put_collect_objects(data)
+		objects = self._multi_put_convert_backref_to_forwardref(objects)
 		dependencies = self._multi_put_calculate_dependencies(objects)
 		ordered_objects = self._multi_put_order_dependencies(dependencies)
 		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request)

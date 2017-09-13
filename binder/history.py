@@ -1,4 +1,5 @@
 import logging
+import threading
 
 from django.db import models
 from django.utils import timezone
@@ -46,13 +47,18 @@ logger = logging.getLogger(__name__)
 
 
 
-class Transaction:
+class _Transaction(threading.local):
+	def __init__(self):
+		logger.info('Creating new Transaction for thread {}'.format(threading.current_thread().name))
+
 	user = None
 	uuid = None
 	date = None
 	source = None
 	started = False
 	changes = {}
+
+Transaction = _Transaction()
 
 
 
@@ -72,7 +78,7 @@ def start(source=None, user=None, uuid=None, date=None):
 		date = timezone.now()
 
 	if Transaction.started:
-		logger.warning('Transaction start: discarding open transaction')
+		raise RuntimeError('called Transaction.start() while there is an open transaction')
 
 	Transaction.source = source
 	Transaction.user = user
@@ -109,7 +115,7 @@ def change(model, oid, field, old, new):
 # FIXME: use bulk inserts for efficiency.
 def commit():
 	if not Transaction.started:
-		logger.error('Transaction commit: no open transaction')
+		raise RuntimeError('called Transaction.commit() while there is no open transaction')
 	Transaction.started = False
 
 	# Fill in the deferred m2ms
@@ -158,7 +164,7 @@ def commit():
 
 def abort():
 	if not Transaction.started:
-		logger.error('Transaction abort: no open transaction')
+		raise RuntimeError('called Transaction.abort() while there is no open transaction')
 	Transaction.started = False
 	Transaction.changes.clear()
 
