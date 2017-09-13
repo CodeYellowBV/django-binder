@@ -4,9 +4,7 @@ from __future__ import unicode_literals
 import logging
 import json
 
-from django.core.management.base import BaseCommand
 from django.db import migrations, transaction, models, connection
-from django.apps import apps
 
 from binder.history import Change
 
