@@ -29,11 +29,7 @@ from .json import JsonResponse, jsonloads
 def multiput_get_id(bla):
 	return bla['id'] if isinstance(bla, dict) else bla
 
-# Primary keys are a bit special, they're NOT NULL, but .save() populates them.
-# So when checking for not null constraint fails, we ignore primary keys.
-# The same holds for auto_now and auto_now_add fields. (like created_at and updated_at)
-def is_filled_upon_save(field):
-	return field.primary_key or getattr(field, 'auto_now_add', False) or getattr(field, 'auto_now', False)
+
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +87,6 @@ class ModelView(View):
 	#  - id, pk, deleted, _meta
 	#  - reverse relations
 	#  - file fields (as specified in file_fields)
-	#
-	# NOTE: Unwritability also disables the in-Binder not-NULL check.
-	# See the nullability check in self._store() (search for T9646)
 	unwritable_fields = []
 
 	# Fields to use for ?search=foo. Empty tuple for disabled search.
@@ -693,6 +686,17 @@ class ModelView(View):
 
 
 
+	# Determine if the field needs an extra nullability check.
+	# Expects the field object (not the field name)
+	def field_needs_nullability_check(self, field):
+		if isinstance(field, (models.CharField, models.TextField)):
+			if field.blank and not field.null:
+				return True
+
+		return False
+
+
+
 	# Deserialize JSON to Django Model objects.
 	# obj: Model object to update (for PUT), newly created object (for POST)
 	# values: Python dict of {field name: value} (parsed JSON)
@@ -740,12 +744,12 @@ class ModelView(View):
 			})
 			validation_errors.append(e)
 
-		# full_clean() doesn't complain when CharField(blank=True, null=False) = None
+		# full_clean() doesn't complain about some not-NULL fields being None.
 		# This causes save() to explode with a django.db.IntegrityError because the
 		# column is NOT NULL. Tyvm, Django.
-		# So we check this case here.
+		# So we perform an extra NULL check for some cases. See #66, T2989, T9646.
 		for f in obj._meta.fields:
-			if (f.blank and not f.null) and not is_filled_upon_save(f):
+			if self.field_needs_nullability_check(f):
 				# gettattr on a foreignkey foo gets the related model, while foo_id just gets the id.
 				# We don't need or want the model (nor the DB query), we'll take the id thankyouverymuch.
 				name = f.name + ('_id' if isinstance(f, models.ForeignKey) else '')
