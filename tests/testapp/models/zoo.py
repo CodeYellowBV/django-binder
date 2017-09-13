@@ -25,4 +25,10 @@ class Zoo(BinderModel):
 	def __str__(self):
 		return 'zoo %d: %s' % (self.pk or 0, self.name)
 
+	@property
+	def animal_count(self):
+		return self.animals.count()
+
+
 post_delete.connect(delete_files, sender=Zoo)
+

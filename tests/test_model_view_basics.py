@@ -53,6 +53,33 @@ class ModelViewBasicsTest(TestCase):
 		result = jsonloads(response.content)
 		self.assertEqual('NotFound', result['code'])
 
+	def test_get_model_shown_properties(self):
+		"""
+		Test that the properties under shown_properties are added to the result of a get model request
+		"""
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		response = self.client.get('/zoo/{}/'.format(gaia.id))
+
+		self.assertEqual(response.status_code, 200)
+		result = jsonloads(response.content)
+
+		self.assertTrue('animal_count' in result['data'])
+		self.assertEqual(0, result['data']['animal_count'])
+
+		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
+		coyote.full_clean()
+		coyote.save()
+
+		response = self.client.get('/zoo/{}/'.format(gaia.id))
+
+		self.assertEqual(response.status_code, 200)
+		result = jsonloads(response.content)
+
+		self.assertTrue('animal_count' in result['data'])
+		self.assertEqual(1, result['data']['animal_count'])
 
 	def test_get_collection_with_no_models_returns_empty_array(self):
 		response = self.client.get('/animal/')
@@ -523,3 +550,5 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(response.status_code, 200)
 		result = jsonloads(response.content)
 		self.assertEqual(1, len(result['_meta']['with']['zoo']))
+
+
