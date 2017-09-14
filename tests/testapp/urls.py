@@ -1,12 +1,14 @@
 from django.conf.urls import url, include
 
 import binder.router
+import binder.websocket
 import binder.views
 import binder.history
 import binder.models
 from .views import animal, caretaker, costume, custom, zoo, contact_person, gate
 
 router = binder.router.Router().register(binder.views.ModelView)
+room_controller = binder.websocket.RoomController().register(binder.views.ModelView)
 
 urlpatterns = [
 	url(r'^custom/route', custom.custom, name='custom'),

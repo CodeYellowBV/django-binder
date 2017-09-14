@@ -8,3 +8,10 @@ class ZooView(ModelView):
 	model = Zoo
 	file_fields = ['floor_plan']
 	shown_properties = ['animal_count']
+
+	def get_rooms_for_user(user):
+		return [
+			{
+				'zoo': 'all',
+			},
+		]

@@ -39,5 +39,6 @@ setup(
 		'Django >= 1.10',
 		'Pillow >= 3.2.0',
 		'django-request-id >= 1.0.0',
+		'requests >= 2.13.0',
 	],
 )
