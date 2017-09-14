@@ -269,9 +269,9 @@ class PermissionView(ModelView):
 				raise UnexpectedScopeException(
 					'Scope {} is not implemented for model {}'.format(scope_name, self.model))
 			scope_queries.append(getattr(self, scope_name)(request))
-		subfilter = Q(id__in=[-1])
+		subfilter = Q(pk__in=[-1])
 		for scope_query in scope_queries:
-			subfilter |= Q(id__in=scope_query.values('id'))
+			subfilter |= Q(pk__in=scope_query.values('pk'))
 
 		self._save_scope(request, Scope.VIEW)
 

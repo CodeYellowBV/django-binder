@@ -122,7 +122,7 @@ class TestValidationErrors(TestCase):
 		assert_json(returned_data, {
 			'errors': {
 				'costume': {
-					'null': {
+					'1': {
 						'nickname': [
 							{'code': 'null', MAYBE('message'): ANY(str)}
 						]

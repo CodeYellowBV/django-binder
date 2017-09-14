@@ -26,7 +26,7 @@ class DeleteTest(TestCase):
 		sailor.full_clean()
 		sailor.save()
 
-		response = self.client.delete('/costume/%d/' % sailor.id)
+		response = self.client.delete('/costume/%d/' % sailor.pk)
 		self.assertEqual(response.status_code, 204)
 		self.assertEqual('', response.content.decode())
 

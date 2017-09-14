@@ -53,6 +53,33 @@ class ModelViewBasicsTest(TestCase):
 		result = jsonloads(response.content)
 		self.assertEqual('NotFound', result['code'])
 
+	def test_get_model_shown_properties(self):
+		"""
+		Test that the properties under shown_properties are added to the result of a get model request
+		"""
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		response = self.client.get('/zoo/{}/'.format(gaia.id))
+
+		self.assertEqual(response.status_code, 200)
+		result = jsonloads(response.content)
+
+		self.assertTrue('animal_count' in result['data'])
+		self.assertEqual(0, result['data']['animal_count'])
+
+		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
+		coyote.full_clean()
+		coyote.save()
+
+		response = self.client.get('/zoo/{}/'.format(gaia.id))
+
+		self.assertEqual(response.status_code, 200)
+		result = jsonloads(response.content)
+
+		self.assertTrue('animal_count' in result['data'])
+		self.assertEqual(1, result['data']['animal_count'])
 
 	def test_get_collection_with_no_models_returns_empty_array(self):
 		response = self.client.get('/animal/')
@@ -129,7 +156,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('Wile E. Coyote', result['data'][2]['name'])
 
 		# Sorting by nonexistent field errors
-		response = self.client.get('/animal/', data={'order_by': 'zoo__name'})
+		response = self.client.get('/animal/', data={'order_by': 'zoo.foobar'})
 
 		self.assertEqual(response.status_code, 418)
 		result = jsonloads(response.content)
@@ -238,7 +265,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('GaiaZOO', zoo_by_id[gaia.pk]['name'])
 		self.assertEqual('Wildlands Adventure Zoo Emmen', zoo_by_id[emmen.pk]['name'])
 		self.assertSetEqual(set([coyote.pk, roadrunner.pk]),
-				    set(zoo_by_id[gaia.pk]['animals']))
+							set(zoo_by_id[gaia.pk]['animals']))
 		self.assertSetEqual(set([woody.pk]), set(zoo_by_id[emmen.pk]['animals']))
 
 
@@ -333,8 +360,8 @@ class ModelViewBasicsTest(TestCase):
 		costume_by_id = {costume['id']: costume for costume in result['with']['costume']}
 		self.assertEqual('Weird sailor costume', costume_by_id[sailor.pk]['description'])
 		self.assertEqual("Gentleman's frock coat", costume_by_id[frock.pk]['description'])
-		self.assertEqual(scrooge.pk, costume_by_id[frock.pk]['animal'])
-		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['animal'])
+		self.assertEqual(scrooge.pk, costume_by_id[frock.pk]['id'])
+		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['id'])
 
 	def test_get_model_with_relation_without_id(self):
 		gaia = Zoo(name='GaiaZOO')
@@ -392,8 +419,8 @@ class ModelViewBasicsTest(TestCase):
 		result = jsonloads(response.content)
 		self.assertEqual(2, len(result['data']))
 
-		self.assertEqual(frock.pk, result['data'][0]['id']) # G
-		self.assertEqual(sailor.pk, result['data'][1]['id']) # W
+		self.assertEqual(frock.pk, result['data'][0]['id'])  # G
+		self.assertEqual(sailor.pk, result['data'][1]['id'])  # W
 
 		# Another regression due to the same bug we test
 		# above: the with would also break.
@@ -402,8 +429,8 @@ class ModelViewBasicsTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual(2, len(result['data']))
-		self.assertEqual(frock.pk, result['data'][0]['id']) # G
-		self.assertEqual(sailor.pk, result['data'][1]['id']) # W
+		self.assertEqual(frock.pk, result['data'][0]['id'])  # G
+		self.assertEqual(sailor.pk, result['data'][1]['id'])  # W
 		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
 		self.assertEqual('Scrooge McDuck', animal_by_id[frock.pk]['name'])
 		self.assertEqual("Donald Duck", animal_by_id[sailor.pk]['name'])
@@ -437,7 +464,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(artis.pk, returned_data.get('zoo'))
 
 		scooby = Animal.objects.get(id=returned_data.get('id'))
-		self.assertEqual(artis, scooby.zoo) # haha, Scooby Zoo!
+		self.assertEqual(artis, scooby.zoo)  # haha, Scooby Zoo!
 		self.assertEqual('Scooby Doo', scooby.name)
 
 
@@ -456,9 +483,9 @@ class ModelViewBasicsTest(TestCase):
 		returned_data = jsonloads(response.content)
 		self.assertIsNotNone(returned_data.get('id'))
 		self.assertEqual('Weird sailor costume', returned_data.get('description'))
-		self.assertEqual(donald.pk, returned_data.get('animal'))
+		self.assertEqual(donald.pk, returned_data.get('id'))
 
-		sailor = Costume.objects.get(id=returned_data.get('id'))
+		sailor = Costume.objects.get(animal_id=returned_data.get('id'))
 		self.assertEqual(donald, sailor.animal)
 		self.assertEqual('Weird sailor costume', sailor.description)
 
@@ -488,7 +515,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertIsNotNone(returned_data.get('id'))
 		self.assertEqual('Artis', returned_data.get('name'))
 		self.assertSetEqual(set([scooby.id, scrappy.id]),
-				    set(returned_data.get('animals')))
+							set(returned_data.get('animals')))
 
 		artis = Zoo.objects.get(id=returned_data.get('id'))
 		self.assertEqual('Artis', artis.name)
@@ -523,3 +550,5 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(response.status_code, 200)
 		result = jsonloads(response.content)
 		self.assertEqual(1, len(result['_meta']['with']['zoo']))
+
+

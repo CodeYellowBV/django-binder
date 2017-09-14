@@ -1,12 +1,9 @@
-import unittest
-import json
-
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
-from binder.json import jsonloads
+from binder.json import jsonloads, jsondumps
 
-from .compare import assert_json, MAYBE, ANY, EXTRA
+# from .compare import assert_json, MAYBE, ANY, EXTRA
 from .testapp.models import Animal, Costume
 
 
@@ -17,15 +14,15 @@ class CustomOrdering:
 		self.order = order
 
 	def __enter__(self):
-		self.old = self.cls.Meta.ordering[0]
-		self.cls.Meta.ordering[0] = self.order
+		self.old = self.cls._meta.ordering[0]
+		self.cls._meta.ordering[0] = self.order
 
 	def __exit__(self, *args, **kwargs):
-		self.cls.Meta.ordering[0] = self.old
+		self.cls._meta.ordering[0] = self.old
 
 
 
-class TestValidationErrors(TestCase):
+class TestOrderBy(TestCase):
 	def setUp(self):
 		super().setUp()
 		u = User(username='testuser', is_active=True, is_superuser=True)
@@ -40,10 +37,10 @@ class TestValidationErrors(TestCase):
 		Animal(id=3, name='a3').save()
 		Animal(id=4, name='a4').save()
 
-		Costume(id=2, animal_id=2, nickname='Foo', description='Bar').save()
-		Costume(id=3, animal_id=3, nickname='Bar', description='Bar').save()
-		Costume(id=1, animal_id=1, nickname='Foo', description='Foo').save()
-		Costume(id=4, animal_id=4, nickname='Bar', description='Foo').save()
+		Costume(animal_id=2, nickname='Foo', description='Bar').save()
+		Costume(animal_id=3, nickname='Bar', description='Bar').save()
+		Costume(animal_id=1, nickname='Foo', description='Foo').save()
+		Costume(animal_id=4, nickname='Bar', description='Foo').save()
 
 
 
@@ -117,7 +114,7 @@ class TestValidationErrors(TestCase):
 
 	# Order by nickname, custom model default (-id)
 	def test_order_nickname_customdefault(self):
-		with CustomOrdering(Costume, '-id'):
+		with CustomOrdering(Costume, '-animal_id'):
 			response = self.client.get('/costume/?order_by=nickname')
 			self.assertEqual(response.status_code, 200)
 			returned_data = jsonloads(response.content)
@@ -129,13 +126,26 @@ class TestValidationErrors(TestCase):
 
 	# Order by -description, custom model default (-id)
 	def test_order_revdescription_customdefault(self):
-		with CustomOrdering(Costume, '-id'):
+		with CustomOrdering(Costume, '-animal_id'):
 			response = self.client.get('/costume/?order_by=-description')
 			self.assertEqual(response.status_code, 200)
 			returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
 		self.assertEqual(data, [4, 1, 3, 2])
+
+
+	# Order by -description, custom model default on related model (-animal.name)
+	# This would break due to Django vs Binder related object syntax mismatch and
+	# missing views for non-Binder relations.
+	def test_order_revdescription_customdefault_related_model_name(self):
+		with CustomOrdering(Costume, 'animal__name'):
+			response = self.client.get('/costume/?order_by=-description')
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		data = [x['id'] for x in returned_data['data']]
+		self.assertEqual(data, [1, 4, 2, 3])
 
 
 
