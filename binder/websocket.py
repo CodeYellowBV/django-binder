@@ -1,6 +1,7 @@
 from django.conf import settings
 from .json import jsondumps
 import requests
+from requests.exceptions import ConnectionError
 
 class RoomController(object):
 	def __init__(self):
@@ -29,7 +30,10 @@ class RoomController(object):
 def trigger(data, rooms):
 	url = getattr(settings, 'HIGH_TEMPLAR_URL', 'http://localhost:8002')
 
-	return requests.post('{}/trigger/'.format(url), data=jsondumps({
+	try:
+		requests.post('{}/trigger/'.format(url), data=jsondumps({
 			'data': data,
 			'rooms': rooms,
 		}))
+	except ConnectionError:
+		pass

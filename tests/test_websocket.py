@@ -54,9 +54,20 @@ class WebsocketTest(TestCase):
 		costume = Costume(nickname='Gnarls Barker', description='Foo Bark', animal=doggo)
 		costume.full_clean()
 		costume.save()
-		costume.trigger_websocket()
 		self.assertEqual(1, requests.post.call_count)
 		mock.assert_called_with('http://localhost:8002/trigger/', data=json.dumps({
 				'data': {'id': doggo.id},
 				'rooms': [{'costume': doggo.id}]
 			}))
+
+	def test_post_succeeds_when_trigger_fails(self):
+		doggo = Animal(name='Woofer')
+		doggo.full_clean()
+		doggo.save()
+
+		costume = Costume(nickname='Gnarls Barker', description='Foo Bark', animal=doggo)
+		costume.full_clean()
+		costume.save()
+
+		# Barbaric way to check if costume is saved
+		self.assertEqual(1, costume.pk)

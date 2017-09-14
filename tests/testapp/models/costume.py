@@ -1,6 +1,7 @@
 from django.db import models
 from binder.models import BinderModel
 from binder.websocket import trigger
+from django.db.models.signals import post_save
 
 
 # Some of our fictitious animals actually wear clothes/costumes...
@@ -21,5 +22,10 @@ class Costume(BinderModel):
 			'costume': self.animal.id,
 		}]
 
-	def trigger_websocket(self):
-		trigger({'id': self.animal.id}, self.list_rooms())
+
+def trigger_websocket(instance, created, **kwargs):
+	if created:
+		costume = instance
+		trigger({'id': costume.animal.id}, costume.list_rooms())
+
+post_save.connect(trigger_websocket, sender=Costume)
