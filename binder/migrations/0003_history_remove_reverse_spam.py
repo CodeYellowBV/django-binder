@@ -6,8 +6,6 @@ import json
 
 from django.db import migrations, transaction, models, connection
 
-from binder.history import Change
-
 
 
 logger = logging.getLogger(__name__)
@@ -15,6 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 def remove_reverse_spam(apps, schema_editor):
+	Change = apps.get_model('binder', 'Change')
+
+	# This migration will also be called when initializing empty DBs (e.g., for tests).
+	# In that case, we want to NOP quickly and silently.
+	# No changes in the history is sufficient to detect that.
+	# No changes in the history also guarantees that doing nothing is OK.
+	if Change.objects.count() == 0:
+		return
+
+
+
 	logger.info('Running Binder migration 0003 - removing redundant FK/M2M binder history changes.')
 	logger.info('See https://github.com/CodeYellowBV/django-binder/issues/76')
 	print()
