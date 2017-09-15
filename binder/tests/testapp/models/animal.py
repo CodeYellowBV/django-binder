@@ -1,5 +1,6 @@
 from django.db import models
 from binder.models import BinderModel
+from binder.exceptions import BinderValidationError
 
 # From the api docs: an animal with a name.  We don't use the
 # CaseInsensitiveCharField because it's so much simpler to use
@@ -14,6 +15,12 @@ class Animal(BinderModel):
 
 	def __str__(self):
 		return 'animal %d: %s' % (self.pk or 0, self.name)
+
+	def _binder_unset_relation_caretaker(self):
+		raise BinderValidationError({'animal': {self.pk: {'caretaker': [{
+			'code': 'cant_unset',
+			'message': 'You can\'t unset zoo.',
+		}]}}})
 
 	class Binder:
 		history = True
