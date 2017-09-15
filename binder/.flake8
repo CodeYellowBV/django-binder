@@ -1,5 +1,5 @@
 [flake8]
-ignore = W191,E501,E301,E302,E303,E265,E201,E202,E713,E126,E128,E226,E221,E266,E127,E251,E305,E241,E272
+ignore = W191,E501,E301,E302,E303,E265,E201,E202,E713,E126,E128,E226,E221,E266,E127,E251,E305,E241,E272,E261
 
 # W191            indentation uses tabs
 # E501            line too long
@@ -16,3 +16,4 @@ ignore = W191,E501,E301,E302,E303,E265,E201,E202,E713,E126,E128,E226,E221,E266,E
 # E305            expected 2 blank lines after class or function definition, found 3
 # E241            multiple spaces after ':'
 # E272            multiple spaces before keyword
+# E261            at least two spaces before inline comment

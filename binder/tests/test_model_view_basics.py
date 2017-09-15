@@ -550,5 +550,3 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(response.status_code, 200)
 		result = jsonloads(response.content)
 		self.assertEqual(1, len(result['_meta']['with']['zoo']))
-
-

@@ -1,11 +1,11 @@
 from django.conf.urls import url, include
 
-import binder.router
-import binder.websocket
-import binder.views
-import binder.history
-import binder.models
-from .views import animal, caretaker, costume, custom, zoo, contact_person, gate
+import binder.router # noqa
+import binder.websocket # noqa
+import binder.views # noqa
+import binder.history # noqa
+import binder.models # noqa
+from .views import animal, caretaker, costume, custom, zoo, contact_person, gate # noqa
 
 router = binder.router.Router().register(binder.views.ModelView)
 room_controller = binder.websocket.RoomController().register(binder.views.ModelView)

@@ -1,8 +1,6 @@
 import os
 from django.db import models
 from django.db.models.signals import post_delete
-
-import binder.models
 from binder.models import BinderModel
 
 def delete_files(sender, instance=None, **kwargs):
@@ -31,4 +29,3 @@ class Zoo(BinderModel):
 
 
 post_delete.connect(delete_files, sender=Zoo)
-

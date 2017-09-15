@@ -1,12 +1,9 @@
-import unittest
-import json
-
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
-from .compare import assert_json, MAYBE, ANY, EXTRA
+from .compare import assert_json, EXTRA
 from .testapp.models import Zoo, Animal, ContactPerson
 
 

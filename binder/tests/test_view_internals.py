@@ -1,4 +1,4 @@
-from django.test import TestCase, Client
+from django.test import TestCase
 from .testapp.views import ZooView
 
 class ViewInternalsTest(TestCase):

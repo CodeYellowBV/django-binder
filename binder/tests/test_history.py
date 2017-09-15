@@ -1,15 +1,11 @@
-from django.db import connection
-
-
 from django.test import TestCase, Client
 
 from datetime import datetime, timedelta, timezone
 import json
-from binder.json import jsonloads
 from binder.history import Change, Changeset
 from django.contrib.auth.models import User
 
-from .testapp.models import Animal, Caretaker, Zoo
+from .testapp.models import Animal, Caretaker
 
 class HistoryTest(TestCase):
 	def setUp(self):

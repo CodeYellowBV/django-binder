@@ -1,9 +1,9 @@
-from django.test import TestCase, Client
+from django.test import TestCase
 from binder.models import BinderModel
 from binder.router import Router, Route
 from binder.views import ModelView
 
-from django.urls.base import resolve, is_valid_path, clear_url_caches
+from django.urls.base import is_valid_path, clear_url_caches
 from django.conf.urls import url, include
 
 from . import urls_module
@@ -11,10 +11,10 @@ from . import urls_module
 # Two unique local models, to use for view registration
 class FooModel(BinderModel):
 	class Meta:
-		app_label='test'
+		app_label = 'test'
 class BarModel(BinderModel):
 	class Meta:
-		app_label='test'
+		app_label = 'test'
 
 
 class RouterTest(TestCase):
@@ -26,36 +26,42 @@ class RouterTest(TestCase):
 	def test_double_model_registration_triggers_error(self):
 		class ParentView(ModelView):
 			pass
-		class FooView1(ParentView):
-			model=FooModel
-		class FooView2(ParentView):
-			model=FooModel
 
-		with self.assertRaises(ValueError) as cm:
+		class FooView1(ParentView):
+			model = FooModel
+
+		class FooView2(ParentView):
+			model = FooModel
+
+		with self.assertRaises(ValueError):
 			Router().register(ParentView)
 
 
 	def test_double_route_registration_triggers_error(self):
 		class ParentView(ModelView):
 			pass
-		class FooView(ParentView):
-			model=FooModel
-			route='myroute'
-		class BarView(ParentView):
-			model=BarModel
-			route='myroute'
 
-		with self.assertRaises(ValueError) as cm:
+		class FooView(ParentView):
+			model = FooModel
+			route = 'myroute'
+
+		class BarView(ParentView):
+			model = BarModel
+			route = 'myroute'
+
+		with self.assertRaises(ValueError):
 			Router().register(ParentView)
 
 
 	def test_register_adds_default_routes_from_modelname(self):
 		class ParentView(ModelView):
 			pass
+
 		class FooView(ParentView):
-			model=FooModel
+			model = FooModel
+
 		class BarView(ParentView):
-			model=BarModel
+			model = BarModel
 
 		r = Router()
 		r.register(ParentView)
@@ -71,13 +77,15 @@ class RouterTest(TestCase):
 	def test_register_adds_custom_route_names(self):
 		class ParentView(ModelView):
 			pass
+
 		class FooView(ParentView):
-			model=FooModel
-			route='foo'
+			model = FooModel
+			route = 'foo'
+
 		class BarView(ParentView):
-			model=BarModel
+			model = BarModel
 			# Explicit Route objects should also be accepted
-			route=Route('bar')
+			route = Route('bar')
 
 		r = Router()
 		r.register(ParentView)
@@ -95,12 +103,14 @@ class RouterTest(TestCase):
 	def test_register_obeys_custom_route_config(self):
 		class ParentView(ModelView):
 			pass
+
 		class FooView(ParentView):
-			model=FooModel
-			route=Route('foo', list_endpoint=False)
+			model = FooModel
+			route = Route('foo', list_endpoint=False)
+
 		class BarView(ParentView):
-			model=BarModel
-			route=Route('bar', detail_endpoint=False)
+			model = BarModel
+			route = Route('bar', detail_endpoint=False)
 
 		r = Router()
 		r.register(ParentView)

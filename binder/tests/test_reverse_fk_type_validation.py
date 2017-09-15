@@ -1,4 +1,3 @@
-import unittest
 import json
 
 from django.test import TestCase, Client
@@ -20,7 +19,8 @@ class TestValidationErrors(TestCase):
 		self.client = Client()
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
-		a = Animal(id=1, name='Test animal so FKs work').save()
+		a = Animal(id=1, name='Test animal so FKs work')
+		a.save()
 
 
 

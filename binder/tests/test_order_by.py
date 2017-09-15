@@ -1,7 +1,7 @@
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
-from binder.json import jsonloads, jsondumps
+from binder.json import jsonloads
 
 # from .compare import assert_json, MAYBE, ANY, EXTRA
 from .testapp.models import Animal, Costume

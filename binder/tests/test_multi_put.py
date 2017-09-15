@@ -40,7 +40,7 @@ class MultiPutTest(TestCase):
 		self.assertIsNotNone(returned_data['idmap']['animal'][0])
 		self.assertIsNotNone(returned_data['idmap']['animal'][1])
 
-		idmap=dict(returned_data['idmap']['animal'])
+		idmap = dict(returned_data['idmap']['animal'])
 
 		scooby = Animal.objects.get(pk=idmap[-1])
 		self.assertEqual(scooby.name, 'Scooby Doo')
@@ -69,7 +69,7 @@ class MultiPutTest(TestCase):
 
 		self.assertNotEqual(scooby.pk, returned_data['idmap']['animal'][0][1])
 
-		idmap=dict(returned_data['idmap']['animal'])
+		idmap = dict(returned_data['idmap']['animal'])
 
 		scooby = Animal.objects.get(pk=scooby.pk)
 		self.assertEqual(scooby.name, 'Scooby Doo')
@@ -117,34 +117,34 @@ class MultiPutTest(TestCase):
 
 		returned_data = jsonloads(response.content)
 
-		animal_idmap=dict(returned_data['idmap']['animal'])
-		zoo_idmap=dict(returned_data['idmap']['zoo'])
+		animal_idmap = dict(returned_data['idmap']['animal'])
+		zoo_idmap = dict(returned_data['idmap']['zoo'])
 
 		self.assertEqual(4, len(animal_idmap))
 		self.assertEqual(3, len(zoo_idmap))
 
 		# Check zoos
-		slagharen=Zoo.objects.get(pk=zoo_idmap[-1])
+		slagharen = Zoo.objects.get(pk=zoo_idmap[-1])
 		self.assertEqual('Slagharen', slagharen.name)
-		burgers=Zoo.objects.get(pk=zoo_idmap[-2])
+		burgers = Zoo.objects.get(pk=zoo_idmap[-2])
 		self.assertEqual("Burgers' Zoo", burgers.name)
-		apenheul=Zoo.objects.get(pk=zoo_idmap[-3])
+		apenheul = Zoo.objects.get(pk=zoo_idmap[-3])
 		self.assertEqual('Apenheul', apenheul.name)
 
 		# Check animals
-		scooby=Animal.objects.get(pk=animal_idmap[-1])
+		scooby = Animal.objects.get(pk=animal_idmap[-1])
 		self.assertEqual('Scooby Doo', scooby.name)
 		self.assertEqual(slagharen, scooby.zoo)
 
-		daffy=Animal.objects.get(pk=animal_idmap[-2])
+		daffy = Animal.objects.get(pk=animal_idmap[-2])
 		self.assertEqual('Daffy Duck', daffy.name)
 		self.assertEqual(slagharen, daffy.zoo)
 
-		pluto=Animal.objects.get(pk=animal_idmap[-3])
+		pluto = Animal.objects.get(pk=animal_idmap[-3])
 		self.assertEqual('Pluto', pluto.name)
 		self.assertEqual(burgers, pluto.zoo)
 
-		stimpy=Animal.objects.get(pk=animal_idmap[-4])
+		stimpy = Animal.objects.get(pk=animal_idmap[-4])
 		self.assertEqual('Stimpson J Cat', stimpy.name)
 		self.assertEqual(burgers, stimpy.zoo)
 
@@ -187,32 +187,32 @@ class MultiPutTest(TestCase):
 
 		returned_data = jsonloads(response.content)
 
-		zoo_idmap=dict(returned_data['idmap']['zoo'])
-		animal_idmap=dict(returned_data['idmap']['animal'])
+		zoo_idmap = dict(returned_data['idmap']['zoo'])
+		animal_idmap = dict(returned_data['idmap']['animal'])
 
 		self.assertEqual(2, len(zoo_idmap))
 		self.assertEqual(4, len(animal_idmap))
 
 		# Check zoos
-		central_park=Zoo.objects.get(pk=zoo_idmap[-1])
+		central_park = Zoo.objects.get(pk=zoo_idmap[-1])
 		self.assertEqual('Central Park Zoo', central_park.name)
-		artis=Zoo.objects.get(pk=zoo_idmap[-3])
+		artis = Zoo.objects.get(pk=zoo_idmap[-3])
 		self.assertEqual('Artis', artis.name)
 
 		# Check animals
-		alex=Animal.objects.get(pk=animal_idmap[-1])
+		alex = Animal.objects.get(pk=animal_idmap[-1])
 		self.assertEqual('Alex the lion', alex.name)
 		self.assertEqual(central_park, alex.zoo)
 
-		ren=Animal.objects.get(pk=animal_idmap[-2])
+		ren = Animal.objects.get(pk=animal_idmap[-2])
 		self.assertEqual('Ren Höek', ren.name)
 		self.assertEqual(central_park, ren.zoo)
 
-		tom=Animal.objects.get(pk=animal_idmap[-3])
+		tom = Animal.objects.get(pk=animal_idmap[-3])
 		self.assertEqual('Tom', tom.name)
 		self.assertIsNone(tom.zoo)
 
-		jerry=Animal.objects.get(pk=animal_idmap[-4])
+		jerry = Animal.objects.get(pk=animal_idmap[-4])
 		self.assertEqual('Jerry', jerry.name)
 		self.assertEqual(artis, jerry.zoo)
 
@@ -237,7 +237,7 @@ class MultiPutTest(TestCase):
 
 		returned_data = jsonloads(response.content)
 
-		animal_idmap=dict(returned_data['idmap']['animal'])
+		animal_idmap = dict(returned_data['idmap']['animal'])
 		scooby_pk = animal_idmap[-1]
 
 		scooby = Animal.objects.get(pk=scooby_pk)

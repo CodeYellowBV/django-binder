@@ -1,6 +1,4 @@
 from django.db import models
-
-import binder.models
 from binder.models import BinderModel
 
 # From the api docs: an animal with a name.  We don't use the
