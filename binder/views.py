@@ -788,7 +788,13 @@ class ModelView(View):
 				old_ids = set(obj_field.values_list('id', flat=True))
 				new_ids = set(value)
 				for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
-					if obj_field.field.null:
+					method = getattr(rmobj, '_binder_unset_relation_{}'.format(obj_field.field.name), None)
+					if callable(method):
+						try:
+							method()
+						except BinderValidationError as bve:
+							validation_errors.append(bve)
+					elif obj_field.field.null:
 						setattr(rmobj, obj_field.field.name, None)
 						rmobj.save()
 					elif hasattr(rmobj, 'deleted'):
@@ -811,6 +817,9 @@ class ModelView(View):
 				setattr(obj, field, value)
 			else:
 				setattr(obj, field, value)
+
+		if validation_errors:
+			raise sum(validation_errors, None)
 
 		data = self._get_obj(obj.pk, request=request)
 		data['_meta'] = {'ignored_fields': ignored_fields}
