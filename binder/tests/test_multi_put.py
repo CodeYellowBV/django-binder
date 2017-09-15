@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 from binder.json import jsonloads
 
 from .testapp.models import Animal, Zoo
+from .compare import assert_json, MAYBE, ANY
 
 
 
@@ -345,3 +346,47 @@ class MultiPutTest(TestCase):
 
 		returned_data = jsonloads(response.content)
 		self.assertEqual(returned_data['zoo_employees'], [])
+
+	def test_remove_relation_through_backref_with_custom_unsetter(self):
+		model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Apenheul',
+				'animals': [-2, -3]
+			}],
+			'with': {
+				'animal': [{
+					'id': -2,
+					'name': 'Harambe',
+				}, {
+					'id': -3,
+					'name': 'Bokito',
+				}]
+			}
+		}
+		response = self.client.put('/caretaker/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		caretaker_id = returned_data['idmap']['caretaker'][0][1]
+		animal_ids = [new for old, new in returned_data['idmap']['animal']]
+
+		update_data = {'animals': []}
+		response = self.client.put('/caretaker/{}/'.format(caretaker_id), data=json.dumps(update_data), content_type='application/json')
+		self.assertEqual(response.status_code, 400)
+		returned_data = jsonloads(response.content)
+
+		assert_json(returned_data, {
+			'errors': {
+				'animal': {
+					str(animal_id): {
+						'caretaker': [
+							{'code': 'cant_unset', MAYBE('message'): ANY(str)}
+						]
+					}
+					for animal_id in animal_ids
+				}
+			},
+			'code': 'ValidationError',
+			MAYBE('debug'): ANY(),
+		})
