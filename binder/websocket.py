@@ -1,7 +1,7 @@
 from django.conf import settings
 from .json import jsondumps
 import requests
-from requests.exceptions import ConnectionError
+from requests.exceptions import RequestException
 
 class RoomController(object):
 	def __init__(self):
@@ -35,5 +35,5 @@ def trigger(data, rooms):
 			'data': data,
 			'rooms': rooms,
 		}))
-	except ConnectionError:
+	except RequestException:
 		pass
