@@ -20,7 +20,7 @@ setup(
 	url='https://github.com/CodeYellowBV/django-binder',
 	author='Marcel Moreaux',
 	author_email='marcel@codeyellow.nl',
-	test_suite='tests',
+	test_suite='binder.tests',
 	classifiers=[
 		'Environment :: Web Environment',
 		'Framework :: Django',

@@ -21,7 +21,7 @@ settings.configure(**{
 		'django.contrib.contenttypes',
 		'django.contrib.sessions',
 		'binder',
-		'tests.testapp',
+		'binder.tests.testapp',
 	],
 	'MIGRATION_MODULES': {
 		'testapp': None,
@@ -31,7 +31,7 @@ settings.configure(**{
 		'binder': None,
 	},
 	'USE_TZ': True,
-	'ROOT_URLCONF': 'tests.testapp.urls',
+	'ROOT_URLCONF': 'binder.tests.testapp.urls',
 	'LOGGING': {
 		'version': 1,
 		'handlers': {
