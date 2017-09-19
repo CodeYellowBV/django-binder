@@ -11,7 +11,7 @@ class Animal(BinderModel):
 	name = models.TextField(max_length=64)
 	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 	caretaker = models.ForeignKey('Caretaker', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
-	deleted = models.BooleanField(default=False) # Softdelete
+	deleted = models.BooleanField(default=False)  # Softdelete
 
 	def __str__(self):
 		return 'animal %d: %s' % (self.pk or 0, self.name)

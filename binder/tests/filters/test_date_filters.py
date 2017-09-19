@@ -14,7 +14,7 @@ class DateFiltersTest(TestCase):
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
 
-		Zoo(name='Burgers Zoo', founding_date='1913-02-13').save() # Couldn't find exact date, only year, but meh
+		Zoo(name='Burgers Zoo', founding_date='1913-02-13').save()  # Couldn't find exact date, only year, but meh
 		Zoo(name='Artis', founding_date='1838-05-01').save()
 
 
