@@ -45,6 +45,11 @@ class BinderException(Exception):
 			data['debug']['location'] = '{1}:{2} in {0}'.format(*self.exception_location())
 		return HttpResponse(json.dumps(data), status=self.http_code, content_type='application/json')
 
+	# The Python Exception __str__ can return something unhelpful like "('foo', SomeOb)".
+	# This can be quite annoying during debug. __repr__ is better so we use that instead.
+	def __str__(self):
+		return repr(self)
+
 
 
 class BinderInvalidURI(BinderException):
