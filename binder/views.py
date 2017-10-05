@@ -1349,12 +1349,12 @@ class ModelView(View):
 					max_width, max_height = max_size, max_size
 
 				# FIXME: hardcoded max
-				max_width_limit = max(max_width, 4096)
-				max_height_limit = max(max_height, 4096)
+				# Flat out refuse images exceeding this size, to prevent DoS.
+				width_limit, height_limit = max(max_width, 4096), max(max_height, 4096)
+				if width > width_limit or height > height_limit:
+					raise BinderImageSizeExceeded(width_limit, height_limit)
 
-				if width > max_width_limit or height > max_height_limit:
-					raise BinderImageSizeExceeded(max_width_limit, max_height_limit)
-
+				# Resize images that are too large.
 				if width > max_width or height > max_height:
 					img.thumbnail((max_width, max_height), Image.ANTIALIAS)
 					logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
