@@ -3,9 +3,8 @@ from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
-from .testapp.models import Animal, Costume, Zoo, Caretaker, Gate
+from .testapp.models import Animal, Zoo, Caretaker
 from .compare import assert_json, EXTRA
-import json
 
 class WithFilterTest(TestCase):
 	def setUp(self):
@@ -48,7 +47,6 @@ class WithFilterTest(TestCase):
 		self.assertEqual(res.status_code, 200)
 		res = jsonloads(res.content)
 
-		from pudb import set_trace; set_trace()
 		assert_json(res, {
 			'data': [
 				{
