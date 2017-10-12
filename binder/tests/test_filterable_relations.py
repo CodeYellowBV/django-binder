@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
-from .testapp.models import Animal, Zoo, Caretaker
+from .testapp.models import Animal, Zoo, Caretaker, ContactPerson
 from .compare import assert_json, EXTRA
 
 class WithFilterTest(TestCase):
@@ -16,29 +16,23 @@ class WithFilterTest(TestCase):
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
 
-	def test_filter_intermediate_relation(self):
+	def test_where(self):
 		zoo = Zoo(name='Meerkerk')
-		zoo.full_clean()
 		zoo.save()
 
 		gman = Caretaker(name='gman')
-		gman.full_clean()
 		gman.save()
 		freeman = Caretaker(name='gordon')
-		freeman.full_clean()
 		freeman.save()
 
 
 		antlion = Animal(zoo=zoo, name='antlion', caretaker=freeman)
-		antlion.full_clean()
 		antlion.save()
 
 		sealion = Animal(zoo=zoo, name='sealion')
-		sealion.full_clean()
 		sealion.save()
 
 		goat = Animal(zoo=zoo, name='goat', caretaker=gman)
-		goat.full_clean()
 		goat.save()
 
 		# Filter the animal relations on animals with lion in the name
@@ -69,6 +63,176 @@ class WithFilterTest(TestCase):
 				'caretaker': [
 					{
 						'id': freeman.id,
+						EXTRA(): None,
+					},
+				]
+			},
+			EXTRA(): None,
+		})
+
+	def test_multiple_wheres(self):
+		zoo = Zoo(name='Meerkerk')
+		zoo.save()
+
+		freeman = Caretaker(name='gordon')
+		freeman.save()
+		alyx = Caretaker(name='alyx')
+		alyx.save()
+
+
+		antlion = Animal(zoo=zoo, name='antlion', caretaker=freeman)
+		antlion.save()
+
+		sealion = Animal(zoo=zoo, name='sealion', caretaker=alyx)
+		sealion.save()
+
+		goat = Animal(zoo=zoo, name='goat')
+		goat.save()
+
+		res = self.client.get('/zoo/', data={
+			'with': 'animals.caretaker',
+			'where': 'animals(name:contains=lion),animals.caretaker(name=gordon)'
+		})
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo.id,
+					'animals': [antlion.id, sealion.id, goat.id],  # Currently we only filter the withs, not foreign keys
+					EXTRA(): None,
+				}
+			],
+			'with': {
+				'animal': [
+					{
+						'id': antlion.id,
+						'caretaker': freeman.id,
+						EXTRA(): None,
+					},
+					{
+						'id': sealion.id,
+						'caretaker': alyx.id,
+						EXTRA(): None,
+					},
+				],
+				'caretaker': [
+					{
+						'id': freeman.id,
+						EXTRA(): None,
+					},
+				]
+			},
+			EXTRA(): None,
+		})
+
+	def test_where_and_filter(self):
+		zoo1 = Zoo(name='Meerkerk')
+		zoo1.save()
+		zoo2 = Zoo(name='Hardinxveld')
+		zoo2.save()
+
+		freeman = Caretaker(name='gordon')
+		freeman.save()
+		alyx = Caretaker(name='alyx')
+		alyx.save()
+
+
+		antlion = Animal(zoo=zoo1, name='antlion', caretaker=freeman)
+		antlion.save()
+
+		sealion = Animal(zoo=zoo1, name='sealion', caretaker=alyx)
+		sealion.save()
+
+		goat1 = Animal(zoo=zoo1, name='goat')
+		goat1.save()
+
+		goat2 = Animal(zoo=zoo2, name='goat')
+		goat2.save()
+
+		# Instead of filtering the animals relation,
+		# we now filter the zoo relation on having certain animals
+		res = self.client.get('/zoo/', data={
+			'.animals.name:contains': 'lion',
+			'with': 'animals.caretaker',
+			'where': 'animals.caretaker(name=gordon)'
+		})
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo1.id,
+					'animals': [antlion.id, sealion.id, goat1.id],
+					EXTRA(): None,
+				}
+			],
+			'with': {
+				'animal': [
+					{
+						'id': antlion.id,
+						'caretaker': freeman.id,
+						EXTRA(): None,
+					},
+					{
+						'id': sealion.id,
+						'caretaker': alyx.id,
+						EXTRA(): None,
+					},
+					{
+						'id': goat1.id,
+						'caretaker': None,
+						EXTRA(): None,
+					}
+				],
+				'caretaker': [
+					{
+						'id': freeman.id,
+						EXTRA(): None,
+					},
+				]
+			},
+			EXTRA(): None,
+		})
+
+	def test_m2m(self):
+		zoo = Zoo(name='Meerkerk')
+		zoo.save()
+
+		cp1 = ContactPerson(name='henk')
+		cp1.save()
+		cp2 = ContactPerson(name='hendrik')
+		cp2.save()
+		cp3 = ContactPerson(name='hans')
+		cp3.save()
+
+		zoo.contacts.set([cp1.id, cp2.id, cp3.id])
+
+		res = self.client.get('/zoo/', data={
+			'with': 'contacts',
+			'where': 'contacts(name:startswith=he)'
+		})
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo.id,
+					'contacts': [cp1.id, cp2.id, cp3.id],
+					EXTRA(): None,
+				}
+			],
+			'with': {
+				'contact_person': [
+					{
+						'id': cp1.id,
+						EXTRA(): None,
+					},
+					{
+						'id': cp2.id,
 						EXTRA(): None,
 					},
 				]
