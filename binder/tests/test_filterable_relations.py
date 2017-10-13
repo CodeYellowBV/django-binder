@@ -256,15 +256,15 @@ class WithFilterTest(TestCase):
 
 
 
-	def test_where_complains_on_nonexistent_relation(self):
+	def test_where_complains_if_relation_not_in_with(self):
 		res = self.client.get('/zoo/', data={
-			'where': 'foo(bar=5)'
+			'where': 'contacts(name:startswith=he)'
 		})
 		self.assertEqual(res.status_code, 418)
 		res = jsonloads(res.content)
 
 		assert_json(res, {
-			'message': 'Unknown field {Zoo}.{foo}.',
+			'message': 'Relation of {where=contacts(name:startswith=he)} is missing from withs.',
 			EXTRA(): None,
 		})
 
@@ -272,6 +272,7 @@ class WithFilterTest(TestCase):
 
 	def test_where_complains_on_non_relation_field(self):
 		res = self.client.get('/zoo/', data={
+			'with': 'floor_plan',
 			'where': 'floor_plan(foo=5)'
 		})
 		self.assertEqual(res.status_code, 418)
@@ -310,24 +311,11 @@ class WithFilterTest(TestCase):
 			'with': 'contacts',
 			'where': 'contacts(name=henk'
 		})
-		self.assertEqual(res.status_code, 200)
+
+		self.assertEqual(res.status_code, 418)
 		res = jsonloads(res.content)
 
 		assert_json(res, {
-			'data': [
-				{
-					'id': zoo.id,
-					'contacts': [cp1.id],
-					EXTRA(): None,
-				}
-			],
-			'with': {
-				'contact_person': [
-					{
-						'id': cp1.id,
-						EXTRA(): None,
-					},
-				]
-			},
+			'message': 'Syntax error in {where=contacts(name=henk}.',
 			EXTRA(): None,
 		})

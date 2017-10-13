@@ -293,11 +293,20 @@ class ModelView(View):
 	# in ['animals': ['name:contains=lion']]
 	# { 'animals': {'filters': ['name:contains=lion'], 'subrels': {}}}
 	#
-	# Please refactor this
-	def _parse_wheres(self, wheres):
+	# We include the withs because the where target
+	# must be included in the withs. Filtering a relation you aren't querying is wrong.
+	def _parse_wheres(self, wheres, withs):
 		where_map = {}
 		for wh in wheres:
+			# Check if "(" and ")" exist in where
+			if '(' not in wh or ')' not in wh:
+				raise BinderRequestError('Syntax error in {{where={}}}.'.format(wh))
+
 			target_rel, query = wh.split('(')
+
+			if target_rel not in withs:
+				raise BinderRequestError('Relation of {{where={}}} is missing from withs.'.format(wh, withs))
+
 			# Also strip the trailing ) from the query
 			query = query[:-1]
 
@@ -324,19 +333,19 @@ class ModelView(View):
 		if withs is None and request is not None:
 			withs = list(filter(None, request.GET.get('with', '').split(',')))
 
+		# Make sure to include A if A.B is specified.
+		for w in withs:
+			if '.' in w:
+				withs.append('.'.join(w.split('.')[:-1]))
+
 		if wheres is None and request is not None:
 			where_params = list(filter(None, request.GET.get('where', '').split(',')))
-			where_map = self._parse_wheres(where_params)
+			where_map = self._parse_wheres(where_params, withs)
 
 		if isinstance(pks, django.db.models.query.QuerySet):
 			pks = pks.values_list('pk', flat=True)
 		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
 		pks = list(pks)
-
-		# Make sure to include A if A.B is specified.
-		for w in withs:
-			if '.' in w:
-				withs.append('.'.join(w.split('.')[:-1]))
 
 		withs = set(withs)
 		extras = defaultdict(set)
@@ -409,9 +418,9 @@ class ModelView(View):
 		# _get_with doesn't fully recurse the relation tree
 		# but it lags behind 1 recursion
 		rel_ids = list(self.model.objects.filter(pk__in=pks).values_list(head + '__pk', flat=True))
-		rel_ids = self._filter_relation(next, rel_ids, where_map.get(head, None))
 
 		view_class = self.router.model_view(next)
+		rel_ids = view_class()._filter_relation(next, rel_ids, where_map.get(head, None))
 
 		if not tail:
 			return (view_class, rel_ids)
