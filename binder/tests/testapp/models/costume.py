@@ -15,7 +15,7 @@ class Costume(BinderModel):
 	animal = models.OneToOneField('Animal', on_delete=models.CASCADE, related_name='costume', primary_key=True)
 
 	def __str__(self):
-		return 'costume %d: %s (for %s)' % (self.pk or 0, self.description, self.animal)
+		return 'costume %d: %s (for %s)' % (self.pk, self.description, self.animal)
 
 	def list_rooms(self):
 		return [{
