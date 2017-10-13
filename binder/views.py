@@ -289,32 +289,76 @@ class ModelView(View):
 	def _get_obj(self, id, request):
 		return self._get_objs(self.model.objects.filter(pk=id), request=request)[0]
 
+	# Split ['animals(name:contains=lion)']
+	# in ['animals': ['name:contains=lion']]
+	# { 'animals': {'filters': ['name:contains=lion'], 'subrels': {}}}
+	#
+	# We include the withs because the where target
+	# must be included in the withs. Filtering a relation you aren't querying is wrong.
+	def _parse_wheres(self, wheres, withs):
+		where_map = {}
+		for wh in wheres:
+			# Check if "(" and ")" exist in where
+			if '(' not in wh or ')' not in wh:
+				raise BinderRequestError('Syntax error in {{where={}}}.'.format(wh))
 
+			target_rel, query = wh.split('(')
+
+			if target_rel not in withs:
+				raise BinderRequestError('Relation of {{where={}}} is missing from withs.'.format(wh, withs))
+
+			# Also strip the trailing ) from the query
+			query = query[:-1]
+
+			rels = target_rel.split('.')
+			pointer = where_map
+			for i, rel in enumerate(rels):
+				if rel not in pointer:
+					pointer[rel] = {'filters': [], 'subrels': {}}
+
+				# Don't change the pointer
+				# if this is the last iteration
+				if i != (len(rels) - 1):
+					pointer = pointer[rel]['subrels']
+
+			pointer[rel]['filters'].append(query)
+
+		return where_map
 
 	# Find which objects of which models to include according to <withs> for the objects in <queryset>.
 	# returns two dictionaries:
 	# - withs: { related_modal_name: [ids]}
 	# - mappings: { with_name: related_model_name}
-	def _get_withs(self, pks, withs, request):
+	def _get_withs(self, pks, withs, request, wheres=None):
 		if withs is None and request is not None:
 			withs = list(filter(None, request.GET.get('with', '').split(',')))
-
-		if isinstance(pks, django.db.models.query.QuerySet):
-			pks = pks.values_list('pk', flat=True)
-		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
-		pks = list(pks)
 
 		# Make sure to include A if A.B is specified.
 		for w in withs:
 			if '.' in w:
 				withs.append('.'.join(w.split('.')[:-1]))
 
+		if wheres is None and request is not None:
+			where_params = list(filter(None, request.GET.get('where', '').split(',')))
+			where_map = self._parse_wheres(where_params, withs)
+
+		if isinstance(pks, django.db.models.query.QuerySet):
+			pks = pks.values_list('pk', flat=True)
+		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
+		pks = list(pks)
+
 		withs = set(withs)
 		extras = defaultdict(set)
 		extras_mapping = {}
 
 		for w in withs:
-			(view, new_ids) = self._get_with(w, pks, request=request)
+			# Make sure the _get_with only gets the wheres relevant to the relation
+			# We scope on the head of the relation, as the caretakers in animals.caretaker
+			# must also be filtered by the animal filter
+			# head = w.split('.')[0]
+			# scoped_wheres = where_map.get(head, [])
+
+			(view, new_ids) = self._get_with(w, pks, request=request, where_map=where_map)
 			if view:
 				extras_mapping[w] = view
 				extras[view].update(set(new_ids))
@@ -366,22 +410,46 @@ class ModelView(View):
 
 
 
-	def _get_with(self, wth, pks, request):
+	def _get_with(self, wth, pks, request, where_map):
 		head, *tail = wth.split('.')
 
 		next = self._follow_related(head)[0].model
 
-		pks = list(self.model.objects.filter(pk__in=pks).values_list(head + '__pk', flat=True))
+		# _get_with doesn't fully recurse the relation tree
+		# but it lags behind 1 recursion
+		rel_ids = list(self.model.objects.filter(pk__in=pks).values_list(head + '__pk', flat=True))
+
 		view_class = self.router.model_view(next)
+		rel_ids = view_class()._filter_relation(next, rel_ids, where_map.get(head, None))
 
 		if not tail:
-			return (view_class, pks)
+			return (view_class, rel_ids)
 		else:
 			view = view_class()
 			# {router-view-instance}
 			view.router = self.router
-			return view._get_with('.'.join(tail), pks, request=request)
+			wm_scoped = where_map.get(head)
+			wm_scoped = wm_scoped['subrels'] if wm_scoped else {}
+			return view._get_with('.'.join(tail), rel_ids, request, wm_scoped)
 
+
+	# We have a set of ids where model M should be scoped on,
+	# but also a set of wheres where model M should further be scoped on
+	#
+	# Returns a further scoped list of ids
+	def _filter_relation(self, M, ids, where_map):
+		# If there are no filters, return the given ids
+		if where_map is None:
+			return ids
+
+		wheres = where_map['filters']
+
+		qs = M.objects.filter(pk__in=ids)
+		for where in wheres:
+			field, val = where.split('=')
+			qs = self._parse_filter(qs, field, val)
+
+		return qs.values_list('pk', flat=True)
 
 
 	def _parse_filter(self, queryset, field, value, partial=''):
@@ -662,6 +730,7 @@ class ModelView(View):
 		queryset = self._paginate(queryset, request)
 
 		#### with
+		# parse wheres from request
 		extras, extras_mapping = self._get_withs(queryset, withs, request=request)
 
 		data = self._get_objs(queryset, request=request)
