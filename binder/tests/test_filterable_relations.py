@@ -296,3 +296,38 @@ class WithFilterTest(TestCase):
 			'message': 'Invalid value {foo} for AutoField {ContactPerson}.{id}.',
 			EXTRA(): None,
 		})
+
+
+
+	def test_where_handles_missing_close_parens(self):
+		zoo = Zoo(name='Assen')
+		zoo.save()
+		cp1 = ContactPerson(name='henk')
+		cp1.save()
+		zoo.contacts.set([cp1])
+
+		res = self.client.get('/zoo/', data={
+			'with': 'contacts',
+			'where': 'contacts(name=henk'
+		})
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo.id,
+					'contacts': [cp1.id],
+					EXTRA(): None,
+				}
+			],
+			'with': {
+				'contact_person': [
+					{
+						'id': cp1.id,
+						EXTRA(): None,
+					},
+				]
+			},
+			EXTRA(): None,
+		})
