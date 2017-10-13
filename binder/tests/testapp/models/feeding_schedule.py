@@ -8,4 +8,4 @@ class FeedingSchedule(BinderModel):
     description = models.TextField(blank=True, null=True)
 
     def __str__(self):
-        return 'feeding schedule %d: %s (for %s)' % (self.pk or 0, self.description, self.animal)
+        return 'feeding schedule %d: %s (for %s)' % (self.pk, self.description, self.animal)

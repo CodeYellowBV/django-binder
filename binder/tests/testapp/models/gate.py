@@ -9,4 +9,4 @@ class Gate(BinderModel):
 	keeper = models.ForeignKey('Caretaker', on_delete=models.CASCADE, related_name='gate', blank=True, null=True)
 
 	def __str__(self):
-		return 'gate %d: of %s)' % (self.pk or 0, self.zoo)
+		return 'gate %d: of %s)' % (self.pk, self.zoo)

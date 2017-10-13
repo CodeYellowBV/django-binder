@@ -14,7 +14,7 @@ class Animal(BinderModel):
 	deleted = models.BooleanField(default=False)  # Softdelete
 
 	def __str__(self):
-		return 'animal %d: %s' % (self.pk or 0, self.name)
+		return 'animal %d: %s' % (self.pk, self.name)
 
 	def _binder_unset_relation_caretaker(self):
 		raise BinderValidationError({'animal': {self.pk: {'caretaker': [{

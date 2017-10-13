@@ -21,7 +21,7 @@ class Zoo(BinderModel):
 	contacts = models.ManyToManyField('ContactPerson', blank=True, related_name='zoos')
 
 	def __str__(self):
-		return 'zoo %d: %s' % (self.pk or 0, self.name)
+		return 'zoo %d: %s' % (self.pk, self.name)
 
 	@property
 	def animal_count(self):

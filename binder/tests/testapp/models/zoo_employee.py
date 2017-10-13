@@ -7,7 +7,7 @@ class ZooEmployee(BinderModel):
 	deleted = models.BooleanField(default=False)  # Softdelete
 
 	def __str__(self):
-		return 'zoo employee %d: %s' % (self.pk or 0, self.name)
+		return 'zoo employee %d: %s' % (self.pk, self.name)
 
 	class Binder:
 		history = True

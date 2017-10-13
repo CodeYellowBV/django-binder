@@ -6,7 +6,7 @@ class Caretaker(BinderModel):
 	last_seen = models.DateTimeField(null=True, blank=True)
 
 	def __str__(self):
-		return 'caretaker %d: %s' % (self.pk or 0, self.name)
+		return 'caretaker %d: %s' % (self.pk, self.name)
 
 	class Binder:
 		history = True
