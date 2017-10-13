@@ -19,7 +19,7 @@ class CaretakerAdmin(admin.ModelAdmin):
 
 @admin.register(Costume)
 class CostumeAdmin(admin.ModelAdmin):
-	list_display = ['description', 'id', 'animal']
+	list_display = ['animal', 'nickname', 'description']
 
 
 
