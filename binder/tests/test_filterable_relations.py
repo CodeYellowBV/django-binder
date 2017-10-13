@@ -239,3 +239,60 @@ class WithFilterTest(TestCase):
 			},
 			EXTRA(): None,
 		})
+
+
+
+	def test_where_complains_on_syntax_error(self):
+		res = self.client.get('/zoo/', data={
+			'where': 'contacts'
+		})
+		self.assertEqual(res.status_code, 418)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'message': 'Syntax error in {where=contacts}.',
+			EXTRA(): None,
+		})
+
+
+
+	def test_where_complains_on_nonexistent_relation(self):
+		res = self.client.get('/zoo/', data={
+			'where': 'foo(bar=5)'
+		})
+		self.assertEqual(res.status_code, 418)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'message': 'Unknown field {Zoo}.{foo}.',
+			EXTRA(): None,
+		})
+
+
+
+	def test_where_complains_on_non_relation_field(self):
+		res = self.client.get('/zoo/', data={
+			'where': 'floor_plan(foo=5)'
+		})
+		self.assertEqual(res.status_code, 418)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'message': 'Field is not a related object {Zoo}.{floor_plan}.',
+			EXTRA(): None,
+		})
+
+
+
+	def test_where_complains_on_invalid_value(self):
+		res = self.client.get('/zoo/', data={
+			'with': 'contacts',
+			'where': 'contacts(id=foo)'
+		})
+		self.assertEqual(res.status_code, 418)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'message': 'Invalid value {foo} for AutoField {ContactPerson}.{id}.',
+			EXTRA(): None,
+		})
