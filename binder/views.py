@@ -614,7 +614,6 @@ class ModelView(View):
 			**{s: int if s == 'id' else str for s in self.searches}
 		).items():
 			try:
-				print(repr(s), repr(search), repr(transform(search)))
 				q |= Q(**{s: transform(search)})
 			except ValueError:
 				pass
