@@ -193,7 +193,7 @@ class ModelView(View):
 			e.log()
 			response = e.response(request=request)
 			history.abort()
-		except:
+		except BaseException:
 			history.abort()
 			raise
 

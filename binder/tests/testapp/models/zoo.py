@@ -7,9 +7,10 @@ def delete_files(sender, instance=None, **kwargs):
 	for field in sender._meta.fields:
 		if isinstance(field, models.fields.files.FileField):
 			try:
-				file = getattr(instance, field.name).path
-				os.unlink(file)
-			except:
+				file_field = getattr(instance, field.name)
+				if file_field:
+					os.unlink(file_field.path)
+			except FileNotFoundError:
 				pass
 
 # From the api docs: a zoo with a name.  It also has a founding date,
