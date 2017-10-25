@@ -94,6 +94,7 @@ class ModelView(View):
 	# id is hardcoded to be treated as an integer.
 	# For anything fancier, override self.search()
 	searches = []
+	transformed_searches = {}
 
 	# Fields to allow POST/GET/DELETE files on.
 	file_fields = []
@@ -604,18 +605,19 @@ class ModelView(View):
 		if not search:
 			return queryset
 
-		if not self.searches:
+		if not (self.searches or self.transformed_searches):
 			raise BinderRequestError('No search fields defined for this view.')
 
 		q = Q()
-		for s in self.searches:
-			if s == 'id':
-				try:
-					q |= Q(id=int(search))
-				except ValueError:
-					pass
-			else:
-				q |= Q(**{s: search})
+		for s, transform in dict(
+			self.transformed_searches,
+			**{s: int if s == 'id' else str for s in self.searches}
+		).items():
+			try:
+				print(repr(s), repr(search), repr(transform(search)))
+				q |= Q(**{s: transform(search)})
+			except ValueError:
+				pass
 		return queryset.filter(q)
 
 
