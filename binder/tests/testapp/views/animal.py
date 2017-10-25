@@ -6,3 +6,5 @@ from ..models import Animal
 class AnimalView(ModelView):
 	model = Animal
 	m2m_fields = ['costume']
+	searches = ['name__icontains']
+	transformed_searches = {'zoo_id': int}

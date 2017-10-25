@@ -550,3 +550,33 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(response.status_code, 200)
 		result = jsonloads(response.content)
 		self.assertEqual(1, len(result['_meta']['with']['zoo']))
+
+	def test_get_search(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+		bokito = Animal(zoo=zoo, name='Bokito')
+		bokito.save()
+		Animal(zoo=zoo, name='Harambe').save()
+
+		res = self.client.get('/animal/?search=bok')
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		self.assertEqual(1, len(res['data']))
+		self.assertEqual(bokito.pk, res['data'][0]['id'])
+
+	def test_get_search_transformed(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+		zoo2 = Zoo(name='Emmen')
+		zoo2.save()
+		bokito = Animal(zoo=zoo, name='Bokito')
+		bokito.save()
+		Animal(zoo=zoo2, name='Harambe').save()
+
+		res = self.client.get('/animal/?search={}'.format(zoo.pk))
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		self.assertEqual(1, len(res['data']))
+		self.assertEqual(bokito.pk, res['data'][0]['id'])
