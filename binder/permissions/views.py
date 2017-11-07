@@ -1,5 +1,6 @@
 import logging
 from enum import Enum
+from functools import reduce
 
 from django.db import transaction
 from django.db.models import Q
@@ -265,13 +266,14 @@ class PermissionView(ModelView):
 		scope_queries = []
 		for s in scopes:
 			scope_name = '_scope_view_{}'.format(s)
-			if getattr(self, scope_name, None) is None:
+			scope_func = getattr(self, scope_name, None)
+			if scope_func is None:
 				raise UnexpectedScopeException(
 					'Scope {} is not implemented for model {}'.format(scope_name, self.model))
-			scope_queries.append(getattr(self, scope_name)(request))
-		subfilter = Q(pk__in=[-1])
-		for scope_query in scope_queries:
-			subfilter |= Q(pk__in=scope_query.values('pk'))
+			pk_values = scope_func(request).values('pk')
+			scope_queries.append(Q(pk__in=pk_values))
+
+		subfilter = reduce(lambda scope_query, q: q | scope_query, scope_queries)
 
 		self._save_scope(request, Scope.VIEW)
 
