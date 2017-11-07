@@ -164,7 +164,7 @@ class PermissionView(ModelView):
 
 
 	def _scope_view_all(self, request):
-		return self.model.objects
+		return Q()
 
 
 
@@ -270,8 +270,15 @@ class PermissionView(ModelView):
 			if scope_func is None:
 				raise UnexpectedScopeException(
 					'Scope {} is not implemented for model {}'.format(scope_name, self.model))
-			pk_values = scope_func(request).values('pk')
-			scope_queries.append(Q(pk__in=pk_values))
+			query_or_q = scope_func(request)
+			# Allow either a ORM filter query manager or a Q object.
+			# Q objects generate more efficient queries (so we don't
+			# get an "id IN (subquery)"), but query managers allow
+			# filtering on annotations, which Q objects don't.
+			if isinstance(query_or_q, Q):
+				scope_queries.append(query_or_q)
+			else:
+				scope_queries.append(Q(pk__in=query_or_q.values('pk')))
 
 		subfilter = reduce(lambda scope_query, q: q | scope_query, scope_queries)
 
