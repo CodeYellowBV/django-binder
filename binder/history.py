@@ -6,9 +6,12 @@ from django.utils import timezone
 from django.http import HttpResponse
 from django.contrib.auth.models import User
 from django.conf import settings
+from django.dispatch import Signal
 
 from .json import jsondumps, JsonResponse
 
+
+transaction_commit = Signal(providing_args=['changeset'])
 
 
 class Changeset(models.Model):
@@ -164,6 +167,8 @@ def commit():
 			after=jsondumps(new),
 		)
 		change.save()
+
+	transaction_commit.send(sender=None, changeset=changeset)
 
 	Transaction.changes.clear()
 
