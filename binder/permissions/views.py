@@ -164,7 +164,7 @@ class PermissionView(ModelView):
 
 
 	def _scope_view_all(self, request):
-		return Q()
+		return Q(pk__isnull=False)
 
 
 
