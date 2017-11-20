@@ -7,11 +7,11 @@ Binder automatically exposes a fairly powerful API for all your models.
 We’ll use this example model, added in `models.py`.
 
 ```python
-from binder.models import BinderModel, CaseInsensitiveCharField
-
+from binder.models import BinderModel
+from django.db import models
 
 class Animal(BinderModel):
-	name = models.CaseInsensitiveCharField()
+	name = models.TextField()
 ```
 
 In `views.py`, add the following:

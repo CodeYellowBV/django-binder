@@ -2,11 +2,7 @@ from django.db import models
 from binder.models import BinderModel
 from binder.exceptions import BinderValidationError
 
-# From the api docs: an animal with a name.  We don't use the
-# CaseInsensitiveCharField because it's so much simpler to use
-# memory-backed sqlite than Postgres in the tests.  Eventually we
-# might switch and require Postgres for tests, if we need many
-# Postgres-specific things.
+# From the api docs: an animal with a name.
 class Animal(BinderModel):
 	name = models.TextField(max_length=64)
 	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)

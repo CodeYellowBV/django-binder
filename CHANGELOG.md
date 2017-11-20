@@ -11,3 +11,7 @@
 ### Router
 
 - Router is no longer a singleton (#28; **backwards incompatible**)
+
+### Models
+
+- `binder.models.CaseInsensitiveCharField` is now deprecated in favor of `django.contrib.postgres.fields.CITextField` (#9)

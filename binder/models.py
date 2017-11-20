@@ -2,19 +2,20 @@ import re
 import warnings
 
 from django.db import models
+from django.contrib.postgres.fields import CITextField
 from django.db.models import signals
 
 from . import history
 
 
 
-class CaseInsensitiveCharField(models.CharField):
-	def db_type(self, connection):
-		return "citext"
+class CaseInsensitiveCharField(CITextField):
+	def __init__(self, *args, **kwargs):
+		warnings.warn(DeprecationWarning('CaseInsensitiveCharField is deprecated, use django.contrib.postgres.fields.CITextField instead'))
+		return super().__init__(*args, **kwargs)
 
 
-
-class UpperCaseCharField(CaseInsensitiveCharField):
+class UpperCaseCharField(CITextField):
 	def get_prep_value(self, value):
 		value = super().get_prep_value(value)
 		if value is None:
@@ -23,7 +24,7 @@ class UpperCaseCharField(CaseInsensitiveCharField):
 
 
 
-class LowerCaseCharField(CaseInsensitiveCharField):
+class LowerCaseCharField(CITextField):
 	def get_prep_value(self, value):
 		value = super().get_prep_value(value)
 		if value is None:

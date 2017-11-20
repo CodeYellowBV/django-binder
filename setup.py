@@ -40,5 +40,6 @@ setup(
 		'Pillow >= 3.2.0',
 		'django-request-id >= 1.0.0',
 		'requests >= 2.13.0',
+		'psycopg2 >= 2.7',
 	],
 )
