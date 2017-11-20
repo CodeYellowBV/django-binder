@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
-from .testapp.models import Animal, Zoo
+from .testapp.models import Animal, Zoo, ZooEmployee
 from .compare import assert_json, MAYBE, ANY
 
 
@@ -316,7 +316,7 @@ class MultiPutTest(TestCase):
 		returned_data = jsonloads(response.content)
 		self.assertEqual(returned_data['animals'], [])
 
-	@unittest.skip('#40')
+
 	def test_remove_relation_through_backref_non_nullable_soft_deletable(self):
 		model_data = {
 			'data': [{
@@ -339,13 +339,24 @@ class MultiPutTest(TestCase):
 
 		returned_data = jsonloads(response.content)
 		zoo_id = returned_data['idmap']['zoo'][0][1]
+		harambe_id = returned_data['idmap']['zoo_employee'][0][1]
+		bokito_id = returned_data['idmap']['zoo_employee'][1][1]
+		# Fixup if needed (gosh this format is FUBAR)
+		if returned_data['idmap']['zoo_employee'][0][0] == -3:
+			harambe_id, bokito_id = bokito_id, harambe_id
 
-		update_data = {'zoo_employees': []}
+		update_data = {'zoo_employees': [bokito_id]}
 		response = self.client.put('/zoo/{}/'.format(zoo_id), data=json.dumps(update_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 
 		returned_data = jsonloads(response.content)
-		self.assertEqual(returned_data['zoo_employees'], [])
+		self.assertSetEqual(set(returned_data['zoo_employees']), set([bokito_id, harambe_id]))
+
+		bokito = ZooEmployee.objects.get(id=bokito_id)
+		harambe = ZooEmployee.objects.get(id=harambe_id)
+		self.assertFalse(bokito.deleted)
+		self.assertTrue(harambe.deleted)
+
 
 	def test_remove_relation_through_backref_with_custom_unsetter(self):
 		model_data = {
