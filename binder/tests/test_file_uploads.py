@@ -39,9 +39,9 @@ class FileUploadTest(TestCase):
 	def test_get_model_with_file(self):
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
 
-		file = temp_imagefile(100, 200, 'jpeg')
-		emmen.floor_plan.save('plan.jpg', File(file), save=False)
-		emmen.save()
+		with temp_imagefile(100, 200, 'jpeg') as file:
+			emmen.floor_plan.save('plan.jpg', File(file), save=False)
+			emmen.save()
 
 		response = self.client.get('/zoo/%d/' % emmen.id)
 		self.assertEqual(response.status_code, 200)
@@ -58,9 +58,9 @@ class FileUploadTest(TestCase):
 	def test_get_related_model_with_file(self):
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
 
-		file = temp_imagefile(100, 200, 'jpeg')
-		emmen.floor_plan.save('plan.jpg', File(file), save=False)
-		emmen.save()
+		with temp_imagefile(100, 200, 'jpeg') as file:
+			emmen.floor_plan.save('plan.jpg', File(file), save=False)
+			emmen.save()
 
 		donald = Animal(name='Donald Duck', zoo=emmen)
 		donald.save()
@@ -82,9 +82,9 @@ class FileUploadTest(TestCase):
 	def test_multi_put_model_with_existing_file(self):
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
 
-		file = temp_imagefile(100, 200, 'jpeg')
-		emmen.floor_plan.save('plan.jpg', File(file), save=False)
-		emmen.save()
+		with temp_imagefile(100, 200, 'jpeg') as file:
+			emmen.floor_plan.save('plan.jpg', File(file), save=False)
+			emmen.save()
 
 		model_data = {
 			'data': [{
@@ -95,3 +95,48 @@ class FileUploadTest(TestCase):
 		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
 
 		self.assertEqual(response.status_code, 200)
+
+
+	def test_upload_to_file_field_stores_file(self):
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.save()
+
+		with temp_imagefile(100, 200, 'jpeg') as uploaded_file:
+			response = self.client.post('/zoo/%s/floor_plan/' % emmen.id, data={'file': uploaded_file})
+			self.assertEqual(response.status_code, 200)
+
+			emmen.refresh_from_db()
+			uploaded_file.seek(0)
+			self.assertTrue(emmen.floor_plan)
+			with emmen.floor_plan.file as current_file:
+				self.assertEqual(uploaded_file.read(), current_file.read())
+
+		# overwrite with new one
+		with temp_imagefile(10, 20, 'jpeg') as replacement_file:
+			response = self.client.post('/zoo/%s/floor_plan/' % emmen.id, data={'file': replacement_file})
+			self.assertEqual(response.status_code, 200)
+
+			emmen.refresh_from_db()
+			replacement_file.seek(0)
+			self.assertTrue(emmen.floor_plan)
+			with emmen.floor_plan.file as current_file:
+				self.assertEqual(replacement_file.read(), current_file.read())
+
+
+	def test_upload_triggers_file_field_validation_errors(self):
+		emmen = Zoo(name='Nowhere')
+		emmen.save()
+
+		with temp_imagefile(100, 200, 'jpeg') as uploaded_file:
+			response = self.client.post('/zoo/%s/floor_plan/' % emmen.id, data={'file': uploaded_file})
+			self.assertEqual(response.status_code, 400)
+
+			returned_data = jsonloads(response.content)
+			self.assertEqual(len(returned_data['errors']), 1)
+			self.assertEqual(len(returned_data['errors']['zoo']), 1)
+			self.assertSetEqual(set(['floor_plan', 'name']), set(returned_data['errors']['zoo'][str(emmen.id)].keys()))
+			self.assertEqual('no plan', returned_data['errors']['zoo'][str(emmen.id)]['floor_plan'][0]['code'])
+			self.assertEqual('nowhere', returned_data['errors']['zoo'][str(emmen.id)]['name'][0]['code'])
+
+			emmen.refresh_from_db()
+			self.assertFalse(emmen.floor_plan)

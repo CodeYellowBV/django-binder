@@ -1,4 +1,5 @@
 import os
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.signals import post_delete
 from binder.models import BinderModel
@@ -26,6 +27,23 @@ class Zoo(BinderModel):
 	@property
 	def animal_count(self):
 		return self.animals.count()
+
+
+	# A poor man's version of the django-fullclean package.
+	def save(self, *args, **kwargs):
+		self.full_clean()
+		return super().save(*args, **kwargs)
+
+
+	def clean(self):
+		errors = {}
+
+		if self.floor_plan and self.name == 'Nowhere':
+			errors['floor_plan'] = ValidationError('Nowhere may not have a floor plan!', code='no plan')
+			errors['name'] = ValidationError('Nowhere may not have a floor plan!', code='nowhere')
+
+		if errors:
+			raise ValidationError(errors)
 
 
 post_delete.connect(delete_files, sender=Zoo)
