@@ -156,4 +156,4 @@ def install_history_signal_handlers(model):
 				signals.m2m_changed.connect(history_obj_m2m_changed, getattr(model, field.name).through)
 
 	for sub in model.__subclasses__():
-		install_m2m_signal_handlers(sub)
+		install_history_signal_handlers(sub)

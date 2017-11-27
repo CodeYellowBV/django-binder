@@ -17,4 +17,4 @@ urlpatterns = [
 ]
 
 # FIXME: Hmm, this is a bit hackish. Especially here. But where else?
-binder.models.install_m2m_signal_handlers(binder.models.BinderModel)
+binder.models.install_history_signal_handlers(binder.models.BinderModel)
