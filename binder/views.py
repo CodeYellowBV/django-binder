@@ -6,6 +6,7 @@ import os
 import hashlib
 import datetime
 import mimetypes
+import functools
 from collections import defaultdict, namedtuple
 from PIL import Image
 
@@ -47,6 +48,26 @@ def ellipsize(msg, length=2048):
 
 
 RelatedModel = namedtuple('RelatedModel', 'fieldname model')
+
+# Stolen and improved from https://stackoverflow.com/a/30462851
+def image_transpose_exif(im):
+	exif_orientation_tag = 0x0112 # contains an integer, 1 through 8
+	exif_transpose_sequences = [  # corresponding to the following
+		[],
+		[Image.FLIP_LEFT_RIGHT],
+		[Image.ROTATE_180],
+		[Image.FLIP_TOP_BOTTOM],
+		[Image.FLIP_LEFT_RIGHT, Image.ROTATE_90],
+		[Image.ROTATE_270],
+		[Image.FLIP_TOP_BOTTOM, Image.ROTATE_90],
+		[Image.ROTATE_90],
+	]
+
+	try:
+		seq = exif_transpose_sequences[im._getexif()[exif_orientation_tag] - 1]
+		return functools.reduce(lambda im, op: im.transpose(op), seq, im)
+	except KeyError:
+		return im
 
 
 
@@ -1407,6 +1428,11 @@ class ModelView(View):
 						raise BinderFileTypeIncorrect([{'extension': t, 'mimetype': 'image/' + t} for t in ['jpeg', 'png', 'gif']])
 
 					width, height = img.size
+					if format == 'jpeg':
+						img = image_transpose_exif(img)
+						file.seek(0) # Do not append to the existing file!
+						file.truncate()
+						img.save(file, 'jpeg')
 
 					# Determine resize threshold
 					try:
