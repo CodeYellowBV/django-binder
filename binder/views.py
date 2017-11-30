@@ -64,8 +64,11 @@ def image_transpose_exif(im):
 	]
 
 	try:
-		seq = exif_transpose_sequences[im._getexif()[exif_orientation_tag] - 1]
-		return functools.reduce(lambda im, op: im.transpose(op), seq, im)
+		if im._getexif() != None:
+			seq = exif_transpose_sequences[im._getexif()[exif_orientation_tag] - 1]
+			return functools.reduce(lambda im, op: im.transpose(op), seq, im)
+		else:
+			return im
 	except KeyError:
 		return im
 
@@ -1429,10 +1432,13 @@ class ModelView(View):
 
 					width, height = img.size
 					if format == 'jpeg':
-						img = image_transpose_exif(img)
-						file.seek(0) # Do not append to the existing file!
-						file.truncate()
-						img.save(file, 'jpeg')
+						img2 = image_transpose_exif(img)
+
+						if img2 != img:
+							file.seek(0) # Do not append to the existing file!
+							file.truncate()
+							img2.save(file, 'jpeg')
+							img = img2
 
 					# Determine resize threshold
 					try:
