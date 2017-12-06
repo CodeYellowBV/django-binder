@@ -11,5 +11,9 @@ install:
 script:
     - flake8 binder
     - coverage run --include="binder/*" setup.py test
+before_script:
+  - psql -c 'create database "binder-test";' -U postgres
+services:
+  - postgresql
 after_success:
     - codecov

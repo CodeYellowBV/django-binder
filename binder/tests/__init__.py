@@ -5,8 +5,8 @@ settings.configure(**{
 	'DEBUG': True,
 	'DATABASES': {
 		'default': {
-			'ENGINE': 'django.db.backends.sqlite3',  # For now
-			'NAME': ':memory:',
+			'ENGINE': 'django.db.backends.postgresql_psycopg2',
+			'NAME': 'binder-test',
 		},
 	},
 	'MIDDLEWARE': [
