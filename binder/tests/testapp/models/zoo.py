@@ -10,7 +10,7 @@ def delete_files(sender, instance=None, **kwargs):
 			try:
 				file = getattr(instance, field.name).path
 				os.unlink(file)
-			except:
+			except (FileNotFoundError, ValueError):
 				pass
 
 # From the api docs: a zoo with a name.  It also has a founding date,

@@ -51,8 +51,8 @@ RelatedModel = namedtuple('RelatedModel', 'fieldname model')
 
 # Stolen and improved from https://stackoverflow.com/a/30462851
 def image_transpose_exif(im):
-	exif_orientation_tag = 0x0112 # contains an integer, 1 through 8
-	exif_transpose_sequences = [  # corresponding to the following
+	exif_orientation_tag = 0x0112  # contains an integer, 1 through 8
+	exif_transpose_sequences = [   # corresponding to the following
 		[],
 		[Image.FLIP_LEFT_RIGHT],
 		[Image.ROTATE_180],
@@ -64,7 +64,7 @@ def image_transpose_exif(im):
 	]
 
 	try:
-		if im._getexif() != None:
+		if im._getexif() is not None:
 			seq = exif_transpose_sequences[im._getexif()[exif_orientation_tag] - 1]
 			return functools.reduce(lambda im, op: im.transpose(op), seq, im)
 		else:
@@ -220,7 +220,7 @@ class ModelView(View):
 			history.abort()
 			e.log()
 			response = e.response(request=request)
-		except:
+		except BaseException:
 			history.abort()
 			raise
 
@@ -1440,7 +1440,7 @@ class ModelView(View):
 						img2 = image_transpose_exif(img)
 
 						if img2 != img:
-							file.seek(0) # Do not append to the existing file!
+							file.seek(0)  # Do not append to the existing file!
 							file.truncate()
 							img2.save(file, 'jpeg')
 							img = img2
