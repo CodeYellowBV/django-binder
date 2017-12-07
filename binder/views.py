@@ -215,9 +215,11 @@ class ModelView(View):
 				history.commit()
 			#### END TRANSACTION
 		except BinderException as e:
+			# Make sure we abort the history transaction first. Response parsing
+			# might fail, which then doesn't abort the history...
+			history.abort()
 			e.log()
 			response = e.response(request=request)
-			history.abort()
 		except:
 			history.abort()
 			raise
