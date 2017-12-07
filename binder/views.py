@@ -268,7 +268,10 @@ class ModelView(View):
 			# We could use an additional filter(**{field + '__isnull': False}), but that only seems slower?
 			# Hurgh. The queryset is annotated, and the annotation columns show up in the subquery -> Boom. Use list of IDs instead.
 			# for this, other in self.model.objects.filter(id__in=queryset).values_list('id', rfield):
-			for this, other in self.model.objects.filter(pk__in=list(queryset.values_list('pk', flat=True))).values_list('pk', rfield):
+			pks = list(queryset.values_list('pk', flat=True))
+			remote_field = self.model._meta.get_field(rfield).remote_field
+			list(remote_field.model.objects.filter(**{remote_field.name + '__pk__in': pks}))
+			for other, this in remote_field.model.objects.filter(**{remote_field.name + '__pk__in': pks}).values_list('pk', remote_field.name + '__pk'):
 				if other is not None:
 					idmap[this].append(other)
 			m2m_ids[field] = idmap

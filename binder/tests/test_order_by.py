@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from binder.json import jsonloads
 
 # from .compare import assert_json, MAYBE, ANY, EXTRA
-from .testapp.models import Animal, Costume
+from .testapp.models import Animal, Costume, Zoo
 
 
 
@@ -135,6 +135,7 @@ class TestOrderBy(TestCase):
 		self.assertEqual(data, [4, 1, 3, 2])
 
 
+
 	# Order by -description, custom model default on related model (-animal.name)
 	# This would break due to Django vs Binder related object syntax mismatch and
 	# missing views for non-Binder relations.
@@ -157,3 +158,34 @@ class TestOrderBy(TestCase):
 
 		data = [x['id'] for x in returned_data['data']]
 		self.assertEqual(data, [4, 3, 2, 1])
+
+
+
+	def test_order_related_ids(self):
+		z = Zoo(name='hoi')
+		z.save()
+
+		a9 = Animal.objects.create(zoo_id=1, name='a9').id
+		a0 = Animal.objects.create(zoo_id=1, name='a0').id
+		a2 = Animal.objects.create(zoo_id=1, name='a2').id
+		a6 = Animal.objects.create(zoo_id=1, name='a6').id
+		a7 = Animal.objects.create(zoo_id=1, name='a7').id
+		a5 = Animal.objects.create(zoo_id=1, name='a5').id
+		a4 = Animal.objects.create(zoo_id=1, name='a4').id
+		a3 = Animal.objects.create(zoo_id=1, name='a3').id
+		a8 = Animal.objects.create(zoo_id=1, name='a8').id
+		a1 = Animal.objects.create(zoo_id=1, name='a1').id
+
+		with CustomOrdering(Animal, 'name'):
+			response = self.client.get('/zoo/{}/'.format(z.id))
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
+
+		with CustomOrdering(Animal, '-name'):
+			response = self.client.get('/zoo/{}/'.format(z.id))
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		self.assertEqual(returned_data['data']['animals'], [a9, a8, a7, a6, a5, a4, a3, a2, a1, a0])
