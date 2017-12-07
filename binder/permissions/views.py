@@ -157,7 +157,11 @@ class PermissionView(ModelView):
 			raise BinderNotFound()
 
 		if request.method in {'POST', 'DELETE'}:
+			# Here we pretend that a DELETE scope is done. We only need a change
+			# scope, but the dispatch checks if have a DELETE scope done.
+			request._scopes.append(Scope.DELETE)
 			self.scope_change(request, obj, {file_field: ...})
+
 
 		return super().dispatch_file_field(request, obj, file_field)
 
