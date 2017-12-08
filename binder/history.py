@@ -54,11 +54,28 @@ class _Transaction(threading.local):
 	def __init__(self):
 		logger.info('Creating new Transaction for thread {}'.format(threading.current_thread().name))
 
-	user = None
-	uuid = None
-	source = None
-	started = False
-	changes = {}
+		self.user = None
+		self.uuid = None
+		self.source = None
+		self.started = False
+		self.changes = {}
+
+	def start(self, *, user=None, uuid=None, source=None):
+		if self.started:
+			raise RuntimeError('Called Transaction.start() while there is an open transaction')
+
+		self.started = True
+		self.changes.clear()
+		self.user = user
+		self.uuid = uuid
+		self.source = source
+
+	def stop(self):
+		if not self.started:
+			raise RuntimeError('Called Transaction.stop() while there is no open transaction')
+
+		self.started = False
+		self.changes.clear()
 
 Transaction = _Transaction()
 
@@ -76,14 +93,7 @@ def start(source=None, user=None, uuid=None):
 	if source is None:
 		raise ValueError('source may not be None')
 
-	if Transaction.started:
-		raise RuntimeError('called Transaction.start() while there is an open transaction')
-
-	Transaction.source = source
-	Transaction.user = user
-	Transaction.uuid = uuid
-	Transaction.started = True
-	Transaction.changes.clear()
+	Transaction.start(source=source, user=user, uuid=uuid)
 
 
 
@@ -117,10 +127,6 @@ def m2m_diff(old, new):
 
 # FIXME: use bulk inserts for efficiency.
 def commit():
-	if not Transaction.started:
-		raise RuntimeError('called Transaction.commit() while there is no open transaction')
-	Transaction.started = False
-
 	# Fill in the deferred m2ms
 	for (model, oid, field), (old, new, diff) in Transaction.changes.items():
 		if new is DeferredM2M:
@@ -133,6 +139,7 @@ def commit():
 	Transaction.changes = {idx: (old, new, diff) for idx, (old, new, diff) in Transaction.changes.items() if old != new}
 
 	if not Transaction.changes:
+		Transaction.stop()
 		return
 
 	user = Transaction.user if Transaction.user and not Transaction.user.is_anonymous else None
@@ -165,15 +172,12 @@ def commit():
 
 	# Save the changeset again, to update the date to be as close to DB transaction commit start as possible.
 	changeset.save()
-	Transaction.changes.clear()
+	Transaction.stop()
 
 
 
 def abort():
-	if not Transaction.started:
-		raise RuntimeError('called Transaction.abort() while there is no open transaction')
-	Transaction.started = False
-	Transaction.changes.clear()
+	Transaction.stop()
 
 
 
