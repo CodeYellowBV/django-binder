@@ -2,7 +2,6 @@ import logging
 import threading
 
 from django.db import models
-from django.utils import timezone
 from django.http import HttpResponse
 from django.contrib.auth.models import User
 from django.conf import settings
@@ -17,7 +16,7 @@ transaction_commit = Signal(providing_args=['changeset'])
 class Changeset(models.Model):
 	source = models.CharField(max_length=32)
 	user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='changesets')
-	date = models.DateTimeField(default=timezone.now)
+	date = models.DateTimeField(auto_now=True)  # When this changeset is "final". Ideally equal to the moment the DB commits the transaction.
 	uuid = models.CharField(max_length=36, blank=True, null=True)
 
 	def __str__(self):
@@ -57,7 +56,6 @@ class _Transaction(threading.local):
 
 	user = None
 	uuid = None
-	date = None
 	source = None
 	started = False
 	changes = {}
@@ -74,12 +72,9 @@ class DeferredM2M:
 
 
 
-def start(source=None, user=None, uuid=None, date=None):
+def start(source=None, user=None, uuid=None):
 	if source is None:
 		raise ValueError('source may not be None')
-
-	if date is None:
-		date = timezone.now()
 
 	if Transaction.started:
 		raise RuntimeError('called Transaction.start() while there is an open transaction')
@@ -87,7 +82,6 @@ def start(source=None, user=None, uuid=None, date=None):
 	Transaction.source = source
 	Transaction.user = user
 	Transaction.uuid = uuid
-	Transaction.date = date
 	Transaction.started = True
 	Transaction.changes.clear()
 
@@ -146,7 +140,6 @@ def commit():
 	changeset = Changeset(
 		source=Transaction.source,
 		user=user,
-		date=Transaction.date,
 		uuid=Transaction.uuid,
 	)
 	changeset.save()
@@ -170,6 +163,8 @@ def commit():
 
 	transaction_commit.send(sender=None, changeset=changeset)
 
+	# Save the changeset again, to update the date to be as close to DB transaction commit start as possible.
+	changeset.save()
 	Transaction.changes.clear()
 
 

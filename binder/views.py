@@ -162,7 +162,7 @@ class ModelView(View):
 	#### XXX WARNING XXX
 	def dispatch(self, request, *args, **kwargs):
 		self.router = kwargs.pop('router')
-		history.start(source='http', user=request.user, uuid=request.request_id, date=None)
+		history.start(source='http', user=request.user, uuid=request.request_id)
 		time_start = time.time()
 		logger.info('request dispatch; verb={}, user={}/{}, path={}'.
 				format(
