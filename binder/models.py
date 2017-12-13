@@ -68,15 +68,13 @@ class FieldFilter(object):
 	# The list of allowed qualifiers
 	allowed_qualifiers = []
 
-	def __init__(self, model, field_name):
-		self.model = model
-		self.field_name = field_name
+	def __init__(self, field):
+		self.field = field
 
 
 
 	def field_description(self):
-		field_type_name = self.model._meta.get_field(self.field_name).__class__.__name__
-		return '{} {{{}}}.{{{}}}'.format(field_type_name, self.model.__name__, self.field_name)
+		return '{} {{{}}}.{{{}}}'.format(self.field.__class__.__name__, self.field.model.__name__, self.field.name)
 
 
 
@@ -113,13 +111,13 @@ class FieldFilter(object):
 			try:
 				cleaned_value = self.clean_value(values[0])
 			except IndexError:
-				raise ValidationError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.model.__name__, self.field_name))
+				raise ValidationError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.field.model.__name__, self.field.name))
 
 		suffix = '__' + qualifier if qualifier else ''
 		if invert:
-			return ~Q(**{partial + self.field_name + suffix: cleaned_value})
+			return ~Q(**{partial + self.field.name + suffix: cleaned_value})
 		else:
-			return Q(**{partial + self.field_name + suffix: cleaned_value})
+			return Q(**{partial + self.field.name + suffix: cleaned_value})
 
 
 

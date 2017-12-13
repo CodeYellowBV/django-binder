@@ -549,7 +549,7 @@ class ModelView(View):
 		for field_class in inspect.getmro(field.__class__):
 			filter_class = self.get_field_filter(field_class)
 			if filter_class:
-				filter = filter_class(self.model, field_name)
+				filter = filter_class(field)
 				try:
 					return queryset.filter(filter.get_q(qualifier, value, invert, partial))
 				except ValidationError as e:
