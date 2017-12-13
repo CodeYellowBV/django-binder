@@ -1525,7 +1525,10 @@ class ModelView(View):
 def api_catchall(request):
 	try:
 		# Need to raise/catch the exception, so the traceback code works
-		raise BinderInvalidURI(request.path)
+		urls = None
+		if django.conf.settings.DEBUG:
+			urls = [str(url.regex.pattern) for url in Router().urls]
+		raise BinderInvalidURI(request.path, urls)
 	except BinderException as e:
 		e.log()
 		return e.response(request=request)
