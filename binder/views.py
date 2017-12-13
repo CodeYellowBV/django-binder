@@ -105,12 +105,14 @@ class ModelView(View):
 	# directly. Rather the fields they are derived from need to be updated.
 	shown_properties = []
 
-	# Fields that cannot be written (PUT/POST). Writing them is not an error;
+	# Fields that won't be written by default (PUT/POST). Writing them is not an error;
 	# their values are silently ignored.
-	# The following fields are always excluded for writes:
+	# The following fields are implicitly included in unwritable_fields:
 	#  - id, pk, deleted, _meta
-	#  - reverse relations
+	#  - reverse relations  (FIXME ehh is this still true?)
 	#  - file fields (as specified in file_fields)
+	# 
+	# NOTE: custom _store__foo() methods will still be called for unwritable fieds.
 	unwritable_fields = []
 
 	# Fields to use for ?search=foo. Empty tuple for disabled search.
