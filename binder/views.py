@@ -1380,6 +1380,7 @@ class ModelView(View):
 
 		if isinstance(pk, self.model):
 			obj = pk
+			pk = obj.pk
 		else:
 			try:
 				obj = self.get_queryset(request).get(pk=int(pk))
