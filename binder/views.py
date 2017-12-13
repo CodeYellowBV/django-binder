@@ -111,7 +111,7 @@ class ModelView(View):
 	#  - id, pk, deleted, _meta
 	#  - reverse relations  (FIXME ehh is this still true?)
 	#  - file fields (as specified in file_fields)
-	# 
+	#
 	# NOTE: custom _store__foo() methods will still be called for unwritable fieds.
 	unwritable_fields = []
 
