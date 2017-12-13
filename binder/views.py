@@ -244,6 +244,22 @@ class ModelView(View):
 
 
 
+	# Use this to instantiate other views you need. It returns a properly initialized view instance.
+	# Call like:   foo_view_instance = self.get_view(FooView)
+	def get_view(self, cls):
+		view = cls()
+		view.router = self.router
+		return view
+
+
+
+	# Use this to instantiate the default view for a specific model class.
+	# Call like:   foo_view_instance = self.get_model_view(FooModel)
+	def get_model_view(self, model):
+		return self.get_view(self.router.model_view(model))
+
+
+
 	# Return a list of RelatedObjects for all _visible_ reverse relations (from both FKs and m2ms).
 	def _get_reverse_relations(self):
 		return [

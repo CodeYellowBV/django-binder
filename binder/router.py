@@ -102,6 +102,8 @@ class Router(object):
 			# FIXME: this should actually be a 500
 			raise BinderRequestError('No view defined for model {}.'.format(model.__name__))
 
+
+
 	def model_route(self, model, pk=None, field=None):
 		if not model in self.model_routes:
 			self.model_routes[model] = reverse(model.__name__)
