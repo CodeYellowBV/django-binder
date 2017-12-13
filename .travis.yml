@@ -1,7 +1,15 @@
 sudo: false
 language: python
 python:
-    - "3.4"
-    - "3.5"
-install: pip install tox-travis
-script: tox
+  - "3.4"
+  - "3.5"
+cache:
+  pip: true
+install:
+    - ./setup.py install
+    - pip install flake8 codecov coverage
+script:
+    - flake8 binder
+    - coverage run --include="binder/*" setup.py test
+after_success:
+    - codecov

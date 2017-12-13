@@ -4,15 +4,14 @@
 
 Binder provides some extra fields you can use for your models.
 
-- `CaseInsensitiveCharField`
 - `UpperCaseCharField`
 - `LowerCaseCharField`
 
 ```python
-from binder.models import BinderModel, CaseInsensitiveCharField
+from binder.models import BinderModel, UpperCaseCharField
 
 class Animal(BinderModel):
-	name = models.CaseInsensitiveCharField()
+	name = UpperCaseCharField()
 ```
 
 ## Enums

@@ -7,11 +7,11 @@ Binder automatically exposes a fairly powerful API for all your models.
 We’ll use this example model, added in `models.py`.
 
 ```python
-from binder.models import BinderModel, CaseInsensitiveCharField
-
+from binder.models import BinderModel
+from django.db import models
 
 class Animal(BinderModel):
-	name = models.CaseInsensitiveCharField()
+	name = models.TextField()
 ```
 
 In `views.py`, add the following:
@@ -253,6 +253,28 @@ accept the following keyword options:
 - `unauthenticated`: If `True`, this route should skip the authentication check.
 - `methods`: Either `None` or a list of strings that indicate the allowed methods.  Any other method results in a BinderNotAllowed exception (a 418 status).
 - `extra_route`: An optional string suffix to append to the route. You can use named capturing groups here, just like in `urls.py`.
+
+## Base View classes ("abstract views")
+
+Sometimes it is desirable to share some logic in multiple View classes.
+This can be achieved by having an unrouted View class to house the common
+functionality, and subclassing that class to provide the actual views.
+
+A View that specifies neither a model nor a route (more precise: model=None
+and route in [None,True]) will be ignored by the router and thus can be used
+as such a base class.
+
+```python
+
+class BaseView(ModelView):
+    # Shared logic
+    def get_queryset(self, request):
+        return self.model.objects.filter(id__gte=1337)
+
+class FooView(BaseView):
+    model = Foo
+```
+
 
 
 TODO:

@@ -1,6 +1,7 @@
 import json
 import datetime
-from uuid import UUID
+import uuid
+import decimal
 
 from django.http import HttpResponse
 
@@ -8,27 +9,42 @@ from .exceptions import BinderRequestError
 
 
 
-class BinderJSONEncoder(json.JSONEncoder):
-	def default(self, obj):
-		if isinstance(obj, datetime.datetime):
-			# FIXME: was .isoformat(), but that omits the microseconds if they
-			# are 0, which upsets our front-end devs. This is ugly.
-			# I hear .isoformat() might learn a timespec parameter in 3.6...
-			tz = obj.strftime("%z")
-			tz = tz if tz else '+0000'
-			return obj.strftime("%Y-%m-%dT%H:%M:%S.%f") + tz
-		elif isinstance(obj, datetime.date):
-			return obj.isoformat()
-		elif isinstance(obj, UUID):
-			return str(obj) # Standard string notation
-		elif isinstance(obj, set):
-			return list(obj)
-		return json.JSONEncoder.default(self, obj)
+# Default Binder serializers; override these by doing
+# json.SERIALIZERS.update({}) in settings.py
+SERIALIZERS = {
+	set:                 list,
+	datetime.datetime:   lambda v: v.strftime('%Y-%m-%dT%H:%M:%S.%f%z'),   # .isoformat() can omit microseconds
+	datetime.date:       lambda v: v.isoformat(),
+	uuid.UUID:           str,
+	decimal.Decimal:     str,
+}
 
 
 
-def jsondumps(o, indent=None):
-	return json.dumps(o, cls=BinderJSONEncoder, indent=indent)
+# dateutil.relativedelta serializer, if available
+try:
+	from dateutil.relativedelta import relativedelta
+	from relativedeltafield import format_relativedelta
+	SERIALIZERS[relativedelta] = format_relativedelta
+except ImportError:
+	pass
+
+
+
+
+# Converts values json.dumps can't convert itself.
+def default(value):
+	# Find a serializer in the Method Resolution Order
+	for cls in type(value).mro():
+		if cls in SERIALIZERS:
+			return SERIALIZERS[cls](value)
+
+	raise TypeError('{} is not JSON serializable'.format(repr(value)))
+
+
+
+def jsondumps(o, default=default, indent=None):
+	return json.dumps(o, default=default, indent=indent)
 
 
 

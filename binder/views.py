@@ -2,11 +2,11 @@ import logging
 import time
 import io
 import inspect
-import re
 import os
 import hashlib
 import datetime
 import mimetypes
+import functools
 from collections import defaultdict, namedtuple
 from PIL import Image
 
@@ -21,10 +21,9 @@ from django.utils import timezone
 from django.db import transaction
 
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
-from .router import Router
 from . import history
 from .models import FieldFilter
-from .json import JsonResponse, jsonloads, jsondumps
+from .json import JsonResponse, jsonloads
 
 
 
@@ -51,10 +50,33 @@ def ellipsize(msg, length=2048):
 
 RelatedModel = namedtuple('RelatedModel', 'fieldname model')
 
+# Stolen and improved from https://stackoverflow.com/a/30462851
+def image_transpose_exif(im):
+	exif_orientation_tag = 0x0112  # contains an integer, 1 through 8
+	exif_transpose_sequences = [   # corresponding to the following
+		[],
+		[Image.FLIP_LEFT_RIGHT],
+		[Image.ROTATE_180],
+		[Image.FLIP_TOP_BOTTOM],
+		[Image.FLIP_LEFT_RIGHT, Image.ROTATE_90],
+		[Image.ROTATE_270],
+		[Image.FLIP_TOP_BOTTOM, Image.ROTATE_90],
+		[Image.ROTATE_90],
+	]
+
+	try:
+		if im._getexif() is not None:
+			seq = exif_transpose_sequences[im._getexif()[exif_orientation_tag] - 1]
+			return functools.reduce(lambda im, op: im.transpose(op), seq, im)
+		else:
+			return im
+	except KeyError:
+		return im
+
 
 
 class ModelView(View):
-	# Model this is a view for. Mandatory.
+	# Model this is a view for. Use None for views not tied to a particular model.
 	model = None
 
 	# If True, Router().model_view(model) will return this view.
@@ -64,7 +86,7 @@ class ModelView(View):
 
 	# The route name to use in the URL. String, True, or None.
 	# If string, specifies the route name.
-	# If True, uses model._model_name()
+	# If True, uses model._model_name() (model=None -> no route)
 	# If None, doesn't add a route.
 	route = True
 
@@ -78,15 +100,20 @@ class ModelView(View):
 	hidden_fields = []
 	m2m_fields = []
 
-	# Fields that cannot be written (PUT/POST). Writing them is not an error;
+	# Some models have derived properties that are not part of the fields of the model.
+	# Properties added to this shown property list are automatically added to the fields
+	# that are returned. Note that properties added here are read only. They can not be changed
+	# directly. Rather the fields they are derived from need to be updated.
+	shown_properties = []
+
+	# Fields that won't be written by default (PUT/POST). Writing them is not an error;
 	# their values are silently ignored.
-	# The following fields are always excluded for writes:
+	# The following fields are implicitly included in unwritable_fields:
 	#  - id, pk, deleted, _meta
-	#  - reverse relations
+	#  - reverse relations  (FIXME ehh is this still true?)
 	#  - file fields (as specified in file_fields)
 	#
-	# NOTE: Unwritability also disables the in-Binder not-NULL check.
-	# See the nullability check in self._store() (search for T9646)
+	# NOTE: custom _store__foo() methods will still be called for unwritable fieds.
 	unwritable_fields = []
 
 	# Fields to use for ?search=foo. Empty tuple for disabled search.
@@ -94,6 +121,7 @@ class ModelView(View):
 	# id is hardcoded to be treated as an integer.
 	# For anything fancier, override self.search()
 	searches = []
+	transformed_searches = {}
 
 	# Fields to allow POST/GET/DELETE files on.
 	file_fields = []
@@ -116,6 +144,18 @@ class ModelView(View):
 	# Set this to False for endpoints that receive passwords etc.
 	log_request_body = True
 
+	# The router object through which this view was invoked.  Will
+	# be set by dispatch().
+	router = None
+
+	# Images over this width/height get scaled down.
+	# 123 limits size to 123x123 for all ImageFields on this model.
+	# (123,456) limits size to 123x456 on all ImageFields.
+	# {'foo': 123, 'bar': 456} limits size to 123x123 on field foo and 456x456 on bar.
+	# A dict will KeyError if you don't specify all ImageFields. Or use:
+	# collections.defaultdict(lambda: 512, foo=1024)
+	image_resize_threshold = 512
+
 
 	#### XXX WARNING XXX
 	# dispatch() ensures transactions. If overriding or circumventing dispatch(), you're on your own!
@@ -123,7 +163,8 @@ class ModelView(View):
 	# If you detect an error and return a HttpResponse(status=400), the transaction is not aborted!
 	#### XXX WARNING XXX
 	def dispatch(self, request, *args, **kwargs):
-		history.start(source='http', user=request.user, uuid=request.request_id, date=None)
+		self.router = kwargs.pop('router')
+		history.start(source='http', user=request.user, uuid=request.request_id)
 		time_start = time.time()
 		logger.info('request dispatch; verb={}, user={}/{}, path={}'.
 				format(
@@ -176,8 +217,14 @@ class ModelView(View):
 				history.commit()
 			#### END TRANSACTION
 		except BinderException as e:
+			# Make sure we abort the history transaction first. Response parsing
+			# might fail, which then doesn't abort the history...
+			history.abort()
 			e.log()
 			response = e.response(request=request)
+		except BaseException:
+			history.abort()
+			raise
 
 		logger.info('request response; status={} time={}ms bytes={} queries={}'.
 				format(
@@ -216,6 +263,22 @@ class ModelView(View):
 
 
 
+	# Use this to instantiate other views you need. It returns a properly initialized view instance.
+	# Call like:   foo_view_instance = self.get_view(FooView)
+	def get_view(self, cls):
+		view = cls()
+		view.router = self.router
+		return view
+
+
+
+	# Use this to instantiate the default view for a specific model class.
+	# Call like:   foo_view_instance = self.get_model_view(FooModel)
+	def get_model_view(self, model):
+		return self.get_view(self.router.model_view(model))
+
+
+
 	# Return a list of RelatedObjects for all _visible_ reverse relations (from both FKs and m2ms).
 	def _get_reverse_relations(self):
 		return [
@@ -228,22 +291,22 @@ class ModelView(View):
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_objs(self, queryset, request=None):
+	def _get_objs(self, queryset, request):
 		# Create a dictionary of {field name: {this object id: [related object ids]}}
 		# (one query per field for performance)
 		m2m_ids = {}
-		for field in self.m2m_fields:
+		for field_name in self.m2m_fields:
 			idmap = defaultdict(list)
 			# Wuh, the autogenerated reverse relation is called foo_set, but in values() you need foo? Weird.
 			# FIXME: We use explicit related_name everywhere, do we still need this? Maybe for User/Group
-			rfield = field[:-4] if field.endswith('_set') else field
-			# We could use an additional filter(**{field + '__isnull': False}), but that only seems slower?
+			field_name2 = field_name[:-4] if field_name.endswith('_set') else field_name
 			# Hurgh. The queryset is annotated, and the annotation columns show up in the subquery -> Boom. Use list of IDs instead.
-			# for this, other in self.model.objects.filter(id__in=queryset).values_list('id', rfield):
-			for this, other in self.model.objects.filter(id__in=list(queryset.values_list('id', flat=True))).values_list('id', rfield):
-				if other is not None:
-					idmap[this].append(other)
-			m2m_ids[field] = idmap
+			pks = list(queryset.values_list('pk', flat=True))
+			remote_field = self.model._meta.get_field(field_name2).remote_field
+			list(remote_field.model.objects.filter(**{remote_field.name + '__pk__in': pks}))
+			for other, this in remote_field.model.objects.filter(**{remote_field.name + '__pk__in': pks}).values_list('pk', remote_field.name + '__pk'):
+				idmap[this].append(other)
+			m2m_ids[field_name] = idmap
 
 		# Serialize the objects, and add in id arrays for m2m fields
 		datas = []
@@ -257,11 +320,16 @@ class ModelView(View):
 				if isinstance(f, models.fields.files.FileField):
 					file = getattr(obj, f.attname)
 					if file:
-						data[f.name] = Router().model_route(self.model, obj.id, f)
+						# {router-view-instance}
+						data[f.name] = self.router.model_route(self.model, obj.id, f)
 					else:
 						data[f.name] = None
 				else:
 					data[f.name] = getattr(obj, f.attname)
+
+			for prop in self.shown_properties:
+				data[prop] = getattr(obj, prop)
+
 			for field, idmap in m2m_ids.items():
 				# TODO: Don't require OneToOneFields in the m2m_fields list
 				if isinstance(self.model._meta.get_field(field), models.OneToOneRel):
@@ -269,6 +337,8 @@ class ModelView(View):
 					data[field] = idmap[obj.id][0] if len(idmap[obj.id]) == 1 else None
 				else:
 					data[field] = idmap[obj.id]
+			if self.model._meta.pk.name in data:
+				data['id'] = data.pop(self.model._meta.pk.name)
 			datas.append(data)
 
 		return datas
@@ -278,44 +348,90 @@ class ModelView(View):
 	# Kinda like model_to_dict()
 	# Fetches the object specified by <id>, and returns a dictionary.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_obj(self, id, request=None):
+	def _get_obj(self, id, request):
 		return self._get_objs(self.model.objects.filter(pk=id), request=request)[0]
 
+	# Split ['animals(name:contains=lion)']
+	# in ['animals': ['name:contains=lion']]
+	# { 'animals': {'filters': ['name:contains=lion'], 'subrels': {}}}
+	#
+	# We include the withs because the where target
+	# must be included in the withs. Filtering a relation you aren't querying is wrong.
+	def _parse_wheres(self, wheres, withs):
+		where_map = {}
+		for wh in wheres:
+			# Check if "(" and ")" exist in where
+			if '(' not in wh or ')' not in wh:
+				raise BinderRequestError('Syntax error in {{where={}}}.'.format(wh))
 
+			target_rel, query = wh.split('(')
+
+			if target_rel not in withs:
+				raise BinderRequestError('Relation of {{where={}}} is missing from withs.'.format(wh, withs))
+
+			# Also strip the trailing ) from the query
+			query = query[:-1]
+
+			rels = target_rel.split('.')
+			pointer = where_map
+			for i, rel in enumerate(rels):
+				if rel not in pointer:
+					pointer[rel] = {'filters': [], 'subrels': {}}
+
+				# Don't change the pointer
+				# if this is the last iteration
+				if i != (len(rels) - 1):
+					pointer = pointer[rel]['subrels']
+
+			pointer[rel]['filters'].append(query)
+
+		return where_map
 
 	# Find which objects of which models to include according to <withs> for the objects in <queryset>.
 	# returns two dictionaries:
 	# - withs: { related_modal_name: [ids]}
 	# - mappings: { with_name: related_model_name}
-	def _get_withs(self, ids, withs=None, request=None):
+	def _get_withs(self, pks, withs, request, wheres=None):
 		if withs is None and request is not None:
 			withs = list(filter(None, request.GET.get('with', '').split(',')))
-
-		if isinstance(ids, django.db.models.query.QuerySet):
-			ids = ids.values_list('id', flat=True)
-		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
-		ids = list(ids)
 
 		# Make sure to include A if A.B is specified.
 		for w in withs:
 			if '.' in w:
 				withs.append('.'.join(w.split('.')[:-1]))
 
+		if wheres is None and request is not None:
+			where_params = list(filter(None, request.GET.get('where', '').split(',')))
+			where_map = self._parse_wheres(where_params, withs)
+
+		if isinstance(pks, django.db.models.query.QuerySet):
+			pks = pks.values_list('pk', flat=True)
+		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
+		pks = list(pks)
+
 		withs = set(withs)
 		extras = defaultdict(set)
 		extras_mapping = {}
 
 		for w in withs:
-			(view, new_ids) = self._get_with(w, ids, request=request)
+			# Make sure the _get_with only gets the wheres relevant to the relation
+			# We scope on the head of the relation, as the caretakers in animals.caretaker
+			# must also be filtered by the animal filter
+			# head = w.split('.')[0]
+			# scoped_wheres = where_map.get(head, [])
+
+			(view, new_ids) = self._get_with(w, pks, request=request, where_map=where_map)
 			if view:
 				extras_mapping[w] = view
 				extras[view].update(set(new_ids))
 
 		extras_dict = {}
 		# FIXME: delegate this to a router or something
-		for view, with_ids in extras.items():
+		for view, with_pks in extras.items():
 			view = view()
-			os = view._get_objs(view.model.objects.filter(id__in=with_ids))
+			# {router-view-instance}
+			view.router = self.router
+			os = view._get_objs(view.get_queryset(request).filter(pk__in=with_pks), request=request)
 			extras_dict[view._model_name()] = os
 		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
 
@@ -347,22 +463,55 @@ class ModelView(View):
 			# Forward relations
 			related_model = field.remote_field.model
 
-		return (RelatedModel(fieldname, related_model),) + Router().model_view(related_model)()._follow_related(fieldspec)
+		# {router-view-instance}
+		# TODO: This should be refactored so that router
+		# returns an instance which has the router set on it.
+		view = self.router.model_view(related_model)()
+		view.router = self.router
+		return (RelatedModel(fieldname, related_model),) + view._follow_related(fieldspec)
 
 
 
-	def _get_with(self, wth, ids, request=None):
+	def _get_with(self, wth, pks, request, where_map):
 		head, *tail = wth.split('.')
 
 		next = self._follow_related(head)[0].model
-		ids = list(self.model.objects.filter(id__in=ids).values_list(head + '__id', flat=True))
-		view = Router().model_view(next)
+
+		# _get_with doesn't fully recurse the relation tree
+		# but it lags behind 1 recursion
+		rel_ids = list(self.model.objects.filter(pk__in=pks).values_list(head + '__pk', flat=True))
+
+		view_class = self.router.model_view(next)
+		rel_ids = view_class()._filter_relation(next, rel_ids, where_map.get(head, None))
 
 		if not tail:
-			return (view, ids)
+			return (view_class, rel_ids)
 		else:
-			return view()._get_with('.'.join(tail), ids, request=request)
+			view = view_class()
+			# {router-view-instance}
+			view.router = self.router
+			wm_scoped = where_map.get(head)
+			wm_scoped = wm_scoped['subrels'] if wm_scoped else {}
+			return view._get_with('.'.join(tail), rel_ids, request, wm_scoped)
 
+
+	# We have a set of ids where model M should be scoped on,
+	# but also a set of wheres where model M should further be scoped on
+	#
+	# Returns a further scoped list of ids
+	def _filter_relation(self, M, ids, where_map):
+		# If there are no filters, return the given ids
+		if where_map is None:
+			return ids
+
+		wheres = where_map['filters']
+
+		qs = M.objects.filter(pk__in=ids)
+		for where in wheres:
+			field, val = where.split('=')
+			qs = self._parse_filter(qs, field, val)
+
+		return qs.values_list('pk', flat=True)
 
 
 	def _parse_filter(self, queryset, field, value, partial=''):
@@ -370,7 +519,9 @@ class ModelView(View):
 
 		if tail:
 			next = self._follow_related(head)[0].model
-			view = Router().model_view(next)()
+			view = self.router.model_view(next)()
+			# {router-view-instance}
+			view.router = self.router
 			return view._parse_filter(queryset, '.'.join(tail), value, partial + head + '__')
 
 		invert = False
@@ -386,6 +537,7 @@ class ModelView(View):
 			qualifier = None
 
 		return self._filter_field(queryset, head, qualifier, value, invert, partial)
+
 
 
 	def _filter_field(self, queryset, field_name, qualifier, value, invert, partial=''):
@@ -404,10 +556,10 @@ class ModelView(View):
 					# TODO: Maybe convert to a BinderValidationError later?
 					raise BinderRequestError(e.message)
 
-
 		# If we get here, we didn't find a suitable filter class
 		raise BinderRequestError('Filtering not supported for type {} ({{{}}}.{{{}}}).'
 				.format(field.__class__.__name__, self.model.__name__, field_name))
+
 
 
 	def _parse_order_by(self, queryset, field, partial=''):
@@ -415,39 +567,45 @@ class ModelView(View):
 
 		if tail:
 			next = self._follow_related(head)[0].model
-			view = Router().model_view(next)()
+			view = self.router.model_view(next)()
+			# {router-view-instance}
+			view.router = self.router
 			return view._parse_order_by(queryset, '.'.join(tail), partial + head + '__')
 
 		try:
 			self.model._meta.get_field(head)
 		except models.fields.FieldDoesNotExist:
-			raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
+			if head == 'id':
+				pk = self.model._meta.pk
+				head = pk.get_attname() if pk.one_to_one or pk.many_to_one else pk.name
+			else:
+				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head)
 
 
 
-	def search(self, queryset, search, request=None):
+	def search(self, queryset, search, request):
 		if not search:
 			return queryset
 
-		if not self.searches:
+		if not (self.searches or self.transformed_searches):
 			raise BinderRequestError('No search fields defined for this view.')
 
 		q = Q()
-		for s in self.searches:
-			if s == 'id':
-				try:
-					q |= Q(id=int(search))
-				except ValueError:
-					pass
-			else:
-				q |= Q(**{s: search})
+		for s, transform in dict(
+			self.transformed_searches,
+			**{s: int if s == 'id' else str for s in self.searches}
+		).items():
+			try:
+				q |= Q(**{s: transform(search)})
+			except ValueError:
+				pass
 		return queryset.filter(q)
 
 
 
-	def filter_deleted(self, queryset, pk, deleted, request=None):
+	def filter_deleted(self, queryset, pk, deleted, request):
 		if pk:
 			return queryset
 
@@ -505,6 +663,26 @@ class ModelView(View):
 
 
 
+	def order_by(self, queryset, request):
+		#### order_by
+		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
+
+		if order_bys:
+			orders = []
+			for o in order_bys:
+				if o.startswith('-'):
+					queryset, order = self._parse_order_by(queryset, o[1:], partial='-')
+				else:
+					queryset, order = self._parse_order_by(queryset, o)
+				orders.append(order)
+			# Append model default orders to the API orders.
+			# This guarantees stable result sets when paging.
+			orders += queryset.model._meta.ordering
+			queryset = queryset.order_by(*orders)
+		return queryset
+
+
+
 	def get(self, request, pk=None, withs=None):
 		meta = {}
 		queryset = self.get_queryset(request)
@@ -529,17 +707,7 @@ class ModelView(View):
 		if 'search' in request.GET:
 			queryset = self.search(queryset, request.GET['search'], request)
 
-		#### order_by
-		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
-		if order_bys:
-			orders = []
-			for o in order_bys:
-				if o.startswith('-'):
-					queryset, order = self._parse_order_by(queryset, o[1:], partial='-')
-				else:
-					queryset, order = self._parse_order_by(queryset, o)
-				orders.append(order)
-			queryset = queryset.order_by(*orders)
+		queryset = self.order_by(queryset, request)
 
 		if not pk:
 			meta['total_records'] = queryset.count()
@@ -547,6 +715,7 @@ class ModelView(View):
 		queryset = self._paginate(queryset, request)
 
 		#### with
+		# parse wheres from request
 		extras, extras_mapping = self._get_withs(queryset, withs, request=request)
 
 		data = self._get_objs(queryset, request=request)
@@ -570,25 +739,36 @@ class ModelView(View):
 
 
 
+	# Determine if the field needs an extra nullability check.
+	# Expects the field object (not the field name)
+	def field_needs_nullability_check(self, field):
+		if isinstance(field, (models.CharField, models.TextField)):
+			if field.blank and not field.null:
+				return True
+
+		return False
+
+
+
 	# Deserialize JSON to Django Model objects.
 	# obj: Model object to update (for PUT), newly created object (for POST)
 	# values: Python dict of {field name: value} (parsed JSON)
 	# Output: Python dict representation of the updated object
-	def _store(self, obj, values, request, ignore_unknown_fields=False):
+	def _store(self, obj, values, request, ignore_unknown_fields=False, pk=None):
 		deferred_m2ms = {}
 		ignored_fields = []
-		validation_errors = defaultdict(list)
+		validation_errors = []
 
-		def store_field(obj, field, value, request):
+		def store_field(obj, field, value, request, pk=pk):
 			try:
 				func = getattr(self, '_store__' + field)
 			except AttributeError:
 				func = self._store_field
-			return func(obj, field, value, request)
+			return func(obj, field, value, request, pk=pk)
 
 		for field, value in values.items():
 			try:
-				res = store_field(obj, field, value, request)
+				res = store_field(obj, field, value, request, pk=pk)
 				if isinstance(res, list):
 					deferred_m2ms[field] = res
 			except BinderInvalidField:
@@ -596,31 +776,52 @@ class ModelView(View):
 					raise
 			except BinderReadOnlyFieldError:
 				ignored_fields.append(field)
-			except BinderValidationError as ve:
-				for f, e in ve.validation_errors.items():
-					validation_errors[f] += e
+			except BinderValidationError as e:
+				validation_errors.append(e)
 
 		try:
 			obj.full_clean()
 		except ValidationError as ve:
-			for f, el in ve.error_dict.items():
-				validation_errors[f] += sum([e.messages for e in el], [])
+			model_name = self.router.model_view(obj.__class__)()._model_name()
 
-		# full_clean() doesn't check nullability (WHY?), so do it here. See T2989.
+			e = BinderValidationError({
+				model_name: {
+					obj.pk if pk is None else pk: {
+						f: [
+							{'code': e.code, 'message': e.messages[0]}
+							for e in el
+						]
+						for f, el in ve.error_dict.items()
+					}
+				}
+			})
+			validation_errors.append(e)
+
+		# full_clean() doesn't complain about some not-NULL fields being None.
+		# This causes save() to explode with a django.db.IntegrityError because the
+		# column is NOT NULL. Tyvm, Django.
+		# So we perform an extra NULL check for some cases. See #66, T2989, T9646.
 		for f in obj._meta.fields:
-			# Ok, this nullable check poses problems. For example, when using MPTT models, we subclass
-			# the MPTTModel, which defines not-NULL bookkeeping fields which it populates on save().
-			# However, for new objects, this check occurs *before* the super().save(), so it complains.
-			# See T9646. Current solution: these fields are strictly populated by the backend, so
-			# they're unwritable from the frontend. So, unwritable -> no NULL check.  ¯\_(ツ)_/¯
-			if f.name in self.unwritable_fields:
-				continue
-			name = f.name + ('_id' if isinstance(f, models.ForeignKey) or isinstance(f, models.OneToOneField) else '')
-			if not f.primary_key and not f.null and getattr(obj, name) is None:
-				validation_errors[f.name] = ['This field cannot be null.']
+			if self.field_needs_nullability_check(f):
+				# gettattr on a foreignkey foo gets the related model, while foo_id just gets the id.
+				# We don't need or want the model (nor the DB query), we'll take the id thankyouverymuch.
+				name = f.name + ('_id' if isinstance(f, models.ForeignKey) else '')
+
+				if getattr(obj, name) is None:
+					e = BinderValidationError({
+						self._model_name(): {
+							obj.pk if pk is None else pk: {
+								f.name: [{
+									'code': 'null',
+									'message': 'This field cannot be null.'
+								}]
+							}
+						}
+					})
+					validation_errors.append(e)
 
 		if validation_errors:
-			raise BinderValidationError(validation_errors, object=obj)
+			raise sum(validation_errors, None)
 
 		obj.save()
 
@@ -640,10 +841,17 @@ class ModelView(View):
 				old_ids = set(obj_field.values_list('id', flat=True))
 				new_ids = set(value)
 				for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
-					if obj_field.field.null:
+					method = getattr(rmobj, '_binder_unset_relation_{}'.format(obj_field.field.name), None)
+					if callable(method):
+						try:
+							method()
+						except BinderValidationError as bve:
+							validation_errors.append(bve)
+					elif obj_field.field.null:
 						setattr(rmobj, obj_field.field.name, None)
+						rmobj.save()
 					elif hasattr(rmobj, 'deleted'):
-						if rmobj.deleted == False:
+						if not rmobj.deleted:
 							rmobj.deleted = True
 							rmobj.save()
 					else:
@@ -651,6 +859,10 @@ class ModelView(View):
 				for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
 					setattr(addobj, obj_field.field.name, obj)
 					addobj.save()
+			elif getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor:
+				remote_obj = obj._meta.get_field(field).related_model.objects.get(pk=value[0])
+				setattr(obj, field, remote_obj)
+				remote_obj.save()
 			elif field in [f.name for f in self._get_reverse_relations()]:
 				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
 				if any(v for v in value if v < 0):
@@ -658,6 +870,9 @@ class ModelView(View):
 				setattr(obj, field, value)
 			else:
 				setattr(obj, field, value)
+
+		if validation_errors:
+			raise sum(validation_errors, None)
 
 		data = self._get_obj(obj.pk, request=request)
 		data['_meta'] = {'ignored_fields': ignored_fields}
@@ -676,7 +891,7 @@ class ModelView(View):
 	# If the field is a m2m, it should do all validation and then return a list of ids
 	# which will be actually set when the object is known to be saved.
 	# Otherwise, return False.
-	def _store_field(self, obj, field, value, request):
+	def _store_field(self, obj, field, value, request, pk=None):
 		# Unwritable fields
 		if field in self.unwritable_fields + ['id', 'pk', 'deleted', '_meta'] + self.file_fields:
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
@@ -695,14 +910,38 @@ class ModelView(View):
 						try:
 							value = int(value)
 						except ValueError:
-							raise BinderValidationError({f.name: ['This value must be an integral number.']}, object=obj)
+							model_name = self.router.model_view(obj.__class__)()._model_name()
+							raise BinderValidationError({
+								model_name: {
+									obj.pk if pk is None else pk: {
+										f.name: [{
+											'code': 'not_int',
+											'message': 'This value must be an integral number.',
+											'value': value
+										}]
+									}
+								}
+							})
 					setattr(obj, f.attname, value)
 				elif isinstance(f, models.TextField):
 					# Django doesn't enforce max_length on TextFields, so we do.
 					if f.max_length is not None:
-						if len(value) > f.max_length:
-							msg = 'Ensure this value has at most {} characters (it has {}).'.format(f.max_length, len(value))
-							raise BinderValidationError({f.name: [msg]}, object=obj)
+						if isinstance(value, str) and len(value) > f.max_length:
+							setattr(obj, f.attname, value[:f.max_length])
+							model_name = self.router.model_view(obj.__class__)()._model_name()
+							raise BinderValidationError({
+								model_name: {
+									obj.pk if pk is None else pk: {
+										f.name: [{
+											'code': 'max_length',
+											'message': 'Ensure this value has at most {} characters (it has {}).'.format(f.max_length, len(value)),
+											'limit_value': f.max_length,
+											'show_value': len(value),
+											'value': value
+										}]
+									}
+								}
+							})
 					setattr(obj, f.attname, value)
 				else:
 					try:
@@ -715,6 +954,8 @@ class ModelView(View):
 		# m2ms
 		for f in list(self.model._meta.many_to_many) + list(self._get_reverse_relations()):
 			if f.name == field:
+				if isinstance(obj._meta.get_field(field), models.OneToOneRel):
+					value = [value]
 				if not (isinstance(value, list) and all(isinstance(v, int) for v in value)):
 					raise BinderFieldTypeError(self.model.__name__, field)
 				# FIXME
@@ -728,7 +969,19 @@ class ModelView(View):
 				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
 				if ids:
 					field_name = obj._meta.get_field(field).remote_field.model.__name__
-					raise BinderValidationError({field: ['{} instances {} do not exist'.format(field_name, list(ids))]})
+					model_name = self.router.model_view(obj.__class__)()._model_name()
+					raise BinderValidationError({
+						model_name: {
+							obj.pk: {
+								field: [{
+									'code': 'does_not_exist',
+									'message': '{} instances {} do not exist'.format(field_name, list(ids)),
+									'model': field_name,
+									'values': list(ids)
+								}]
+							}
+						}
+					})
 				return value
 
 		raise BinderInvalidField(self.model.__name__, field)
@@ -753,7 +1006,7 @@ class ModelView(View):
 
 
 	def _obj_diff(self, old, new, name):
-		if isinstance(old, dict) or isinstance(new, dict):
+		if isinstance(old, dict) and isinstance(new, dict):
 			changes = []
 			for k, v in old.items():
 				if k in new:
@@ -765,7 +1018,7 @@ class ModelView(View):
 					changes.append('  added {}.{}: {}'.format(name, k, repr(v)))
 			return changes
 
-		if isinstance(old, list) or isinstance(new, list):
+		if isinstance(old, list) and isinstance(new, list):
 			changes = []
 			for i in range(0, min(len(old), len(new))):
 				changes += self._obj_diff(old[i], new[i], '{}[{}]'.format(name, i))
@@ -781,9 +1034,8 @@ class ModelView(View):
 
 
 
-	def multi_put(self, request):
-		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
-
+	# Put data and with on one big pile, that's easier for us
+	def _multi_put_parse_request(self, request):
 		body = jsonloads(request.body)
 
 		if not 'data' in body:
@@ -795,18 +1047,22 @@ class ModelView(View):
 		if 'with' in body and not isinstance(body['with'], dict):
 			raise BinderRequestError('with should be a dict')
 
-		# Put data and with on one big pile, that's easier for us
 		data = body.get('with', {})
 		data[self._model_name()] = body['data']
 
-		# Sort object values by model/id
+		return data
+
+
+
+	# Sort object values by model/id
+	def _multi_put_collect_objects(self, data):
 		objects = {}
 		for modelname, objs in data.items():
 			if not isinstance(objs, list):
 				raise BinderRequestError('with.{} value should be a list')
 
 			try:
-				model = Router().name_models[modelname]
+				model = self.router.name_models[modelname]
 			except KeyError:
 				raise BinderRequestError('with.{} is not a valid model name'.format(modelname))
 
@@ -820,7 +1076,24 @@ class ModelView(View):
 
 				objects[(model, obj['id'])] = obj
 
-		# Figure out dependencies
+		return objects
+
+
+
+	def _multi_put_convert_backref_to_forwardref(self, objects):
+		for (model, mid), values in objects.items():
+			for field in filter(lambda f: f.one_to_many, model._meta.get_fields()):
+				if field.name in values:
+					if not isinstance(values[field.name], list) or not all(isinstance(v, int) for v in values[field.name]):
+						raise BinderFieldTypeError(self.model.__name__, field.name)
+					for rid in values[field.name]:
+						if (field.related_model, rid) in objects:
+							objects[(field.related_model, rid)][field.remote_field.name] = mid
+		return objects
+
+
+
+	def _multi_put_calculate_dependencies(self, objects):
 		logger.info('Resolving dependencies for {} objects'.format(len(objects)))
 		dependencies = {}
 		for (model, mid), values in objects.items():
@@ -854,7 +1127,12 @@ class ModelView(View):
 						if (model, mid) != (r_model, r_id):
 							dependencies[(model, mid)].add((r_model, r_id))
 
-		# Actually sort the objects by dependency (and within dependency layer by model/id)
+		return dependencies
+
+
+
+	# Actually sort the objects by dependency (and within dependency layer by model/id)
+	def _multi_put_order_dependencies(self, dependencies):
 		ordered_objects = []
 		while dependencies:
 			this_batch = []
@@ -872,14 +1150,20 @@ class ModelView(View):
 				raise BinderRequestError('No progress in dependency resolution! Cyclic dependencies?')
 			ordered_objects += sorted(this_batch, key=lambda obj: (obj[0].__name__, obj[1]))
 
+		return ordered_objects
+
+
+
+	def _multi_put_save_objects(self, ordered_objects, objects, request):
 		new_id_map = {}
+		validation_errors = []
 		for model, oid in ordered_objects:
 			values = objects[(model, oid)]
 			logger.info('Saving {} {}'.format(model.__name__, oid))
 
 			if oid >= 0:
 				try:
-					obj = model.objects.get(pk=oid)
+					obj = model.objects.select_for_update().get(pk=oid)
 				except ObjectDoesNotExist:
 					raise BinderNotFound('{}[{}]'.format(model.__name__, oid))
 				if hasattr(obj, 'deleted') and obj.deleted:
@@ -905,16 +1189,39 @@ class ModelView(View):
 				if field.name in values:
 					values[field.name] = [multiput_get_id(i) for i in values[field.name] if multiput_get_id(i) >= 0]
 
-			Router().model_view(model)()._store(obj, values, request)
+			view = self.router.model_view(model)()
+			# {router-view-instance}
+			view.router = self.router
+			try:
+				view._store(obj, values, request, pk=oid)
+			except BinderValidationError as e:
+				validation_errors.append(e)
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))
 
-		bla = defaultdict(list)
-		for (model, oid), nid in new_id_map.items():
-			bla[Router().model_view(model)()._model_name()].append((oid, nid))
+		if validation_errors:
+			raise sum(validation_errors, None)
 
-		return JsonResponse({'idmap': bla})
+		return new_id_map
+
+
+
+	def multi_put(self, request):
+		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
+
+		data = self._multi_put_parse_request(request)
+		objects = self._multi_put_collect_objects(data)
+		objects = self._multi_put_convert_backref_to_forwardref(objects)
+		dependencies = self._multi_put_calculate_dependencies(objects)
+		ordered_objects = self._multi_put_order_dependencies(dependencies)
+		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request)
+
+		output = defaultdict(list)
+		for (model, oid), nid in new_id_map.items():
+			output[self.router.model_view(model)()._model_name()].append((oid, nid))
+
+		return JsonResponse({'idmap': output})
 
 
 
@@ -927,7 +1234,7 @@ class ModelView(View):
 		values = jsonloads(request.body)
 
 		try:
-			obj = self.model.objects.get(pk=int(pk))
+			obj = self.model.objects.select_for_update().get(pk=int(pk))
 			old = self._get_obj(int(pk), request)
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
@@ -941,7 +1248,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
@@ -970,7 +1277,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request)
+		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
@@ -996,7 +1303,7 @@ class ModelView(View):
 			pass
 
 		try:
-			obj = self.model.objects.get(pk=int(pk))
+			obj = self.model.objects.select_for_update().get(pk=int(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
@@ -1007,14 +1314,14 @@ class ModelView(View):
 
 
 
-	def soft_delete(self, obj, undelete=False, request=None):
+	def soft_delete(self, obj, undelete, request):
 		try:
 			if obj.deleted and not undelete:
 				raise BinderIsDeleted()
 			if not obj.deleted and undelete:
 				raise BinderIsNotDeleted()
 		except AttributeError:
-			if undelete: # Should never happen
+			if undelete:  # Should never happen
 				raise BinderMethodNotAllowed()
 			else:
 				obj.delete()
@@ -1029,10 +1336,14 @@ class ModelView(View):
 		if not request.method in ('GET', 'POST', 'DELETE'):
 			raise BinderMethodNotAllowed()
 
-		try:
-			obj = self.model.objects.get(pk=int(pk))
-		except ObjectDoesNotExist:
-			raise BinderNotFound()
+		if isinstance(pk, self.model):
+			obj = pk
+			pk = obj.pk
+		else:
+			try:
+				obj = self.get_queryset(request).get(pk=int(pk))
+			except ObjectDoesNotExist:
+				raise BinderNotFound()
 
 		file_field_name = file_field
 		file_field = getattr(obj, file_field_name)
@@ -1065,68 +1376,106 @@ class ModelView(View):
 			except StopIteration:
 				raise BinderRequestError('File POST should use multipart/form-data (with an arbitrary key for the file data).')
 
-			if file.size > self.max_upload_size * 10**6:
-				raise BinderFileSizeExceeded(self.max_upload_size)
+			try:
+				if file.size > self.max_upload_size * 10**6:
+					raise BinderFileSizeExceeded(self.max_upload_size)
 
-			field = self.model._meta.get_field(file_field_name)
-			if isinstance(field, models.fields.files.ImageField):
-				try:
-					img = Image.open(file)
-				except Exception as e:
-					raise BinderImageError(str(e))
+				field = self.model._meta.get_field(file_field_name)
+				if isinstance(field, models.fields.files.ImageField):
+					try:
+						img = Image.open(file)
+					except Exception as e:
+						raise BinderImageError(str(e))
 
-				format = img.format.lower()
-				if not format in ('png', 'gif', 'jpeg'):
-					raise BinderFileTypeIncorrect([{'extension': t, 'mimetype': 'image/' + t} for t in ['jpeg', 'png', 'gif']])
+					format = img.format.lower()
+					if not format in ('png', 'gif', 'jpeg'):
+						raise BinderFileTypeIncorrect([{'extension': t, 'mimetype': 'image/' + t} for t in ['jpeg', 'png', 'gif']])
 
-				width, height = img.size
-				# FIXME: hardcoded max
-				if width > 4096 or height > 4096:
-					raise BinderImageSizeExceeded(4096, 4096)
+					width, height = img.size
+					if format == 'jpeg':
+						img2 = image_transpose_exif(img)
 
-				# FIXME: hardcoded max
-				if width > 512 or height > 512:
-					img.thumbnail((512, 512), Image.ANTIALIAS)
-					logger.info('image dimensions ({}x{}) exceeded (512, 512), resizing.'.format(width, height))
-					file = io.BytesIO()
-					if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
-						img = img.convert("RGB")
-					img.save(file, 'png')
-					format = 'png'
+						if img2 != img:
+							file.seek(0)  # Do not append to the existing file!
+							file.truncate()
+							img2.save(file, 'jpeg')
+							img = img2
 
-				filename = '{}.{}'.format(obj.id, format)
-			else:
-				if file.name.find('.') != -1:
-					filename = '{}.{}'.format(obj.id, file.name.split('.')[-1])
+					# Determine resize threshold
+					try:
+						max_size = self.image_resize_threshold[file_field_name]
+					except TypeError:
+						max_size = self.image_resize_threshold
+
+					try:
+						max_width, max_height = max_size
+					except (TypeError, ValueError):
+						max_width, max_height = max_size, max_size
+
+					# FIXME: hardcoded max
+					# Flat out refuse images exceeding this size, to prevent DoS.
+					width_limit, height_limit = max(max_width, 4096), max(max_height, 4096)
+					if width > width_limit or height > height_limit:
+						raise BinderImageSizeExceeded(width_limit, height_limit)
+
+					# Resize images that are too large.
+					if width > max_width or height > max_height:
+						img.thumbnail((max_width, max_height), Image.ANTIALIAS)
+						logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
+						file = io.BytesIO()
+						if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
+							img = img.convert("RGB")
+						img.save(file, 'png')
+						format = 'png'
+
+					filename = '{}.{}'.format(obj.id, format)
 				else:
-					filename = str(obj.id)
+					if file.name.find('.') != -1:
+						filename = '{}.{}'.format(obj.id, file.name.split('.')[-1])
+					else:
+						filename = str(obj.id)
 
-			# FIXME: duplicate code
-			if file_field:
-				try:
-					old_hash = hashlib.sha256()
-					for c in file_field.file.chunks():
-						old_hash.update(c)
-					old_hash = old_hash.hexdigest()
-				except FileNotFoundError:
-					logger.warning('Old file {} missing!'.format(file_field))
+				# FIXME: duplicate code
+				if file_field:
+					try:
+						old_hash = hashlib.sha256()
+						for c in file_field.file.chunks():
+							old_hash.update(c)
+						old_hash = old_hash.hexdigest()
+					except FileNotFoundError:
+						logger.warning('Old file {} missing!'.format(file_field))
+						old_hash = None
+				else:
 					old_hash = None
-			else:
-				old_hash = None
 
-			file_field.delete()
-			file_field.save(filename, django.core.files.File(file))
-			obj.save()
+				file_field.delete()
+				file_field.save(filename, django.core.files.File(file))
+				obj.save()
 
-			# FIXME: duplicate code
-			new_hash = hashlib.sha256()
-			for c in file_field.file.chunks():
-				new_hash.update(c)
-			new_hash = new_hash.hexdigest()
+				# FIXME: duplicate code
+				new_hash = hashlib.sha256()
+				for c in file_field.file.chunks():
+					new_hash.update(c)
+				new_hash = new_hash.hexdigest()
 
-			logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
-			path = Router().model_route(self.model, obj.id, field)
-			return JsonResponse( {"data": {file_field_name: path}} )
+				logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
+				path = self.router.model_route(self.model, obj.id, field)
+				return JsonResponse( {"data": {file_field_name: path}} )
+
+			except ValidationError as ve:
+				model_name = self.router.model_view(obj.__class__)()._model_name()
+
+				raise BinderValidationError({
+					model_name: {
+						obj.pk if pk is None else pk: {
+							f: [
+								{'code': e.code, 'message': e.messages[0]}
+								for e in el
+							]
+							for f, el in ve.error_dict.items()
+						}
+					}
+				})
 
 		if request.method == 'DELETE':
 			self._require_model_perm('change', request)

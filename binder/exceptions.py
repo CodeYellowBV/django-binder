@@ -34,11 +34,6 @@ class BinderException(Exception):
 	def data(self):
 		data = dict(self.fields)
 		data['code'] = self.code
-		# This should actually be moved to BinderValidationError, but currently, Binder does post-processing on this field
-		if self.validation_errors:
-			data['error'] = {
-				'validation_errors': {f: [{'code': m} for m in ms] for f, ms in self.validation_errors.items()}
-			}
 		if hasattr(self, 'object') and self.object:
 			data['object'] = self.object
 		return data
@@ -49,6 +44,11 @@ class BinderException(Exception):
 		if django.conf.settings.DEBUG:
 			data['debug']['location'] = '{1}:{2} in {0}'.format(*self.exception_location())
 		return HttpResponse(json.dumps(data), status=self.http_code, content_type='application/json')
+
+	# The Python Exception __str__ can return something unhelpful like "('foo', SomeOb)".
+	# This can be quite annoying during debug. __repr__ is better so we use that instead.
+	def __str__(self):
+		return repr(self)
 
 
 
@@ -195,7 +195,42 @@ class BinderValidationError(BinderException):
 	http_code = 400
 	code = 'ValidationError'
 
-	def __init__(self, errors, object=None):
+	def __init__(self, errors):
 		super().__init__()
-		self.validation_errors = errors
-		self.object = '{}: {}'.format(object.__class__.__name__, object)
+		self.errors = errors
+
+	def data(self):
+		data = dict(self.fields)
+		data['code'] = self.code
+		data['errors'] = self.errors
+		return data
+
+	def __radd__(self, other):
+		return self + other
+
+	def __add__(self, other):
+		if other is None:
+			return self
+
+		errors = {}
+		for model in set(self.errors) | set(other.errors):
+			if model in self.errors and model in other.errors:
+				errors[model] = {}
+				for pk in set(self.errors[model]) | set(other.errors[model]):
+					if pk in self.errors[model] and pk in other.errors[model]:
+						errors[model][pk] = {}
+						for field in set(self.errors[model][pk]) | set(other.errors[model][pk]):
+							errors[model][pk][field] = (
+								self.errors[model][pk][field] if field in self.errors[model][pk] else []
+							) + (
+								other.errors[model][pk][field] if field in other.errors[model][pk] else []
+							)
+					elif pk in self.errors[model]:
+						errors[model][pk] = self.errors[model][pk]
+					else:
+						errors[model][pk] = other.errors[model][pk]
+			elif model in self.errors:
+				errors[model] = self.errors[model]
+			else:
+				errors[model] = other.errors[model]
+		return BinderValidationError(errors)

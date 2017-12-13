@@ -53,18 +53,14 @@ class Route(object):
 
 
 class Router(object):
-	# Singleton hackery
-	_instance = None
-	def __new__(cls):
-		if cls._instance is None:
-			cls._instance = super(Router, cls).__new__(cls)
-		return cls._instance
+	def __init__(self):
+		self.model_views = {}
+		self.model_routes = {}
+		self.route_views = {}
+		# FIXME: this needs to be much much better defined
+		self.name_models = {}
 
-	model_views = {}
-	model_routes = {}
-	route_views = {}
-	# FIXME: this needs to be much much better defined
-	name_models = {}
+
 
 	def register(self, superclass):
 		for view in superclass.__subclasses__():
@@ -80,16 +76,24 @@ class Router(object):
 				elif isinstance(view.route, str):
 					route = Route(view.route)
 				elif view.route is True:
-					route = Route(view._model_name())
+					if view.model is None:
+						route = None
+					else:
+						route = Route(view._model_name())
 				else:
 					raise TypeError('{}.route'.format(view))
 
-				for r, v in self.route_views.items():
-					if r.route == route.route:
-						raise ValueError('Routing conflict for "{}": {} vs {}'.format(route.route, view, v))
-				self.route_views[route] = view
+				if route:
+					for r, v in self.route_views.items():
+						if r.route == route.route:
+							raise ValueError('Routing conflict for "{}": {} vs {}'.format(route.route, view, v))
+					self.route_views[route] = view
 
+			# Recurse subclasses of this subclass, so we register all descendants.
 			self.register(view)
+		return self
+
+
 
 	def model_view(self, model):
 		try:
@@ -97,6 +101,8 @@ class Router(object):
 		except KeyError:
 			# FIXME: this should actually be a 500
 			raise BinderRequestError('No view defined for model {}.'.format(model.__name__))
+
+
 
 	def model_route(self, model, pk=None, field=None):
 		if not model in self.model_routes:
@@ -111,6 +117,8 @@ class Router(object):
 
 		return route
 
+
+
 	@property
 	def urls(self):
 		urls = []
@@ -118,19 +126,19 @@ class Router(object):
 			name = view.model.__name__ if view.model else route.route
 			# List and detail endpoints
 			if route.list_endpoint:
-				urls.append(django.conf.urls.url(r'^{}/$'.format(route.route), view.as_view(), name=name))
+				urls.append(django.conf.urls.url(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 			if route.detail_endpoint:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), name=name))
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 
 			# History views
 			if view.model and hasattr(view.model, 'Binder') and view.model.Binder.history:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/$'.format(route.route), view.as_view(), {'history': 'normal'}, name=name))
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/debug/$'.format(route.route), view.as_view(), {'history': 'debug'}, name=name))
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/$'.format(route.route), view.as_view(), {'history': 'normal', 'router': self}, name=name))
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/debug/$'.format(route.route), view.as_view(), {'history': 'debug', 'router': self}, name=name))
 
 			# File field endpoints
 			for ff in view.file_fields:
 				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/{}/$'.format(route.route, ff),
-						view.as_view(), {'file_field': ff}, name='{}.{}'.format(name, ff)))
+						view.as_view(), {'file_field': ff, 'router': self}, name='{}.{}'.format(name, ff)))
 
 			# Custom endpoints
 			for m in dir(view):
@@ -138,7 +146,7 @@ class Router(object):
 				if hasattr(method, 'detail_route') or hasattr(method, 'list_route'):
 					route_name = method.route_name
 					extra = method.extra_route
-					kwargs = {'method': m}
+					kwargs = {'method': m, 'router': self}
 					if method.unauthenticated:
 						kwargs['unauthenticated'] = True
 					if hasattr(method, 'detail_route'):

@@ -30,12 +30,12 @@ import binder.router
 import binder.views
 import binder.models
 
-binder.router.Router().register(binder.views.ModelView)
+router = binder.router.Router().register(binder.views.ModelView)
 
 urlpatterns = [
-	url(r'^', include(binder.router.Router().urls)),
+	url(r'^', include(router.urls)),
 	url(r'^', binder.views.api_catchall, name='catchall'),
 ]
 
-binder.models.install_m2m_signal_handlers(binder.models.BinderModel)
+binder.models.install_history_signal_handlers(binder.models.BinderModel)
 ```

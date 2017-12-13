@@ -20,7 +20,7 @@ setup(
 	url='https://github.com/CodeYellowBV/django-binder',
 	author='Marcel Moreaux',
 	author_email='marcel@codeyellow.nl',
-	test_suite='tests',
+	test_suite='binder.tests',
 	classifiers=[
 		'Environment :: Web Environment',
 		'Framework :: Django',
@@ -39,5 +39,7 @@ setup(
 		'Django >= 1.10',
 		'Pillow >= 3.2.0',
 		'django-request-id >= 1.0.0',
+		'requests >= 2.13.0',
+		'psycopg2 >= 2.7',
 	],
 )

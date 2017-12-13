@@ -1,19 +1,22 @@
 import logging
+import threading
 
 from django.db import models
-from django.utils import timezone
 from django.http import HttpResponse
 from django.contrib.auth.models import User
 from django.conf import settings
+from django.dispatch import Signal
 
 from .json import jsondumps, JsonResponse
 
+
+transaction_commit = Signal(providing_args=['changeset'])
 
 
 class Changeset(models.Model):
 	source = models.CharField(max_length=32)
 	user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='changesets')
-	date = models.DateTimeField(default=timezone.now)
+	date = models.DateTimeField(auto_now=True)  # When this changeset is "final". Ideally equal to the moment the DB commits the transaction.
 	uuid = models.CharField(max_length=36, blank=True, null=True)
 
 	def __str__(self):
@@ -31,6 +34,7 @@ class Change(models.Model):
 	model = models.CharField(max_length=64, db_index=True)
 	oid = models.IntegerField(db_index=True)
 	field = models.CharField(max_length=64, db_index=True)
+	diff = models.BooleanField(default=False)
 	before = models.TextField(blank=True, null=True)
 	after = models.TextField(blank=True, null=True)
 
@@ -46,13 +50,34 @@ logger = logging.getLogger(__name__)
 
 
 
-class Transaction:
-	user = None
-	uuid = None
-	date = None
-	source = None
-	started = False
-	changes = {}
+class _Transaction(threading.local):
+	def __init__(self):
+		logger.info('Creating new Transaction for thread {}'.format(threading.current_thread().name))
+
+		self.user = None
+		self.uuid = None
+		self.source = None
+		self.started = False
+		self.changes = {}
+
+	def start(self, *, user=None, uuid=None, source=None):
+		if self.started:
+			raise RuntimeError('Called Transaction.start() while there is an open transaction')
+
+		self.started = True
+		self.changes.clear()
+		self.user = user
+		self.uuid = uuid
+		self.source = source
+
+	def stop(self):
+		if not self.started:
+			raise RuntimeError('Called Transaction.stop() while there is no open transaction')
+
+		self.started = False
+		self.changes.clear()
+
+Transaction = _Transaction()
 
 
 
@@ -64,22 +89,11 @@ class DeferredM2M:
 
 
 
-def start(source=None, user=None, uuid=None, date=None):
+def start(source=None, user=None, uuid=None):
 	if source is None:
 		raise ValueError('source may not be None')
 
-	if date is None:
-		date = timezone.now()
-
-	if Transaction.started:
-		logger.warning('Transaction start: discarding open transaction')
-
-	Transaction.source = source
-	Transaction.user = user
-	Transaction.uuid = uuid
-	Transaction.date = date
-	Transaction.started = True
-	Transaction.changes.clear()
+	Transaction.start(source=source, user=user, uuid=uuid)
 
 
 
@@ -102,28 +116,30 @@ def change(model, oid, field, old, new):
 		if hasattr(model, 'binder_serialize_m2m_field'):
 			old = model(id=oid).binder_serialize_m2m_field(field)
 
-	Transaction.changes[hid] = old, new
+	Transaction.changes[hid] = old, new, False
+
+
+
+def m2m_diff(old, new):
+	return sorted(old - new), sorted(new - old), True
 
 
 
 # FIXME: use bulk inserts for efficiency.
 def commit():
-	if not Transaction.started:
-		logger.error('Transaction commit: no open transaction')
-	Transaction.started = False
-
 	# Fill in the deferred m2ms
-	for (model, oid, field), (old, new) in Transaction.changes.items():
+	for (model, oid, field), (old, new, diff) in Transaction.changes.items():
 		if new is DeferredM2M:
 			# The target model may be a non-Binder model (e.g. User), so lbyl.
 			if hasattr(model, 'binder_serialize_m2m_field'):
 				new = model(id=oid).binder_serialize_m2m_field(field)
-				Transaction.changes[model, oid, field] = old, new
+				Transaction.changes[model, oid, field] = m2m_diff(old, new)
 
 	# Filter non-changes
-	Transaction.changes = {idx: (old, new) for idx, (old, new) in Transaction.changes.items() if old != new}
+	Transaction.changes = {idx: (old, new, diff) for idx, (old, new, diff) in Transaction.changes.items() if old != new}
 
 	if not Transaction.changes:
+		Transaction.stop()
 		return
 
 	user = Transaction.user if Transaction.user and not Transaction.user.is_anonymous else None
@@ -131,12 +147,11 @@ def commit():
 	changeset = Changeset(
 		source=Transaction.source,
 		user=user,
-		date=Transaction.date,
 		uuid=Transaction.uuid,
 	)
 	changeset.save()
 
-	for (model, oid, field), (old, new) in Transaction.changes.items():
+	for (model, oid, field), (old, new, diff) in Transaction.changes.items():
 		# New instances get None for all the before values
 		if old is NewInstanceField:
 			old = None
@@ -147,12 +162,22 @@ def commit():
 			model=model.__name__,
 			oid=oid,
 			field=field,
+			diff=diff,
 			before=jsondumps(old),
 			after=jsondumps(new),
 		)
 		change.save()
 
-	Transaction.changes.clear()
+	transaction_commit.send(sender=None, changeset=changeset)
+
+	# Save the changeset again, to update the date to be as close to DB transaction commit start as possible.
+	changeset.save()
+	Transaction.stop()
+
+
+
+def abort():
+	Transaction.stop()
 
 
 
@@ -162,7 +187,7 @@ def view_changesets(request, changesets):
 	for cs in changesets:
 		changes = []
 		for c in cs.changes.order_by('model', 'oid', 'field'):
-			changes.append({'model': c.model, 'oid': c.oid, 'field': c.field, 'before': c.before, 'after': c.after})
+			changes.append({'model': c.model, 'oid': c.oid, 'field': c.field, 'diff': c.diff, 'before': c.before, 'after': c.after})
 		data.append({'date': cs.date, 'uuid': cs.uuid, 'id': cs.id, 'source': cs.source, 'user': cs.user_id, 'changes': changes})
 		if cs.user_id:
 			userids.add(cs.user_id)
@@ -182,10 +207,10 @@ def view_changesets_debug(request, changesets):
 		body.append('<h3>Changeset {} by {}: {} on {} {{{}}}'.format(cs.id, cs.source, username, cs.date.strftime('%Y-%m-%d %H:%M:%S'), cs.uuid))
 		body.append('<br><br>')
 		body.append('<table>')
-		body.append('<tr><th>model</th><th>object id</th><th>field</th><th>before</th><th>after</th></tr>')
+		body.append('<tr><th>model</th><th>object id</th><th>field</th><th><diff</th><th>before</th><th>after</th></tr>')
 		for c in cs.changes.order_by('model', 'oid', 'field'):
-			body.append('<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
-				c.model, c.oid, c.field, c.before, c.after))
+			body.append('<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
+				c.model, c.oid, c.field, c.diff, c.before, c.after))
 		body.append('</table>')
 		body.append('<br><br>')
 	body.append('</body>')
