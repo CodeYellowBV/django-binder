@@ -19,6 +19,7 @@ class CaseInsensitiveCharField(CITextField):
 		return super().__init__(*args, **kwargs)
 
 
+
 class UpperCaseCharField(CITextField):
 	def get_prep_value(self, value):
 		value = super().get_prep_value(value)
@@ -59,16 +60,18 @@ class ChoiceEnum(object):
 		raise ValueError()
 
 
+
 class FieldFilter(object):
 	# The classes that this filter applies to (should be mutually
 	# exclusive with the other classes)
-	fields = ()
+	fields = []
 	# The list of allowed qualifiers
-	allowed_qualifiers = ()
+	allowed_qualifiers = []
 
 	def __init__(self, model, field_name):
 		self.model = model
 		self.field_name = field_name
+
 
 
 	def field_description(self):
@@ -76,14 +79,17 @@ class FieldFilter(object):
 		return '{} {{{}}}.{{{}}}'.format(field_type_name, self.model.__name__, self.field_name)
 
 
+
 	def clean_value(self, v):
 		raise ValueError('FieldFilter {} has not overridden the clean_value method'.format(self.__class__.name))
+
 
 
 	def check_qualifier(self, qualifier):
 		if qualifier not in self.allowed_qualifiers:
 			raise BinderRequestError('Qualifier {} not supported for type {} ({}).'
 					.format(qualifier, self.__class__.__name__, self.field_description()))
+
 
 
 	def get_q(self, qualifier, value, invert, partial=''):
@@ -118,8 +124,15 @@ class FieldFilter(object):
 
 
 class IntegerFieldFilter(FieldFilter):
-	fields = (models.IntegerField, models.ForeignKey, models.AutoField, models.ManyToOneRel, models.ManyToManyField, models.ManyToManyRel)
-	allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+	fields = [
+		models.IntegerField,
+		models.ForeignKey,
+		models.AutoField,
+		models.ManyToOneRel,
+		models.ManyToManyField,
+		models.ManyToManyRel,
+	]
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
 	def clean_value(self, v):
 		try:
@@ -128,9 +141,10 @@ class IntegerFieldFilter(FieldFilter):
 			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
 
+
 class FloatFieldFilter(FieldFilter):
-	fields = (models.FloatField,)
-	allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+	fields = [models.FloatField]
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
 	def clean_value(self, v):
 		try:
@@ -139,20 +153,23 @@ class FloatFieldFilter(FieldFilter):
 			raise ValidationError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'.format(v, self.field_description()))
 
 
+
 class DateFilter(FieldFilter):
-	fields = (models.DateField,)
+	fields = [models.DateField]
 	# Maybe allow __startswith? And __year etc?
-	allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
 	def clean_value(self, v):
 		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', v):
 			raise ValidationError('Invalid YYYY-MM-DD value {{{}}} for {}.'.format(v, self.field_description()))
 		return v
 
+
+
 class DateTimeFieldFilter(FieldFilter):
-	fields = (models.DateTimeField,)
+	fields = [models.DateTimeField]
 	# Maybe allow __startswith? And __year etc?
-	allowed_qualifiers = (None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull')
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
 	def clean_value(self, v):
 		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})?)?$', v):
@@ -160,9 +177,10 @@ class DateTimeFieldFilter(FieldFilter):
 		return v
 
 
+
 class BooleanFieldFilter(FieldFilter):
-	fields = (models.BooleanField,)
-	allowed_qualifiers = (None,)
+	fields = [models.BooleanField]
+	allowed_qualifiers = [None]
 
 	def clean_value(self, v):
 		if v == 'true':
@@ -173,9 +191,10 @@ class BooleanFieldFilter(FieldFilter):
 			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
 
+
 class TextFieldFilter(FieldFilter):
-	fields = (models.CharField, models.TextField)
-	allowed_qualifiers = (None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search')
+	fields = [models.CharField, models.TextField]
+	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search']
 
 	# Always valid(?)
 	def clean_value(self, v):
