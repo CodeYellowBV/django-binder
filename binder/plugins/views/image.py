@@ -133,4 +133,3 @@ class ImageView:
 		if isinstance(self, PermissionView):
 			self.scope_change_list(request, scans, {})
 		return scans
-

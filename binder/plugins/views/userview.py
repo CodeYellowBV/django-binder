@@ -18,7 +18,7 @@ from hijack.helpers import login_user, release_hijack
 
 from binder.permissions.views import no_scoping_required
 from binder.exceptions import BinderForbidden, BinderReadOnlyFieldError, BinderMethodNotAllowed, BinderIsNotDeleted, \
-	BinderIsDeleted, BinderNotAuthenticated,BinderFieldTypeError, BinderRequestError, BinderValidationError, \
+	BinderIsDeleted, BinderNotAuthenticated, BinderFieldTypeError, BinderRequestError, BinderValidationError, \
 	BinderNotFound
 from binder.router import list_route, detail_route
 from binder.json import JsonResponse
@@ -131,7 +131,7 @@ class UserViewMixIn:
 			body = json.loads(decoded)
 			username = body.get('username', '')
 			password = body.get('password', '')
-		except Exception as e:
+		except Exception:
 			username = request.POST.get('username', '')
 			password = request.POST.get('password', '')
 

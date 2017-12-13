@@ -68,7 +68,7 @@ class CsvExportView:
 
 		writer = csv.writer(response)
 		# CSV header
-		writer.writerow(list(map(lambda x:x[1], self.csv_settings.column_map)))
+		writer.writerow(list(map(lambda x: x[1], self.csv_settings.column_map)))
 
 		# Make a mapping from the withs. This creates a map. This is needed for easy looking up relations
 		# {
@@ -128,7 +128,7 @@ class CsvExportView:
 
 						# if head_key not in key_mapping:
 						prefix_key = parent_data['with_mapping'][new_prefix[1:]]
-						datums =[str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in fk_ids]
+						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in fk_ids]
 						return self.csv_settings.multi_value_delimiter.join(
 							datums
 						)
@@ -148,4 +148,3 @@ class CsvExportView:
 			writer.writerow(data)
 
 		return response
-
