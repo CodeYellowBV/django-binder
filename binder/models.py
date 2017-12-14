@@ -2,10 +2,11 @@ import re
 import warnings
 
 from django.db import models
-from django.contrib.postgres.fields import CITextField
+from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
 from django.db.models import signals
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
+from binder.json import jsonloads
 
 from binder.exceptions import BinderRequestError
 
@@ -78,7 +79,7 @@ class FieldFilter(object):
 
 
 
-	def clean_value(self, v):
+	def clean_value(self, qualifier, v):
 		raise ValueError('FieldFilter {} has not overridden the clean_value method'.format(self.__class__.name))
 
 
@@ -106,10 +107,10 @@ class FieldFilter(object):
 		if qualifier == 'isnull':
 			cleaned_value = True
 		elif qualifier in ('in', 'range'):
-			cleaned_value = [self.clean_value(v) for v in values]
+			cleaned_value = [self.clean_value(qualifier, v) for v in values]
 		else:
 			try:
-				cleaned_value = self.clean_value(values[0])
+				cleaned_value = self.clean_value(qualifier, values[0])
 			except IndexError:
 				raise ValidationError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.field.model.__name__, self.field.name))
 
@@ -132,7 +133,7 @@ class IntegerFieldFilter(FieldFilter):
 	]
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
-	def clean_value(self, v):
+	def clean_value(self, qualifier, v):
 		try:
 			return int(v)
 		except ValueError:
@@ -144,7 +145,7 @@ class FloatFieldFilter(FieldFilter):
 	fields = [models.FloatField]
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
-	def clean_value(self, v):
+	def clean_value(self, qualifier, v):
 		try:
 			return float(v)
 		except ValueError:
@@ -157,7 +158,7 @@ class DateFilter(FieldFilter):
 	# Maybe allow __startswith? And __year etc?
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
-	def clean_value(self, v):
+	def clean_value(self, qualifier, v):
 		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', v):
 			raise ValidationError('Invalid YYYY-MM-DD value {{{}}} for {}.'.format(v, self.field_description()))
 		return v
@@ -169,7 +170,7 @@ class DateTimeFieldFilter(FieldFilter):
 	# Maybe allow __startswith? And __year etc?
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
-	def clean_value(self, v):
+	def clean_value(self, qualifier, v):
 		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})?)?$', v):
 			raise ValidationError('Invalid YYYY-MM-DD(.mmm)ZONE value {{{}}} for {}.'.format(v, self.field_description()))
 		return v
@@ -180,7 +181,7 @@ class BooleanFieldFilter(FieldFilter):
 	fields = [models.BooleanField]
 	allowed_qualifiers = [None]
 
-	def clean_value(self, v):
+	def clean_value(self, qualifier, v):
 		if v == 'true':
 			return True
 		elif v == 'false':
@@ -195,8 +196,58 @@ class TextFieldFilter(FieldFilter):
 	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search']
 
 	# Always valid(?)
-	def clean_value(self, v):
+	def clean_value(self, qualifier, v):
 		return v
+
+
+class ArrayFieldFilter(FieldFilter):
+	fields = [ArrayField]
+	allowed_qualifiers = [None, 'contains', 'contained_by', 'overlap', 'isnull']
+
+	# Some copy/pasta involved....
+	def get_field_filter(self, field_class, reset=False):
+		f = not reset and getattr(self, '_field_filter', None)
+
+		if not f:
+			f = None
+			for field_filter_cls in FieldFilter.__subclasses__():
+				for field_cls in field_filter_cls.fields:
+					if field_cls == field_class:
+						f = field_filter_cls
+						break
+			self._field_filter = f
+
+		return f
+
+
+	def clean_value(self, qualifier, v):
+		Filter = self.get_field_filter(self.field.base_field.__class__)
+		filter = Filter(self.field.base_field)
+		if v == '': # Special case: This should represent the empty array, not an array with one empty string
+			return []
+		else:
+			values = v.split(',')
+			return map(lambda v: filter.clean_value(qualifier, v), values)
+
+
+class JSONFieldFilter(FieldFilter):
+	fields = [JSONField]
+	# TODO: Element or path-based lookup is not supported yet
+	allowed_qualifiers = [None, 'contains', 'contained_by', 'has_key', 'has_any_keys', 'has_keys', 'isnull']
+
+	def clean_value(self, qualifier, v):
+		if qualifier == 'has_key':
+			return v
+		elif qualifier in ('has_keys', 'has_any_keys'):
+			if v == '':
+				return []
+			else:
+				return v.split(',')
+		else:
+			# Use bytes to allow decode() to work.  We don't just
+			# json.loads because we want to behave identically to
+			# any other Binder JSON decode when there are errors.
+			return jsonloads(bytes(v, 'utf-8'))
 
 
 
