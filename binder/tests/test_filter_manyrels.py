@@ -8,7 +8,7 @@ from .testapp.models import Zoo, Animal, ContactPerson
 
 
 
-class TestValidationErrors(TestCase):
+class TestFilterManyRels(TestCase):
 	def setUp(self):
 		super().setUp()
 		u = User(username='testuser', is_active=True, is_superuser=True)

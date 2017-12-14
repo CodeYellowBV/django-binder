@@ -69,5 +69,4 @@ class WebsocketTest(TestCase):
 		costume.full_clean()
 		costume.save()
 
-		# Barbaric way to check if costume is saved
-		self.assertEqual(1, costume.pk)
+		self.assertIsNotNone(costume.pk)

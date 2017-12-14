@@ -62,6 +62,7 @@ def _assert_json(value, spec):
 			# ANY() means *anything*
 			return
 		else:
+			# ANY(klass), so check type
 			if type(value) == spec.cls:
 				return
 		raise AssertionError('{} is wrong type for {}'.format(repr(value), spec))

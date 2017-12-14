@@ -2,6 +2,7 @@ import json
 
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
+from django.db.models import Max
 
 from binder.json import jsonloads
 
@@ -10,7 +11,7 @@ from .testapp.models import Animal
 
 
 
-class TestValidationErrors(TestCase):
+class TestReverseFKValidationErrors(TestCase):
 	def setUp(self):
 		super().setUp()
 		u = User(username='testuser', is_active=True, is_superuser=True)
@@ -19,21 +20,21 @@ class TestValidationErrors(TestCase):
 		self.client = Client()
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
-		a = Animal(id=1, name='Test animal so FKs work')
-		a.save()
+		self.animal = Animal(name='Test animal so FKs work')
+		self.animal.save()
 
 
 
 	def test_post_reverse_fk_correct(self):
-		model_data = { 'name': 'foo', 'animals': [1] }
+		model_data = { 'name': 'foo', 'animals': [self.animal.id] }
 
 		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 
 		assert_json(returned_data, {
-			'animals': [1],
-			'id': 1,
+			'animals': [self.animal.id],
+			'id': ANY(int),
 			'name': 'foo',
 			EXTRA(): None,
 		})
@@ -41,7 +42,8 @@ class TestValidationErrors(TestCase):
 
 
 	def test_post_reverse_fk_nonexistent(self):
-		model_data = { 'name': 'foo', 'animals': [555] }
+		nonexistent = Animal.objects.all().aggregate(Max('pk'))['pk__max'] + 1
+		model_data = { 'name': 'foo', 'animals': [nonexistent] }
 
 		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 400)
@@ -55,7 +57,7 @@ class TestValidationErrors(TestCase):
 							{
 								'code': 'does_not_exist',
 								'model': 'Animal',
-								'values': [555],
+								'values': [nonexistent],
 								MAYBE('message'): ANY(str),
 							}
 						]
@@ -85,7 +87,7 @@ class TestValidationErrors(TestCase):
 
 
 	def test_post_reverse_fk_containsnull(self):
-		model_data = { 'name': 'foo', 'animals': [1, None] }
+		model_data = { 'name': 'foo', 'animals': [self.animal.id, None] }
 
 		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 418)
@@ -100,7 +102,7 @@ class TestValidationErrors(TestCase):
 
 
 	def test_multiput_reverse_fk_correct(self):
-		model_data = { 'data': [ {'id': -1, 'name': 'foo', 'animals': [1]} ] }
+		model_data = { 'data': [ {'id': -1, 'name': 'foo', 'animals': [self.animal.id]} ] }
 
 		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
@@ -113,7 +115,8 @@ class TestValidationErrors(TestCase):
 
 
 	def test_multiput_reverse_fk_nonexistent(self):
-		model_data = { 'data': [ {'id': -1, 'name': 'foo', 'animals': [555]} ]}
+		nonexistent = Animal.objects.all().aggregate(Max('pk'))['pk__max'] + 1
+		model_data = { 'data': [ {'id': -1, 'name': 'foo', 'animals': [nonexistent]} ]}
 
 		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 400)
@@ -127,7 +130,7 @@ class TestValidationErrors(TestCase):
 							{
 								'code': 'does_not_exist',
 								'model': 'Animal',
-								'values': [555],
+								'values': [nonexistent],
 								MAYBE('message'): ANY(str),
 							}
 						]
@@ -157,7 +160,7 @@ class TestValidationErrors(TestCase):
 
 
 	def test_multiput_reverse_fk_containsnull(self):
-		model_data = { 'data': [ {'id': -1, 'name': 'foo', 'animals': [1, None]} ] }
+		model_data = { 'data': [ {'id': -1, 'name': 'foo', 'animals': [self.animal.id, None]} ] }
 
 		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 418)

@@ -19,8 +19,9 @@ class TestValidationErrors(TestCase):
 		self.client = Client()
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
-		a = Animal(id=1, name='Test animal so FKs work')
+		a = Animal(name='Test animal so FKs work')
 		a.save()
+		self.animal_id = a.id
 
 
 
@@ -89,7 +90,7 @@ class TestValidationErrors(TestCase):
 
 
 	def test_post_validate_blank_null_getsblank(self):
-		model_data = { 'animal': 1, 'description': '' }
+		model_data = { 'animal': self.animal_id, 'description': '' }
 
 		response = self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
@@ -97,7 +98,7 @@ class TestValidationErrors(TestCase):
 
 
 	def test_post_validate_blank_null_getsnull(self):
-		model_data = { 'animal': 1, 'description': None }
+		model_data = { 'animal': self.animal_id, 'description': None }
 
 		response = self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
@@ -105,7 +106,7 @@ class TestValidationErrors(TestCase):
 
 
 	def test_post_validate_blank_notnull_getsblank(self):
-		model_data = { 'animal': 1, 'nickname': '' }
+		model_data = { 'animal': self.animal_id, 'nickname': '' }
 
 		response = self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
@@ -113,7 +114,7 @@ class TestValidationErrors(TestCase):
 
 
 	def test_post_validate_blank_notnull_getsnull(self):
-		model_data = { 'animal': 1, 'nickname': None }
+		model_data = { 'animal': self.animal_id, 'nickname': None }
 
 		response = self.client.post('/costume/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 400)
@@ -122,7 +123,7 @@ class TestValidationErrors(TestCase):
 		assert_json(returned_data, {
 			'errors': {
 				'costume': {
-					'1': {
+					list(returned_data['errors']['costume'].keys())[0]: {
 						'nickname': [
 							{'code': 'null', MAYBE('message'): ANY(str)}
 						]

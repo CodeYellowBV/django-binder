@@ -32,15 +32,23 @@ class TestOrderBy(TestCase):
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
 
-		Animal(id=1, name='a1').save()
-		Animal(id=2, name='a2').save()
-		Animal(id=3, name='a3').save()
-		Animal(id=4, name='a4').save()
+		self.a1 = Animal(name='a1')
+		self.a1.save()
+		self.a2 = Animal(name='a2')
+		self.a2.save()
+		self.a3 = Animal(name='a3')
+		self.a3.save()
+		self.a4 = Animal(name='a4')
+		self.a4.save()
 
-		Costume(animal_id=2, nickname='Foo', description='Bar').save()
-		Costume(animal_id=3, nickname='Bar', description='Bar').save()
-		Costume(animal_id=1, nickname='Foo', description='Foo').save()
-		Costume(animal_id=4, nickname='Bar', description='Foo').save()
+		self.c1 = Costume(animal_id=self.a2.id, nickname='Foo', description='Bar')
+		self.c1.save()
+		self.c2 = Costume(animal_id=self.a3.id, nickname='Bar', description='Bar')
+		self.c2.save()
+		self.c3 = Costume(animal_id=self.a1.id, nickname='Foo', description='Foo')
+		self.c3.save()
+		self.c4 = Costume(animal_id=self.a4.id, nickname='Bar', description='Foo')
+		self.c4.save()
 
 
 
@@ -51,7 +59,7 @@ class TestOrderBy(TestCase):
 		returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
-		self.assertEqual(data, [1, 2, 3, 4])
+		self.assertEqual(data, [self.a1.pk, self.a2.pk, self.a3.pk, self.a4.pk])
 
 
 
@@ -75,7 +83,7 @@ class TestOrderBy(TestCase):
 		returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
-		self.assertEqual(data, [3, 4, 2, 1])
+		self.assertEqual(data, [self.a3.pk, self.a4.pk, self.a2.pk, self.a1.pk])
 
 
 
@@ -86,7 +94,7 @@ class TestOrderBy(TestCase):
 		returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
-		self.assertEqual(data, [2, 3, 1, 4])
+		self.assertEqual(data, [self.a2.pk, self.a3.pk, self.a1.pk, self.a4.pk])
 
 
 
@@ -97,7 +105,7 @@ class TestOrderBy(TestCase):
 		returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
-		self.assertEqual(data, [3, 4, 1, 2])
+		self.assertEqual(data, [self.a3.pk, self.a4.pk, self.a1.pk, self.a2.pk])
 
 
 
@@ -108,7 +116,7 @@ class TestOrderBy(TestCase):
 		returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
-		self.assertEqual(data, [1, 4, 2, 3])
+		self.assertEqual(data, [self.a1.pk, self.a4.pk, self.a2.pk, self.a3.pk])
 
 
 
@@ -120,7 +128,7 @@ class TestOrderBy(TestCase):
 			returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
-		self.assertEqual(data, [4, 3, 2, 1])
+		self.assertEqual(data, [self.a4.pk, self.a3.pk, self.a2.pk, self.a1.pk])
 
 
 
@@ -132,7 +140,7 @@ class TestOrderBy(TestCase):
 			returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
-		self.assertEqual(data, [4, 1, 3, 2])
+		self.assertEqual(data, [self.a4.pk, self.a1.pk, self.a3.pk, self.a2.pk])
 
 
 
@@ -146,7 +154,7 @@ class TestOrderBy(TestCase):
 			returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
-		self.assertEqual(data, [1, 4, 2, 3])
+		self.assertEqual(data, [self.a1.pk, self.a4.pk, self.a2.pk, self.a3.pk])
 
 
 
@@ -157,7 +165,7 @@ class TestOrderBy(TestCase):
 		returned_data = jsonloads(response.content)
 
 		data = [x['id'] for x in returned_data['data']]
-		self.assertEqual(data, [4, 3, 2, 1])
+		self.assertEqual(data, [self.a4.pk, self.a3.pk, self.a2.pk, self.a1.pk])
 
 
 
@@ -165,16 +173,16 @@ class TestOrderBy(TestCase):
 		z = Zoo(name='hoi')
 		z.save()
 
-		a9 = Animal.objects.create(zoo_id=1, name='a9').id
-		a0 = Animal.objects.create(zoo_id=1, name='a0').id
-		a2 = Animal.objects.create(zoo_id=1, name='a2').id
-		a6 = Animal.objects.create(zoo_id=1, name='a6').id
-		a7 = Animal.objects.create(zoo_id=1, name='a7').id
-		a5 = Animal.objects.create(zoo_id=1, name='a5').id
-		a4 = Animal.objects.create(zoo_id=1, name='a4').id
-		a3 = Animal.objects.create(zoo_id=1, name='a3').id
-		a8 = Animal.objects.create(zoo_id=1, name='a8').id
-		a1 = Animal.objects.create(zoo_id=1, name='a1').id
+		a9 = Animal.objects.create(zoo_id=z.id, name='a9').id
+		a0 = Animal.objects.create(zoo_id=z.id, name='a0').id
+		a2 = Animal.objects.create(zoo_id=z.id, name='a2').id
+		a6 = Animal.objects.create(zoo_id=z.id, name='a6').id
+		a7 = Animal.objects.create(zoo_id=z.id, name='a7').id
+		a5 = Animal.objects.create(zoo_id=z.id, name='a5').id
+		a4 = Animal.objects.create(zoo_id=z.id, name='a4').id
+		a3 = Animal.objects.create(zoo_id=z.id, name='a3').id
+		a8 = Animal.objects.create(zoo_id=z.id, name='a8').id
+		a1 = Animal.objects.create(zoo_id=z.id, name='a1').id
 
 		with CustomOrdering(Animal, 'name'):
 			response = self.client.get('/zoo/{}/'.format(z.id))
