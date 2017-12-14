@@ -98,6 +98,36 @@ class PostgresFieldsTest(TestCase):
 		self.assertEqual(0, len(result['data']))
 
 
+	def test_get_collection_arrayfield_overlap_filtering(self):
+		response = self.client.get('/feeding_schedule/', data={'.foods:overlap': 'corn'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+		self.assertEqual(self.rr_feeding.id, result['data'][0]['id'])
+
+		response = self.client.get('/feeding_schedule/', data={'.foods:overlap': 'corn,meat'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
+
+
+		response = self.client.get('/feeding_schedule/', data={'.foods:overlap': 'corn,bricks'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+		self.assertEqual(self.rr_feeding.id, result['data'][0]['id'])
+
+
+		response = self.client.get('/feeding_schedule/', data={'.foods:overlap': ''})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(0, len(result['data']))
+
+
 	def test_get_collection_arrayfield_contains_filtering(self):
 		response = self.client.get('/feeding_schedule/', data={'.foods:contains': 'corn,bugs'})
 		self.assertEqual(response.status_code, 200)
