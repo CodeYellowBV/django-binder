@@ -250,7 +250,7 @@ class ModelView(View):
 					else:
 						f[field_cls] = field_filter_cls
 
-			self.field_filters = f
+			self._field_filters = f
 
 		return f.get(field_class)
 
