@@ -60,6 +60,12 @@ class ChoiceEnum(object):
 				return k
 		raise ValueError()
 
+	def field(self):
+		return models.CharField(
+			choices=self.choices(),
+			max_length=max(len(s) for s in self.items.values()),
+		)
+
 
 
 class FieldFilter(object):
