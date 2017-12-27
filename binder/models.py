@@ -63,7 +63,7 @@ class ChoiceEnum(object):
 	def __call__(self, **kwargs):
 		return models.CharField(
 			choices=self.choices(),
-			max_length=max(len(s) for s in self.items.values()),
+			max_length=max(map(len, self.items.values())),
 			**kwargs
 		)
 
