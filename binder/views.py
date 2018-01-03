@@ -863,11 +863,13 @@ class ModelView(View):
 				remote_obj = obj._meta.get_field(field).related_model.objects.get(pk=value[0])
 				setattr(obj, field, remote_obj)
 				remote_obj.save()
-			elif field in [f.name for f in self._get_reverse_relations()]:
+			elif any(f.name == field for f in self._get_reverse_relations()):
 				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
 				if any(v for v in value if v < 0):
 					continue
-				setattr(obj, field, value)
+				getattr(obj, field).set(value)
+			elif any(f.name == field for f in self.model._meta.many_to_many):
+				getattr(obj, field).set(value)
 			else:
 				setattr(obj, field, value)
 
