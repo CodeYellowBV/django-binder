@@ -368,7 +368,7 @@ class ModelViewBasicsTest(TestCase):
 		gaia.full_clean()
 		gaia.save()
 
-		fabbby = Caretaker(name='fabbby')
+		fabbby = Caretaker(name='fabbby', ssn='1234')
 		fabbby.full_clean()
 		fabbby.save()
 
