@@ -482,6 +482,7 @@ class ModelView(View):
 		rel_ids = list(self.model.objects.filter(pk__in=pks).values_list(head + '__pk', flat=True))
 
 		view_class = self.router.model_view(next)
+		view_class.router = self.router
 		rel_ids = view_class()._filter_relation(next, rel_ids, where_map.get(head, None))
 
 		if not tail:
@@ -509,6 +510,7 @@ class ModelView(View):
 		qs = M.objects.filter(pk__in=ids)
 		for where in wheres:
 			field, val = where.split('=')
+
 			qs = self._parse_filter(qs, field, val)
 
 		return qs.values_list('pk', flat=True)
@@ -517,11 +519,20 @@ class ModelView(View):
 	def _parse_filter(self, queryset, field, value, partial=''):
 		head, *tail = field.split('.')
 
+		view = self.router.model_view(self.model)
+		# Take the real field part form the field
+		real_field = field.split(':')[0] if ':' in field else field
+		# Check for all the wheres, if the field we are filtering on is hidden. If so, we ignore the filtering. This
+		# makes sure that filtering can't be used for leaking data
+		if real_field in view.hidden_fields:
+			return queryset
+
 		if tail:
 			next = self._follow_related(head)[0].model
 			view = self.router.model_view(next)()
 			# {router-view-instance}
 			view.router = self.router
+
 			return view._parse_filter(queryset, '.'.join(tail), value, partial + head + '__')
 
 		invert = False

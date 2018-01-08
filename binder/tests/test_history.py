@@ -84,7 +84,7 @@ class HistoryTest(TestCase):
 
 
 	def test_model_with_related_history_model_creates_changes_on_the_same_changeset(self):
-		mickey = Caretaker(name='Mickey')
+		mickey = Caretaker(name='Mickey', ssn='mouse_1234')
 		mickey.full_clean()
 		mickey.save()
 		pluto = Animal(name='Pluto')
