@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
-from .testapp.models import Animal, Zoo, ZooEmployee
+from .testapp.models import Animal, Zoo, ZooEmployee, ContactPerson
 from .compare import assert_json, MAYBE, ANY
 
 
@@ -400,3 +400,50 @@ class MultiPutTest(TestCase):
 			'code': 'ValidationError',
 			MAYBE('debug'): ANY(),
 		})
+
+
+	# This is a regression test for a deprecation issue that was
+	# removed in Django 2.0: now you need to use .set on m2m
+	# relations when updating the reference list.
+	# This apparently only happened in the multi-put, but still....
+	def test_update_model_with_m2m_field_causes_no_error(self):
+		artis = Zoo(name='Artis')
+		artis.full_clean()
+		artis.save()
+
+		contact1 = ContactPerson(name='cp1')
+		contact1.full_clean()
+		contact1.save()
+		contact1.zoos.add(artis)
+
+		contact2 = ContactPerson(name='cp2')
+		contact2.full_clean()
+		contact2.save()
+		contact2.zoos.add(artis)
+
+		model_data = {
+			'data': [{
+				'id': artis.id,
+				'contacts': [contact1.pk],
+			}]
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
+
+		artis.refresh_from_db()
+		self.assertSetEqual({contact1.pk}, {c.pk for c in artis.contacts.all()})
+
+		# Now from the other end
+		model_data = {
+			'data': [{
+				'id': contact1.id,
+				'zoos': [],
+			}]
+		}
+		response = self.client.put('/contact_person/', data=json.dumps(model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
+
+		contact1.refresh_from_db()
+		self.assertSetEqual(set(), {c.pk for c in contact1.zoos.all()})

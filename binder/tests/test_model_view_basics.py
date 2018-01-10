@@ -4,7 +4,7 @@ import json
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-from .testapp.models import Animal, Costume, Zoo, Caretaker, Gate
+from .testapp.models import Animal, Costume, Zoo, Caretaker, Gate, ContactPerson
 
 class ModelViewBasicsTest(TestCase):
 	def setUp(self):
@@ -520,6 +520,61 @@ class ModelViewBasicsTest(TestCase):
 		artis = Zoo.objects.get(id=returned_data.get('id'))
 		self.assertEqual('Artis', artis.name)
 		self.assertSetEqual(set([scooby.id, scrappy.id]), set([a.id for a in artis.animals.all()]))
+
+
+	# This is a regression test for a deprecation issue that was
+	# removed in Django 2.0: now you need to use .set on m2m
+	# relations when updating the reference list.
+	# This apparently only happened in the multi-put, but still....
+	def test_put_update_model_with_m2m_field_causes_no_error(self):
+		artis = Zoo(name='Artis')
+		artis.full_clean()
+		artis.save()
+
+		contact1 = ContactPerson(name='cp1')
+		contact1.full_clean()
+		contact1.save()
+		contact1.zoos.add(artis)
+
+		contact2 = ContactPerson(name='cp2')
+		contact2.full_clean()
+		contact2.save()
+		contact2.zoos.add(artis)
+
+		model_data = {
+			'id': artis.id,
+			'contacts': [contact1.pk],
+		}
+		response = self.client.put('/zoo/{}/'.format(artis.pk), data=json.dumps(model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		self.assertIsNotNone(returned_data.get('id'))
+		self.assertEqual('Artis', returned_data.get('name'))
+		self.assertSetEqual(set([contact1.pk]), set(returned_data.get('contacts')))
+
+		artis = Zoo.objects.get(id=returned_data.get('id'))
+		self.assertEqual('Artis', artis.name)
+		self.assertSetEqual(set([contact1.pk]), set([c.pk for c in artis.contacts.all()]))
+
+		# Now from the other end
+		model_data = {
+			'id': contact1.id,
+			'zoos': [],
+		}
+		response = self.client.put('/contact_person/{}/'.format(contact1.pk), data=json.dumps(model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		self.assertIsNotNone(returned_data.get('id'))
+		self.assertEqual('cp1', returned_data.get('name'))
+		self.assertSetEqual(set([]), set(returned_data.get('zoos')))
+
+		contact1 = ContactPerson.objects.get(id=returned_data.get('id'))
+		self.assertEqual('cp1', contact1.name)
+		self.assertSetEqual(set([]), set([c.pk for c in contact1.zoos.all()]))
 
 
 	def test_post_put_respect_with_clause(self):
