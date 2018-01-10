@@ -542,6 +542,8 @@ class ModelView(View):
 
 	def _filter_field(self, queryset, field_name, qualifier, value, invert, partial=''):
 		try:
+			if field_name in self.hidden_fields:
+				raise models.fields.FieldDoesNotExist()
 			field = self.model._meta.get_field(field_name)
 		except models.fields.FieldDoesNotExist:
 			raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, field_name))
