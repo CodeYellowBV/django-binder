@@ -43,10 +43,10 @@ class HiddenFieldTest(TestCase):
 		self.assertNotIn('ssn', res['data'])
 
 
-	def test_filtering_on_ssn_is_ignored(self):
+	def test_filtering_on_ssn_throws_request_error(self):
 		"""
-		Make sure that filtering on hidden fields is ignored, otherwise it may leak information stored in
-		hidden fields by doing a smart lookup
+		Make sure that filtering on hidden fields throws an exception that filter does not exist,
+		otherwise it may leak information stored in hidden fields by doing a smart lookup
 		"""
 		res = self.client.get('/caretaker/', data={})
 		self.assertEqual(res.status_code, 200)
@@ -56,23 +56,25 @@ class HiddenFieldTest(TestCase):
 		self.assertEqual(2, res['meta']['total_records'])
 		self.assertEqual(2, len(res['data']))
 
+
 		# A normal where is filter
 		res = self.client.get('/caretaker/', data={
+			'.id': -4,
 			'.ssn': 1234
 		})
 
-		self.assertEqual(res.status_code, 200)
+		self.assertEqual(res.status_code, 418)
 		res = jsonloads(res.content)
-		# Filtering should be ignored,
-		self.assertEqual(2, res['meta']['total_records'])
-		self.assertEqual(2, len(res['data']))
+
+		# Filtering should throw an exception
+		self.assertEqual('RequestError', res['code'])
 
 		# A more complicated filter
 		res = self.client.get('/caretaker/', data={
-			'ssn:startswith': '1234'
+			'.ssn:startswith': '1234'
 		})
-		self.assertEqual(res.status_code, 200)
+		self.assertEqual(res.status_code, 418)
 		res = jsonloads(res.content)
-		# Filtering should be ignored,
-		self.assertEqual(2, res['meta']['total_records'])
-		self.assertEqual(2, len(res['data']))
+
+		# Filtering should throw an exception
+		self.assertEqual('RequestError', res['code'])
