@@ -3,10 +3,14 @@ language: python
 python:
   - "3.4"
   - "3.5"
+  - "3.6"
 cache:
   pip: true
+env:
+  - DJANGO_VERSION=1.11.9
+  - DJANGO_VERSION=2.0.1
 install:
-    - ./setup.py install
+    - pip install -q psycopg2 Pillow django-request-id requests django==$DJANGO_VERSION
     - pip install flake8 codecov coverage
 script:
     - flake8 binder

@@ -36,7 +36,7 @@ setup(
 		'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
 	],
 	install_requires=[
-		'Django >= 1.10',
+		'Django >= 1.11',
 		'Pillow >= 3.2.0',
 		'django-request-id >= 1.0.0',
 		'requests >= 2.13.0',
