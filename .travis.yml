@@ -1,7 +1,6 @@
 sudo: false
 language: python
 python:
-  - "3.4"
   - "3.5"
   - "3.6"
 cache:
@@ -20,6 +19,6 @@ before_script:
 services:
   - postgresql
 addons:
-  postgresql: "9.5"
+  postgresql: "9.6"
 after_success:
     - codecov
