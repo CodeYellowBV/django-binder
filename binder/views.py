@@ -9,6 +9,7 @@ import mimetypes
 import functools
 from collections import defaultdict, namedtuple
 from PIL import Image
+from inspect import getmro
 
 import django
 from django.views.generic import View
@@ -22,7 +23,7 @@ from django.db import transaction
 
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
-from .models import FieldFilter
+from .models import FieldFilter, BinderModel
 from .json import JsonResponse, jsonloads
 
 
@@ -73,6 +74,11 @@ def image_transpose_exif(im):
 	except KeyError:
 		return im
 
+
+def getsubclasses(cls):
+	for subcls in cls.__subclasses__():
+		yield subcls
+		yield from getsubclasses(subcls)
 
 
 class ModelView(View):
@@ -1093,6 +1099,9 @@ class ModelView(View):
 					for rid in values[field.name]:
 						if (field.related_model, rid) in objects:
 							objects[(field.related_model, rid)][field.remote_field.name] = mid
+						for submodel in getsubclasses(field.related_model):
+							if (submodel, rid) in objects:
+								objects[(submodel, rid)][field.remote_field.name] = mid
 		return objects
 
 
@@ -1202,6 +1211,12 @@ class ModelView(View):
 				validation_errors.append(e)
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
+				for base in getmro(model)[1:]:
+					if not (
+						hasattr(base, 'Meta') and
+						getattr(base.Meta, 'abstract', False)
+					) and BinderModel in getmro(base)[1:]:
+						new_id_map[(base, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))
 
 		if validation_errors:
