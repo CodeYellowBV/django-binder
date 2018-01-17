@@ -1,8 +1,6 @@
 import json
 
 from django.test import TestCase, Client
-
-from binder.json import jsonloads
 from django.contrib.auth.models import User
 
 from .testapp.models import Zoo
