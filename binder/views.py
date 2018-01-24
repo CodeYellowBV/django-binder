@@ -1215,7 +1215,7 @@ class ModelView(View):
 					if not (
 						hasattr(base, 'Meta') and
 						getattr(base.Meta, 'abstract', False)
-					) and BinderModel in getmro(base)[1:]:
+					) and isinstance(base, BinderModel):
 						new_id_map[(base, oid)] = obj.id
 				logger.info('Saved as id {}'.format(obj.id))
 
