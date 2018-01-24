@@ -7,5 +7,6 @@ from .contact_person import ContactPerson
 from .costume import Costume
 from .feeding_schedule import FeedingSchedule
 from .gate import Gate
+from .lion import Lion
 from .zoo import Zoo
 from .zoo_employee import ZooEmployee
