@@ -1343,7 +1343,23 @@ class ModelView(View):
 			if undelete:  # Should never happen
 				raise BinderMethodNotAllowed()
 			else:
-				obj.delete()
+				try:
+					obj.delete()
+				except models.ProtectedError as e:
+					protected_objects = defaultdict(list)
+					for prot in e.protected_objects:
+						protected_objects[self.router.model_view(prot.__class__)()._model_name()] += [prot.id]
+					raise BinderValidationError({
+						self._model_name(): {
+							obj.pk: {
+								'id': [{
+									'code': 'protected',
+									'message': 'Could not delete object {}'.format(obj.id),
+									'objects': protected_objects,
+								}]
+							}
+						}
+					})
 				return
 
 		obj.deleted = not undelete
