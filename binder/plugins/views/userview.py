@@ -540,8 +540,8 @@ class UserViewMixIn:
 		"""
 		pass
 
-	@staticmethod
-	def _send_activation_email(request, user):
+	@abstractmethod
+	def _send_activation_email(self, request, user):
 		"""
 		Callback to send a mail notifying that the user is activated.
 		"""
