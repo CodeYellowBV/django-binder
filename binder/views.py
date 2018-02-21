@@ -750,7 +750,7 @@ class ModelView(View):
 	# Determine if the field needs an extra nullability check.
 	# Expects the field object (not the field name)
 	def field_needs_nullability_check(self, field):
-		if isinstance(field, (models.CharField, models.TextField)):
+		if isinstance(field, (models.CharField, models.TextField, models.BooleanField)):
 			if field.blank and not field.null:
 				return True
 
