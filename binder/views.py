@@ -1,4 +1,5 @@
 import logging
+import warnings
 import time
 import io
 import inspect
@@ -355,7 +356,10 @@ class ModelView(View):
 	# Fetches the object specified by <id>, and returns a dictionary.
 	# Includes a list of ids for all m2m fields (including reverse relations).
 	def _get_obj(self, id, request):
-		return self._get_objs(self.model.objects.filter(pk=id), request=request)[0]
+		warnings.warn(DeprecationWarning('ModelView._get_obj() is deprecated, harmful, and will be removed.'))
+		return self._get_objs(self.get_queryset(request).filter(pk=id), request=request)[0]
+
+
 
 	# Split ['animals(name:contains=lion)']
 	# in ['animals': ['name:contains=lion']]
@@ -884,7 +888,8 @@ class ModelView(View):
 		if validation_errors:
 			raise sum(validation_errors, None)
 
-		data = self._get_obj(obj.pk, request=request)
+		# Permission checks are done at this point, so we can avoid get_queryset()
+		data = self._get_objs(self.model.objects.filter(pk=obj.pk), request=request)[0]
 		data['_meta'] = {'ignored_fields': ignored_fields}
 		return data
 
@@ -1253,8 +1258,9 @@ class ModelView(View):
 		values = jsonloads(request.body)
 
 		try:
-			obj = self.model.objects.select_for_update().get(pk=int(pk))
-			old = self._get_obj(int(pk), request)
+			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
+			# Permission checks are done at this point, so we can avoid get_queryset()
+			old = self._get_objs(self.model.objects.filter(pk=int(pk)), request)[0]
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
@@ -1322,7 +1328,7 @@ class ModelView(View):
 			pass
 
 		try:
-			obj = self.model.objects.select_for_update().get(pk=int(pk))
+			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
