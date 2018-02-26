@@ -1,5 +1,4 @@
 import logging
-import warnings
 import time
 import io
 import inspect
