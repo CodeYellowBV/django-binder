@@ -89,6 +89,26 @@ class DeferredM2M:
 
 
 
+# History context manager. Use this.
+class atomic:
+	def __init__(self, source=None, user=None, uuid=None):
+		self.source = source
+		self.user = user
+		self.uuid = uuid
+
+	def __enter__(self):
+		start(self.source, self.user, self.uuid)
+
+	def __exit__(self, etype, value, traceback):
+		if etype is None:
+			commit()
+			return True
+		else:
+			abort()
+			return False # reraise
+
+
+
 def start(source=None, user=None, uuid=None):
 	if source is None:
 		raise ValueError('source may not be None')

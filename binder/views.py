@@ -170,7 +170,6 @@ class ModelView(View):
 	#### XXX WARNING XXX
 	def dispatch(self, request, *args, **kwargs):
 		self.router = kwargs.pop('router')
-		history.start(source='http', user=request.user, uuid=request.request_id)
 		time_start = time.time()
 		logger.info('request dispatch; verb={}, user={}/{}, path={}'.
 				format(
@@ -206,7 +205,7 @@ class ModelView(View):
 		response = None
 		try:
 			#### START TRANSACTION
-			with transaction.atomic():
+			with transaction.atomic(), history.atomic(source='http', user=request.user, uuid=request.request_id):
 				if not kwargs.pop('unauthenticated', False) and not request.user.is_authenticated:
 					raise BinderNotAuthenticated()
 
@@ -219,18 +218,10 @@ class ModelView(View):
 					response = self.view_history(request, *args, **kwargs)
 				else:
 					response = super().dispatch(request, *args, **kwargs)
-
-				history.commit()
 			#### END TRANSACTION
 		except BinderException as e:
-			# Make sure we abort the history transaction first. Response parsing
-			# might fail, which then doesn't abort the history...
-			history.abort()
 			e.log()
 			response = e.response(request=request)
-		except BaseException:
-			history.abort()
-			raise
 
 		logger.info('request response; status={} time={}ms bytes={} queries={}'.
 				format(
