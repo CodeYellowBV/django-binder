@@ -483,7 +483,7 @@ class ModelView(View):
 
 		# _get_with doesn't fully recurse the relation tree
 		# but it lags behind 1 recursion
-		rel_ids = list(self.model.objects.filter(pk__in=pks).values_list(head + '__pk', flat=True))
+		rel_ids = self.model.objects.filter(pk__in=pks).values_list(head + '__pk', flat=True)
 
 		view_class = self.router.model_view(next)
 		rel_ids = view_class()._filter_relation(next, rel_ids, where_map.get(head, None))
@@ -499,8 +499,9 @@ class ModelView(View):
 			return view._get_with('.'.join(tail), rel_ids, request, wm_scoped)
 
 
-	# We have a set of ids where model M should be scoped on,
-	# but also a set of wheres where model M should further be scoped on
+	# We have a queryset resulting in a set of ids where model M
+	# should be scoped on, but also a set of wheres where model M
+	# should further be scoped on.
 	#
 	# Returns a further scoped list of ids
 	def _filter_relation(self, M, ids, where_map):
