@@ -1,5 +1,3 @@
-import re
-
 from django.test import TestCase
 from binder.models import BinderModel
 from binder.router import Router, Route
