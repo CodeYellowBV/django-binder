@@ -152,7 +152,7 @@ class PermissionView(ModelView):
 
 	def dispatch_file_field(self, request, pk=None, file_field=None):
 		try:
-			obj = self.get_queryset(request).get(pk=self.route_pk_parser(pk))
+			obj = self.get_queryset(request).get(pk=self.pk_parser(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 

@@ -25,7 +25,35 @@ from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExc
 from . import history
 from .models import FieldFilter, BinderModel
 from .json import JsonResponse, jsonloads
+from .classproperty import classproperty
 
+
+def resolve_regex(field):
+	if isinstance(field, (models.IntegerField, models.AutoField)):
+		return r'\d+'
+	elif isinstance(field, models.SlugField):
+		return r'[-a-zA-Z0-9_]+'
+	elif isinstance(field, models.ForeignKey) and len(field.to_fields) == 1:
+		return resolve_regex(field.target_field)
+	else:
+		raise ValueError(
+			'can\'t infer regex for field of type {}'
+			.format(field.__class__.__name__)
+		)
+
+
+def resolve_parser(field):
+	if isinstance(field, (models.IntegerField, models.AutoField)):
+		return int
+	elif isinstance(field, models.SlugField):
+		return str
+	elif isinstance(field, models.ForeignKey) and len(field.to_fields) == 1:
+		return resolve_parser(field.target_field)
+	else:
+		raise ValueError(
+			'can\'t infer parser for field of type {}'
+			.format(field.__class__.__name__)
+		)
 
 
 # Haha kill me now
@@ -97,10 +125,10 @@ class ModelView(View):
 	route = True
 
 	# The regex used to match the pk for detail endpoints
-	route_pk_re = r'\d+'
+	route_pk_regex = None
 
 	# The parser used to transform the str of the matched pk to the right value
-	route_pk_parser = int
+	route_pk_parser = None
 
 	# What regular fields and FKs show up in a GET is controlled by
 	# shown_fields and hidden_fields. If shown_fields is a list of fields,
@@ -167,6 +195,28 @@ class ModelView(View):
 	# A dict will KeyError if you don't specify all ImageFields. Or use:
 	# collections.defaultdict(lambda: 512, foo=1024)
 	image_resize_threshold = 512
+
+
+	@classproperty
+	def pk_regex(cls):
+		"""
+		The regex that the view checks for when trying to match a pk
+		for a detail view
+		"""
+		if cls.route_pk_regex is None:
+			cls.route_pk_regex = resolve_regex(cls.model._meta.pk)
+		return cls.route_pk_regex
+
+
+	@classproperty
+	def pk_parser(cls):
+		"""
+		The method that the view uses to transform a matched str for a
+		pk to an actual pk value
+		"""
+		if cls.route_pk_parser is None:
+			cls.route_pk_parser = resolve_parser(cls.model._meta.pk)
+		return cls.route_pk_parser
 
 
 	#### XXX WARNING XXX
@@ -700,7 +750,7 @@ class ModelView(View):
 		meta = {}
 		queryset = self.get_queryset(request)
 		if pk:
-			queryset = queryset.filter(pk=self.route_pk_parser(pk))
+			queryset = queryset.filter(pk=self.pk_parser(pk))
 
 		# No parameter repetition. Should be extended to .params too after filters have been refactored.
 		for k, v in request.GET.lists():
@@ -1259,9 +1309,9 @@ class ModelView(View):
 		values = jsonloads(request.body)
 
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=self.route_pk_parser(pk))
+			obj = self.get_queryset(request).select_for_update().get(pk=self.pk_parser(pk))
 			# Permission checks are done at this point, so we can avoid get_queryset()
-			old = self._get_objs(self.model.objects.filter(pk=self.route_pk_parser(pk)), request)[0]
+			old = self._get_objs(self.model.objects.filter(pk=self.pk_parser(pk)), request)[0]
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
@@ -1329,7 +1379,7 @@ class ModelView(View):
 			pass
 
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=self.route_pk_parser(pk))
+			obj = self.get_queryset(request).select_for_update().get(pk=self.pk_parser(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
@@ -1383,7 +1433,7 @@ class ModelView(View):
 			pk = obj.pk
 		else:
 			try:
-				obj = self.get_queryset(request).get(pk=self.route_pk_parser(pk))
+				obj = self.get_queryset(request).get(pk=self.pk_parser(pk))
 			except ObjectDoesNotExist:
 				raise BinderNotFound()
 
