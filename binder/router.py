@@ -153,7 +153,7 @@ class Router(object):
 						urls.append(django.conf.urls.url(r'^{}/(?P<pk>{})/{}/{}$'.format(route.route, view.pk_regex, route_name, extra),
 								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
 					if hasattr(method, 'list_route'):
-						urls.append(django.conf.urls.url(r'^{}/{}/{}$'.format(route.route, view.pk_regex, route_name, extra),
+						urls.append(django.conf.urls.url(r'^{}/{}/{}$'.format(route.route, route_name, extra),
 								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
 
 		return urls
