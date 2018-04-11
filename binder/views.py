@@ -33,7 +33,7 @@ def resolve_regex(field):
 		return r'\d+'
 	elif isinstance(field, models.SlugField):
 		return r'[-a-zA-Z0-9_]+'
-	elif isinstance(field, models.ForeignKey) and len(field.to_fields) == 1:
+	elif isinstance(field, models.ForeignKey):
 		return resolve_regex(field.target_field)
 	else:
 		raise ValueError(
@@ -47,7 +47,7 @@ def resolve_parser(field):
 		return int
 	elif isinstance(field, models.SlugField):
 		return str
-	elif isinstance(field, models.ForeignKey) and len(field.to_fields) == 1:
+	elif isinstance(field, models.ForeignKey):
 		return resolve_parser(field.target_field)
 	else:
 		raise ValueError(
