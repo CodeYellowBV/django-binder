@@ -9,3 +9,4 @@ venv
 *.pyc
 .tox/
 .vscode/
+**/*.swp

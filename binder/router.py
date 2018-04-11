@@ -128,16 +128,16 @@ class Router(object):
 			if route.list_endpoint:
 				urls.append(django.conf.urls.url(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 			if route.detail_endpoint:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), {'router': self}, name=name))
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>{})/$'.format(route.route, view.pk_regex), view.as_view(), {'router': self}, name=name))
 
 			# History views
 			if view.model and hasattr(view.model, 'Binder') and view.model.Binder.history:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/$'.format(route.route), view.as_view(), {'history': 'normal', 'router': self}, name=name))
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/debug/$'.format(route.route), view.as_view(), {'history': 'debug', 'router': self}, name=name))
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>{})/history/$'.format(route.route, view.pk_regex), view.as_view(), {'history': 'normal', 'router': self}, name=name))
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>{})/history/debug/$'.format(route.route, view.pk_regex), view.as_view(), {'history': 'debug', 'router': self}, name=name))
 
 			# File field endpoints
 			for ff in view.file_fields:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/{}/$'.format(route.route, ff),
+				urls.append(django.conf.urls.url(r'^{}/(?P<pk>{})/{}/$'.format(route.route, view.pk_regex, ff),
 						view.as_view(), {'file_field': ff, 'router': self}, name='{}.{}'.format(name, ff)))
 
 			# Custom endpoints
@@ -150,7 +150,7 @@ class Router(object):
 					if method.unauthenticated:
 						kwargs['unauthenticated'] = True
 					if hasattr(method, 'detail_route'):
-						urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/{}/{}$'.format(route.route, route_name, extra),
+						urls.append(django.conf.urls.url(r'^{}/(?P<pk>{})/{}/{}$'.format(route.route, view.pk_regex, route_name, extra),
 								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
 					if hasattr(method, 'list_route'):
 						urls.append(django.conf.urls.url(r'^{}/{}/{}$'.format(route.route, route_name, extra),
