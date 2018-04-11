@@ -1,3 +1,5 @@
+import re
+
 from django.test import TestCase
 from binder.models import BinderModel
 from binder.router import Router, Route
@@ -121,3 +123,38 @@ class RouterTest(TestCase):
 
 		self.assertTrue(is_valid_path('/bar/', urls_module))
 		self.assertFalse(is_valid_path('/bar/1/', urls_module))
+
+
+	def test_register_view_custom_pk_re(self):
+
+		class ParentView(ModelView):
+			pass
+
+		class FooView(ParentView):
+			model = FooModel
+			route = 'foo'
+			route_pk_re = r'foo|bar|baz'
+
+		r = Router()
+		r.register(ParentView)
+		urls_module.urlpatterns = [url(r'^', include(r.urls))]
+
+		self.assertTrue(is_valid_path('/foo/', urls_module))
+
+		self.assertTrue(is_valid_path('/foo/foo/', urls_module))
+		self.assertTrue(is_valid_path('/foo/bar/', urls_module))
+		self.assertTrue(is_valid_path('/foo/baz/', urls_module))
+
+		self.assertFalse(is_valid_path('/foo/1/', urls_module))
+		self.assertFalse(is_valid_path('/foo/12345/', urls_module))
+		self.assertFalse(is_valid_path('/foo/blaat/', urls_module))
+
+		self.assertFalse(is_valid_path('/bar/', urls_module))
+
+		self.assertFalse(is_valid_path('/bar/foo/', urls_module))
+		self.assertFalse(is_valid_path('/bar/bar/', urls_module))
+		self.assertFalse(is_valid_path('/bar/baz/', urls_module))
+
+		self.assertFalse(is_valid_path('/bar/1/', urls_module))
+		self.assertFalse(is_valid_path('/bar/12345/', urls_module))
+		self.assertFalse(is_valid_path('/bar/blaat/', urls_module))

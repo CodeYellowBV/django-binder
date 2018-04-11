@@ -96,6 +96,12 @@ class ModelView(View):
 	# If None, doesn't add a route.
 	route = True
 
+	# The regex used to match the pk for detail endpoints
+	route_pk_re = r'\d+'
+
+	# The parser used to transform the str of the matched pk to the right value
+	route_pk_parser = int
+
 	# What regular fields and FKs show up in a GET is controlled by
 	# shown_fields and hidden_fields. If shown_fields is a list of fields,
 	# only those fields are included in a GET. If shown_fields is None, all
@@ -694,7 +700,7 @@ class ModelView(View):
 		meta = {}
 		queryset = self.get_queryset(request)
 		if pk:
-			queryset = queryset.filter(pk=int(pk))
+			queryset = queryset.filter(pk=self.route_pk_parser(pk))
 
 		# No parameter repetition. Should be extended to .params too after filters have been refactored.
 		for k, v in request.GET.lists():
@@ -1253,9 +1259,9 @@ class ModelView(View):
 		values = jsonloads(request.body)
 
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
+			obj = self.get_queryset(request).select_for_update().get(pk=self.route_pk_parser(pk))
 			# Permission checks are done at this point, so we can avoid get_queryset()
-			old = self._get_objs(self.model.objects.filter(pk=int(pk)), request)[0]
+			old = self._get_objs(self.model.objects.filter(pk=self.route_pk_parser(pk)), request)[0]
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
@@ -1323,7 +1329,7 @@ class ModelView(View):
 			pass
 
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
+			obj = self.get_queryset(request).select_for_update().get(pk=self.route_pk_parser(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
@@ -1377,7 +1383,7 @@ class ModelView(View):
 			pk = obj.pk
 		else:
 			try:
-				obj = self.get_queryset(request).get(pk=int(pk))
+				obj = self.get_queryset(request).get(pk=self.route_pk_parser(pk))
 			except ObjectDoesNotExist:
 				raise BinderNotFound()
 
