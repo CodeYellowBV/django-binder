@@ -151,10 +151,13 @@ class PermissionView(ModelView):
 
 
 	def dispatch_file_field(self, request, pk=None, file_field=None):
-		try:
-			obj = self.get_queryset(request).get(pk=int(pk))
-		except ObjectDoesNotExist:
-			raise BinderNotFound()
+		if isinstance(pk, self.model):
+			obj = pk
+		else:
+			try:
+				obj = self.get_queryset(request).get(pk=int(pk))
+			except ObjectDoesNotExist:
+				raise BinderNotFound()
 
 		if request.method in {'POST', 'DELETE'}:
 			# Here we pretend that a DELETE scope is done. We only need a change
