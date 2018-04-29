@@ -405,7 +405,36 @@ class ModelView(View):
 				withs.append('.'.join(w.split('.')[:-1]))
 
 		if wheres is None and request is not None:
-			where_params = list(filter(None, request.GET.get('where', '').split(',')))
+			where_str = request.GET.get('where', '')
+
+			# Find all splits
+			splits = []
+			pos = 0
+			while pos < len(where_str):
+				if where_str[pos] == ',':
+					splits.append(pos)
+				if where_str[pos] == '(':
+					# Skip until matching )
+					depth = 1
+					while pos + 1 < len(where_str) and depth > 0:
+						pos += 1
+						if where_str[pos] == '(':
+							depth += 1
+						elif where_str[pos] == ')':
+							depth -= 1
+				pos += 1
+
+			# Get params based on splits
+			starts = [0] + [split + 1 for split in splits]
+			ends = splits + [len(where_str)]
+			where_params = [
+				where_str[start:end]
+				for start, end in zip(starts, ends)
+			]
+
+			# Filter out empty params
+			where_params = list(filter(bool, where_params))
+
 			where_map = self._parse_wheres(where_params, withs)
 
 		if isinstance(pks, django.db.models.query.QuerySet):

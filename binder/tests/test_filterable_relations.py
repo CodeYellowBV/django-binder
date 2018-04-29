@@ -319,3 +319,46 @@ class WithFilterTest(TestCase):
 			'message': 'Syntax error in {where=contacts(name=henk}.',
 			EXTRA(): None,
 		})
+
+
+	def test_where_ignores_commas_in_parens(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		harambe = Animal(name='Harambe', zoo=zoo)
+		harambe.save()
+		bokito = Animal(name='Bokito', zoo=zoo)
+		bokito.save()
+		rafiki = Animal(name='Rafiki', zoo=zoo)
+		rafiki.save()
+
+		res = self.client.get('/zoo/', data={
+			'with': 'animals',
+			'where': 'animals(name:in=Harambe,Bokito)',
+		})
+
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo.id,
+					'animals': [harambe.id, bokito.id, rafiki.id],
+					EXTRA(): None,
+				}
+			],
+			'with': {
+				'animal': [
+					{
+						'id': harambe.id,
+						EXTRA(): None,
+					},
+					{
+						'id': bokito.id,
+						EXTRA(): None,
+					},
+				]
+			},
+			EXTRA(): None,
+		})
