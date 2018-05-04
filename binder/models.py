@@ -200,9 +200,19 @@ class BooleanFieldFilter(FieldFilter):
 
 class TextFieldFilter(FieldFilter):
 	fields = [models.CharField, models.TextField]
-	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'search']
+	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact']
 
 	# Always valid(?)
+	def clean_value(self, qualifier, v):
+		return v
+
+
+class UUIDFieldFilter(FieldFilter):
+	fields = [models.UUIDField]
+	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact']
+
+	# Always valid; when using "contains" this doesn't need to be
+	# an actually formatted uuid.
 	def clean_value(self, qualifier, v):
 		return v
 
