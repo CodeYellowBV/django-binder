@@ -172,7 +172,7 @@ class ModelView(View):
 
 	@property
 	def annotations(self):
-		return self.model.annotations() if isinstance(self.model, BinderModel) else {}
+		return self.model.annotations() if issubclass(self.model, BinderModel) else {}
 
 
 	#### XXX WARNING XXX
@@ -324,14 +324,11 @@ class ModelView(View):
 		else:
 			fields = [f for f in self.model._meta.fields if f.name in self.shown_fields]
 
-		if issubclass(self.model, BinderModel):
-			annotations = set(self.annotations)
-			if self.shown_annotations is None:
-				annotations -= set(self.hidden_annotations)
-			else:
-				annotations &= set(self.shown_annotations)
+		annotations = set(self.annotations)
+		if self.shown_annotations is None:
+			annotations -= set(self.hidden_annotations)
 		else:
-			annotations = set()
+			annotations &= set(self.shown_annotations)
 
 		for obj in queryset:
 			data = {}
