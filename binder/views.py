@@ -33,6 +33,12 @@ def multiput_get_id(bla):
 	return bla['id'] if isinstance(bla, dict) else bla
 
 
+def annotate(qs):
+	if issubclass(qs.model, BinderModel):
+		for name, annotation in qs.model.annotations().items():
+			qs = qs.annotate(**{name: annotation['expr']})
+	return qs
+
 
 logger = logging.getLogger(__name__)
 
@@ -314,16 +320,14 @@ class ModelView(View):
 		else:
 			fields = [f for f in self.model._meta.fields if f.name in self.shown_fields]
 
-		if self.shown_annotations is None:
-			annotations = [
-				name for name, a in self.model.annotations().items()
-				if name not in self.hidden_annotations
-			]
+		if issubclass(self.model, BinderModel):
+			annotations = set(self.model.annotations())
+			if self.shown_annotations is None:
+				annotations -= set(self.hidden_annotations)
+			else:
+				annotations &= set(self.shown_annotations)
 		else:
-			annotations = [
-				name for name, a in self.model.annotations().items()
-				if name in self.shown_annotations
-			]
+			annotations = set()
 
 		for obj in queryset:
 			data = {}
@@ -482,7 +486,7 @@ class ModelView(View):
 			# {router-view-instance}
 			view.router = self.router
 			os = view._get_objs(
-				view.annotate(view.get_queryset(request).filter(pk__in=with_pks)),
+				annotate(view.get_queryset(request).filter(pk__in=with_pks)),
 				request=request,
 			)
 			extras_dict[view._model_name()] = os
@@ -663,12 +667,6 @@ class ModelView(View):
 		return queryset.filter(q)
 
 
-	def annotate(self, qs):
-		for name, annotation in self.model.annotations().items():
-			qs = qs.annotate(**{name: annotation['expr']})
-		return qs
-
-
 	def filter_deleted(self, queryset, pk, deleted, request):
 		if pk:
 			return queryset
@@ -762,7 +760,7 @@ class ModelView(View):
 		queryset = self.filter_deleted(queryset, pk, request.GET.get('deleted'), request)
 
 		#### annotations
-		queryset = self.annotate(queryset)
+		queryset = annotate(queryset)
 
 		#### filters
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
@@ -945,7 +943,7 @@ class ModelView(View):
 
 		# Permission checks are done at this point, so we can avoid get_queryset()
 		data = self._get_objs(
-			self.annotate(self.model.objects.filter(pk=obj.pk)),
+			annotate(self.model.objects.filter(pk=obj.pk)),
 			request=request,
 		)[0]
 		data['_meta'] = {'ignored_fields': ignored_fields}
@@ -1319,7 +1317,7 @@ class ModelView(View):
 			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
 			# Permission checks are done at this point, so we can avoid get_queryset()
 			old = self._get_objs(
-				self.annotate(self.model.objects.filter(pk=int(pk))),
+				annotate(self.model.objects.filter(pk=int(pk))),
 				request,
 			)[0]
 		except ObjectDoesNotExist:
