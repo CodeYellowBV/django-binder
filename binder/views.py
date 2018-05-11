@@ -170,6 +170,10 @@ class ModelView(View):
 	# collections.defaultdict(lambda: 512, foo=1024)
 	image_resize_threshold = 512
 
+	@property
+	def annotations(self):
+		return self.model.annotations() if isinstance(self.model, BinderModel) else {}
+
 
 	#### XXX WARNING XXX
 	# dispatch() ensures transactions. If overriding or circumventing dispatch(), you're on your own!
@@ -321,7 +325,7 @@ class ModelView(View):
 			fields = [f for f in self.model._meta.fields if f.name in self.shown_fields]
 
 		if issubclass(self.model, BinderModel):
-			annotations = set(self.model.annotations())
+			annotations = set(self.annotations)
 			if self.shown_annotations is None:
 				annotations -= set(self.hidden_annotations)
 			else:
@@ -599,8 +603,8 @@ class ModelView(View):
 
 
 	def _filter_field(self, queryset, field_name, qualifier, value, invert, partial=''):
-		if field_name in self.model.annotations():
-			field = self.model.annotations()[field_name]['field']
+		if field_name in self.annotations:
+			field = self.annotations[field_name]['field']
 		else:
 			try:
 				if field_name in self.hidden_fields:
@@ -641,7 +645,7 @@ class ModelView(View):
 			if head == 'id':
 				pk = self.model._meta.pk
 				head = pk.get_attname() if pk.one_to_one or pk.many_to_one else pk.name
-			elif head not in self.model.annotations():
+			elif head not in self.annotations:
 				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head)
