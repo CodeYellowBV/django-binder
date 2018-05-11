@@ -3,7 +3,7 @@ import warnings
 
 from django.db import models
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
-from django.db.models import signals
+from django.db.models import signals, F
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
 from django.db.models.expressions import BaseExpression
@@ -324,18 +324,24 @@ class BinderModel(models.Model):
 					# Check for reserved python internal attribute
 					if attr.startswith('__') and attr.endswith('__'):
 						continue
+
 					expr = getattr(cls.Annotations, attr)
-					if isinstance(expr, BaseExpression):
+
+					if isinstance(expr, F):
+						field = getattr(cls, expr.name)
+					elif isinstance(expr, BaseExpression):
 						field = expr.field.clone()
 						field.name = attr
 						field.model = cls
-						cls._annotations[attr] = {'field': field, 'expr': expr}
 					else:
 						warnings.warn(
 							'{}.Annotations.{} was ignored because it is not '
 							'a valid django query expression.'
 							.format(cls.__name__, attr)
 						)
+						continue
+
+					cls._annotations[attr] = {'field': field, 'expr': expr}
 		return cls._annotations
 
 

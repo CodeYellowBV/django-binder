@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import Count
+from django.db.models import Count, F
 from binder.models import BinderModel
 
 class Caretaker(BinderModel):
@@ -18,3 +18,4 @@ class Caretaker(BinderModel):
 
 	class Annotations:
 		animal_count = Count('animals')
+		bsn = F('ssn')  # simple alias

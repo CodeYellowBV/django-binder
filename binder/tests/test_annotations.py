@@ -70,3 +70,14 @@ class AnnotationTestCase(TestCase):
 
 		order = [ct['id'] for ct in data['data']]
 		self.assertEqual(order, [caretaker_2.pk, caretaker_3.pk, self.caretaker.pk])
+
+	def test_f_expression(self):
+		self.caretaker.ssn = 'blablabla'
+		self.caretaker.save()
+
+		res = self.client.get('/caretaker/{}/'.format(self.caretaker.pk))
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+
+		self.assertEqual(data['data']['bsn'], 'blablabla')
