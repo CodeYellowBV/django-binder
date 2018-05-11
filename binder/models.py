@@ -348,7 +348,7 @@ class BinderModel(models.Model):
 					fix_output_field(expr, cls)
 
 					if isinstance(expr, F):
-						field = getattr(cls, expr.name)
+						field = expr._output_field_or_none
 					elif isinstance(expr, BaseExpression):
 						field = expr.field.clone()
 						field.name = attr
