@@ -70,6 +70,7 @@ class AnnotationTestCase(TestCase):
 
 		order = [ct['id'] for ct in data['data']]
 		self.assertEqual(order, [caretaker_2.pk, caretaker_3.pk, self.caretaker.pk])
+		self.assertEqual(data['data'][0]['best_animal'], 'animal 2 2')
 
 	def test_f_expression(self):
 		self.caretaker.ssn = 'blablabla'

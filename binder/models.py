@@ -2,6 +2,7 @@ import re
 import warnings
 
 from django.db import models
+from django.db.models.fields.reverse_related import ForeignObjectRel
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
 from django.db.models import signals, F
 from django.core.exceptions import ValidationError
@@ -14,6 +15,24 @@ from binder.exceptions import BinderRequestError
 
 from . import history
 
+
+def fix_output_field(expr, model):
+	if isinstance(expr, F):
+		path = expr.name.split('__')
+		for key in path[:-1]:
+			field = model._meta.get_field(key)
+			model = (
+				field.related_model
+				if isinstance(field, ForeignObjectRel) else
+				field.remote_field.model
+			)
+		expr._output_field_or_none = model._meta.get_field(path[-1])
+	elif isinstance(expr, BaseExpression):
+		try:
+			expr.field
+		except AttributeError:
+			for subexpr in expr.get_source_expressions():
+				fix_output_field(subexpr, model)
 
 
 class CaseInsensitiveCharField(CITextField):
@@ -326,6 +345,7 @@ class BinderModel(models.Model):
 						continue
 
 					expr = getattr(cls.Annotations, attr)
+					fix_output_field(expr, cls)
 
 					if isinstance(expr, F):
 						field = getattr(cls, expr.name)

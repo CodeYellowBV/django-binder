@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import Count, F
+from django.db.models import Count, F, Max
 from binder.models import BinderModel
 
 class Caretaker(BinderModel):
@@ -17,5 +17,6 @@ class Caretaker(BinderModel):
 		history = True
 
 	class Annotations:
+		best_animal = Max('animals__name')
 		animal_count = Count('animals')
 		bsn = F('ssn')  # simple alias
