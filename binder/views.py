@@ -105,6 +105,8 @@ class ModelView(View):
 	shown_fields = None
 	hidden_fields = []
 	m2m_fields = []
+	shown_annotations = None
+	hidden_annotations = []
 
 	# Some models have derived properties that are not part of the fields of the model.
 	# Properties added to this shown property list are automatically added to the fields
@@ -311,6 +313,18 @@ class ModelView(View):
 			fields = [f for f in self.model._meta.fields if f.name not in self.hidden_fields]
 		else:
 			fields = [f for f in self.model._meta.fields if f.name in self.shown_fields]
+
+		if self.shown_annotations is None:
+			annotations = [
+				name for name, a in self.model.annotations().items()
+				if name not in self.hidden_annotations
+			]
+		else:
+			annotations = [
+				name for name, a in self.model.annotations().items()
+				if name in self.shown_annotations
+			]
+
 		for obj in queryset:
 			data = {}
 			for f in fields:
@@ -323,6 +337,9 @@ class ModelView(View):
 						data[f.name] = None
 				else:
 					data[f.name] = getattr(obj, f.attname)
+
+			for a in annotations:
+				data[a] = getattr(obj, a)
 
 			for prop in self.shown_properties:
 				data[prop] = getattr(obj, prop)
@@ -464,7 +481,10 @@ class ModelView(View):
 			view = view()
 			# {router-view-instance}
 			view.router = self.router
-			os = view._get_objs(view.get_queryset(request).filter(pk__in=with_pks), request=request)
+			os = view._get_objs(
+				view.annotate(view.get_queryset(request).filter(pk__in=with_pks)),
+				request=request,
+			)
 			extras_dict[view._model_name()] = os
 		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
 
@@ -575,12 +595,15 @@ class ModelView(View):
 
 
 	def _filter_field(self, queryset, field_name, qualifier, value, invert, partial=''):
-		try:
-			if field_name in self.hidden_fields:
-				raise models.fields.FieldDoesNotExist()
-			field = self.model._meta.get_field(field_name)
-		except models.fields.FieldDoesNotExist:
-			raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, field_name))
+		if field_name in self.model.annotations():
+			field = self.model.annotations()[field_name]['field']
+		else:
+			try:
+				if field_name in self.hidden_fields:
+					raise models.fields.FieldDoesNotExist()
+				field = self.model._meta.get_field(field_name)
+			except models.fields.FieldDoesNotExist:
+				raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, field_name))
 
 		for field_class in inspect.getmro(field.__class__):
 			filter_class = self.get_field_filter(field_class)
@@ -614,7 +637,7 @@ class ModelView(View):
 			if head == 'id':
 				pk = self.model._meta.pk
 				head = pk.get_attname() if pk.one_to_one or pk.many_to_one else pk.name
-			else:
+			elif head not in self.model.annotations():
 				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head)
@@ -639,6 +662,11 @@ class ModelView(View):
 				pass
 		return queryset.filter(q)
 
+
+	def annotate(self, qs):
+		for name, annotation in self.model.annotations().items():
+			qs = qs.annotate(**{name: annotation['expr']})
+		return qs
 
 
 	def filter_deleted(self, queryset, pk, deleted, request):
@@ -732,6 +760,9 @@ class ModelView(View):
 
 		#### soft-deletes
 		queryset = self.filter_deleted(queryset, pk, request.GET.get('deleted'), request)
+
+		#### annotations
+		queryset = self.annotate(queryset)
 
 		#### filters
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
@@ -913,7 +944,10 @@ class ModelView(View):
 			raise sum(validation_errors, None)
 
 		# Permission checks are done at this point, so we can avoid get_queryset()
-		data = self._get_objs(self.model.objects.filter(pk=obj.pk), request=request)[0]
+		data = self._get_objs(
+			self.annotate(self.model.objects.filter(pk=obj.pk)),
+			request=request,
+		)[0]
 		data['_meta'] = {'ignored_fields': ignored_fields}
 		return data
 
@@ -1284,7 +1318,10 @@ class ModelView(View):
 		try:
 			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
 			# Permission checks are done at this point, so we can avoid get_queryset()
-			old = self._get_objs(self.model.objects.filter(pk=int(pk)), request)[0]
+			old = self._get_objs(
+				self.annotate(self.model.objects.filter(pk=int(pk))),
+				request,
+			)[0]
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 

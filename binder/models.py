@@ -6,6 +6,8 @@ from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
 from django.db.models import signals
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
+from django.db.models.expressions import BaseExpression
+
 from binder.json import jsonloads
 
 from binder.exceptions import BinderRequestError
@@ -267,7 +269,6 @@ class JSONFieldFilter(FieldFilter):
 			return jsonloads(bytes(v, 'utf-8'))
 
 
-
 class BinderModel(models.Model):
 	def binder_concrete_fields_as_dict(self):
 		fields = {}
@@ -311,6 +312,31 @@ class BinderModel(models.Model):
 	class Meta:
 		abstract = True
 		ordering = ['id']
+
+	_annotations = None
+
+	@classmethod
+	def annotations(cls):
+		if cls._annotations is None:
+			cls._annotations = {}
+			if hasattr(cls, 'Annotations'):
+				for attr in dir(cls.Annotations):
+					# Check for reserved python internal attribute
+					if attr.startswith('__') and attr.endswith('__'):
+						continue
+					expr = getattr(cls.Annotations, attr)
+					if isinstance(expr, BaseExpression):
+						field = expr.field.clone()
+						field.name = attr
+						field.model = cls
+						cls._annotations[attr] = {'field': field, 'expr': expr}
+					else:
+						warnings.warn(
+							'{}.Annotations.{} was ignored because it is not '
+							'a valid django query expression.'
+							.format(cls.__name__, attr)
+						)
+		return cls._annotations
 
 
 

@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Count
 from binder.models import BinderModel
 
 class Caretaker(BinderModel):
@@ -14,3 +15,6 @@ class Caretaker(BinderModel):
 
 	class Binder:
 		history = True
+
+	class Annotations:
+		animal_count = Count('animals')

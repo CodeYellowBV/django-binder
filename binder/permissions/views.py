@@ -47,7 +47,7 @@ class PermissionView(ModelView):
 
 
 	def get_queryset(self, request):
-		queryset = self.model.objects
+		queryset = super().get_queryset(request)
 		return self.scope_view(request, queryset)
 
 
