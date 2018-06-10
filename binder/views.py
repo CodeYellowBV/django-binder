@@ -312,7 +312,6 @@ class ModelView(View):
 			# Hurgh. The queryset is annotated, and the annotation columns show up in the subquery -> Boom. Use list of IDs instead.
 			pks = list(queryset.values_list('pk', flat=True))
 			remote_field = self.model._meta.get_field(field_name2).remote_field
-			list(remote_field.model.objects.filter(**{remote_field.name + '__pk__in': pks}))
 			for other, this in remote_field.model.objects.filter(**{remote_field.name + '__pk__in': pks}).values_list('pk', remote_field.name + '__pk'):
 				idmap[this].append(other)
 			m2m_ids[field_name] = idmap

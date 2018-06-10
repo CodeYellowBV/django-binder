@@ -1,11 +1,15 @@
-from django.test import TestCase, Client
-
 from datetime import datetime, timedelta, timezone
 import json
-from binder.history import Change, Changeset
+
+from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
+from binder import history
+from binder.history import Change, Changeset
+
 from .testapp.models import Animal, Caretaker
+
+
 
 class HistoryTest(TestCase):
 	def setUp(self):
@@ -16,6 +20,8 @@ class HistoryTest(TestCase):
 		self.client = Client()
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
+
+
 
 	# Zoo has no history, Animal does
 	def test_model_without_history_does_not_create_changes_on_creation(self):
@@ -47,6 +53,7 @@ class HistoryTest(TestCase):
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='caretaker', before='null', after='null').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='zoo', before='null', after='null').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='deleted', before='null', after='false').count())
+
 
 
 	def test_model_with_history_creates_changes_on_update_but_only_for_changed_fields(self):
@@ -81,6 +88,7 @@ class HistoryTest(TestCase):
 
 		self.assertEqual(1, Change.objects.count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='name', before='"Daffy Duck"', after='"Daffy THE Duck"').count())
+
 
 
 	def test_model_with_related_history_model_creates_changes_on_the_same_changeset(self):
@@ -118,3 +126,93 @@ class HistoryTest(TestCase):
 		self.assertEqual(2, Change.objects.count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='name', before='"Pluto"', after='"Pluto the dog"').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Caretaker', field='name', before='"Mickey"', after='"Mickey Mouse"').count())
+
+
+
+	def test_manual_history_direct_success(self):
+		history.start(source='tests')
+
+		# No history yet
+		self.assertEqual(0, Changeset.objects.count())
+		self.assertEqual(0, Change.objects.count())
+
+		mickey = Caretaker(name='Mickey')
+		mickey.save()
+
+		# Still no history
+		self.assertEqual(0, Changeset.objects.count())
+		self.assertEqual(0, Change.objects.count())
+
+		history.commit()
+
+		# Aww yeah
+		self.assertEqual(1, Changeset.objects.count())
+		self.assertEqual(4, Change.objects.count())
+
+
+
+	def test_manual_history_direct_abort(self):
+		history.start(source='tests')
+
+		# No history yet
+		self.assertEqual(0, Changeset.objects.count())
+		self.assertEqual(0, Change.objects.count())
+
+		mickey = Caretaker(name='Mickey')
+		mickey.save()
+
+		# Still no history
+		self.assertEqual(0, Changeset.objects.count())
+		self.assertEqual(0, Change.objects.count())
+
+		history.abort()
+
+		# Aborted, so still no history
+		self.assertEqual(0, Changeset.objects.count())
+		self.assertEqual(0, Change.objects.count())
+
+
+
+	def test_manual_history_contextmanager_success(self):
+		with history.atomic(source='tests'):
+			# No history yet
+			self.assertEqual(0, Changeset.objects.count())
+			self.assertEqual(0, Change.objects.count())
+
+			mickey = Caretaker(name='Mickey')
+			mickey.save()
+
+			# Still no history
+			self.assertEqual(0, Changeset.objects.count())
+			self.assertEqual(0, Change.objects.count())
+
+		# Aww yeah
+		self.assertEqual(1, Changeset.objects.count())
+		self.assertEqual(4, Change.objects.count())
+
+
+
+	def test_manual_history_contextmanager_abort(self):
+		class TestException(Exception):
+			pass
+
+		try:
+			with history.atomic(source='tests'):
+				# No history yet
+				self.assertEqual(0, Changeset.objects.count())
+				self.assertEqual(0, Change.objects.count())
+
+				mickey = Caretaker(name='Mickey')
+				mickey.save()
+
+				# Still no history
+				self.assertEqual(0, Changeset.objects.count())
+				self.assertEqual(0, Change.objects.count())
+
+				raise TestException('oeps')
+		except TestException:
+			pass
+
+		# Aborted, so still no history
+		self.assertEqual(0, Changeset.objects.count())
+		self.assertEqual(0, Change.objects.count())

@@ -1,5 +1,6 @@
 import logging
 import threading
+import warnings
 
 from django.db import models
 from django.http import HttpResponse
@@ -50,9 +51,9 @@ logger = logging.getLogger(__name__)
 
 
 
-class _Transaction(threading.local):
+class __Transaction(threading.local):
 	def __init__(self):
-		logger.info('Creating new Transaction for thread {}'.format(threading.current_thread().name))
+		logger.info('Creating new _Transaction for thread {}'.format(threading.current_thread().name))
 
 		self.user = None
 		self.uuid = None
@@ -62,7 +63,7 @@ class _Transaction(threading.local):
 
 	def start(self, *, user=None, uuid=None, source=None):
 		if self.started:
-			raise RuntimeError('Called Transaction.start() while there is an open transaction')
+			raise RuntimeError('Called _Transaction.start() while there is an open transaction')
 
 		self.started = True
 		self.changes.clear()
@@ -72,12 +73,12 @@ class _Transaction(threading.local):
 
 	def stop(self):
 		if not self.started:
-			raise RuntimeError('Called Transaction.stop() while there is no open transaction')
+			raise RuntimeError('Called _Transaction.stop() while there is no open transaction')
 
 		self.started = False
 		self.changes.clear()
 
-Transaction = _Transaction()
+_Transaction = __Transaction()
 
 
 
@@ -97,23 +98,23 @@ class atomic:
 		self.uuid = uuid
 
 	def __enter__(self):
-		start(self.source, self.user, self.uuid)
+		_start(self.source, self.user, self.uuid)
 
 	def __exit__(self, etype, value, traceback):
 		if etype is None:
-			commit()
+			_commit()
 			return True
 		else:
-			abort()
+			_abort()
 			return False # reraise
 
 
 
-def start(source=None, user=None, uuid=None):
+def _start(source=None, user=None, uuid=None):
 	if source is None:
 		raise ValueError('source may not be None')
 
-	Transaction.start(source=source, user=user, uuid=uuid)
+	_Transaction.start(source=source, user=user, uuid=uuid)
 
 
 
@@ -126,8 +127,8 @@ def change(model, oid, field, old, new):
 	hid = model, oid, field
 
 	# Re-use old old value (so we accumulate all changes in one)
-	if hid in Transaction.changes:
-		old = Transaction.changes[hid][0]
+	if hid in _Transaction.changes:
+		old = _Transaction.changes[hid][0]
 	elif old is DeferredM2M:
 		# If we haven't seen this field before, and it's a m2m of
 		# unknown value, we need to get the value now.
@@ -136,7 +137,7 @@ def change(model, oid, field, old, new):
 		if hasattr(model, 'binder_serialize_m2m_field'):
 			old = model(id=oid).binder_serialize_m2m_field(field)
 
-	Transaction.changes[hid] = old, new, False
+	_Transaction.changes[hid] = old, new, False
 
 
 
@@ -146,32 +147,32 @@ def m2m_diff(old, new):
 
 
 # FIXME: use bulk inserts for efficiency.
-def commit():
+def _commit():
 	# Fill in the deferred m2ms
-	for (model, oid, field), (old, new, diff) in Transaction.changes.items():
+	for (model, oid, field), (old, new, diff) in _Transaction.changes.items():
 		if new is DeferredM2M:
 			# The target model may be a non-Binder model (e.g. User), so lbyl.
 			if hasattr(model, 'binder_serialize_m2m_field'):
 				new = model(id=oid).binder_serialize_m2m_field(field)
-				Transaction.changes[model, oid, field] = m2m_diff(old, new)
+				_Transaction.changes[model, oid, field] = m2m_diff(old, new)
 
 	# Filter non-changes
-	Transaction.changes = {idx: (old, new, diff) for idx, (old, new, diff) in Transaction.changes.items() if old != new}
+	_Transaction.changes = {idx: (old, new, diff) for idx, (old, new, diff) in _Transaction.changes.items() if old != new}
 
-	if not Transaction.changes:
-		Transaction.stop()
+	if not _Transaction.changes:
+		_Transaction.stop()
 		return
 
-	user = Transaction.user if Transaction.user and not Transaction.user.is_anonymous else None
+	user = _Transaction.user if _Transaction.user and not _Transaction.user.is_anonymous else None
 
 	changeset = Changeset(
-		source=Transaction.source,
+		source=_Transaction.source,
 		user=user,
-		uuid=Transaction.uuid,
+		uuid=_Transaction.uuid,
 	)
 	changeset.save()
 
-	for (model, oid, field), (old, new, diff) in Transaction.changes.items():
+	for (model, oid, field), (old, new, diff) in _Transaction.changes.items():
 		# New instances get None for all the before values
 		if old is NewInstanceField:
 			old = None
@@ -192,12 +193,12 @@ def commit():
 
 	# Save the changeset again, to update the date to be as close to DB transaction commit start as possible.
 	changeset.save()
-	Transaction.stop()
+	_Transaction.stop()
 
 
 
-def abort():
-	Transaction.stop()
+def _abort():
+	_Transaction.stop()
 
 
 
@@ -236,3 +237,18 @@ def view_changesets_debug(request, changesets):
 	body.append('</body>')
 	body.append('</html>')
 	return HttpResponse('\n'.join(body))
+
+
+
+# Deprecation wrappers, remove at some point
+def start(*args, **kwargs):
+	warnings.warn("Don't call history.start() directly, use the history.atomic() context manager", DeprecationWarning)
+	_start(*args, **kwargs)
+
+def abort(*args, **kwargs):
+	warnings.warn("Don't call history.abort() directly, use the history.atomic() context manager", DeprecationWarning)
+	_abort(*args, **kwargs)
+
+def commit(*args, **kwargs):
+	warnings.warn("Don't call history.commit() directly, use the history.atomic() context manager", DeprecationWarning)
+	_commit(*args, **kwargs)
