@@ -17,7 +17,7 @@ from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationErr
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
 from django.http.request import RawPostDataException
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, F
 from django.utils import timezone
 from django.db import transaction
 
@@ -635,6 +635,15 @@ class ModelView(View):
 			view.router = self.router
 			return view._parse_order_by(queryset, '.'.join(tail), partial + head + '__')
 
+		if head.endswith('__nulls_last'):
+			head = head[:-12]
+			nulls_last = True
+		elif head.endswith('__nulls_first'):
+			head = head[:-13]
+			nulls_last = False
+		else:
+			nulls_last = None
+
 		try:
 			self.model._meta.get_field(head)
 		except models.fields.FieldDoesNotExist:
@@ -644,7 +653,7 @@ class ModelView(View):
 			elif head not in self.annotations:
 				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
-		return (queryset, partial + head)
+		return (queryset, partial + head, nulls_last)
 
 
 
@@ -733,9 +742,15 @@ class ModelView(View):
 			orders = []
 			for o in order_bys:
 				if o.startswith('-'):
-					queryset, order = self._parse_order_by(queryset, o[1:], partial='-')
+					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], partial='-')
 				else:
-					queryset, order = self._parse_order_by(queryset, o)
+					queryset, order, nulls_last = self._parse_order_by(queryset, o)
+				if nulls_last is not None:
+					order = F(order[1:]).desc if order.startswith('-') else F(order).asc
+					if nulls_last:
+						order = order(nulls_last=True)
+					else:
+						order = order(nulls_first=True)
 				orders.append(order)
 			# Append model default orders to the API orders.
 			# This guarantees stable result sets when paging.
