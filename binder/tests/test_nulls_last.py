@@ -24,15 +24,22 @@ class NullsLastTest(TestCase):
 	def test_order_by_nulls_last(self):
 		self._load_test_data()
 
-		self._assert_order(
-			'last_seen',
-			['1', '2', '3', '4', '5'],
-		)
+		self._assert_order('last_seen', ['1', '2', '3', '4', '5'])
 		self._assert_order('-last_seen', ['4', '5', '3', '2', '1'])
 		self._assert_order('last_seen__nulls_last', ['1', '2', '3', '4', '5'])
 		self._assert_order('-last_seen__nulls_last', ['3', '2', '1', '4', '5'])
 		self._assert_order('last_seen__nulls_first', ['4', '5', '1', '2', '3'])
 		self._assert_order('-last_seen__nulls_first', ['4', '5', '3', '2', '1'])
+
+	def test_order_by_nulls_last_on_annotation(self):
+		self._load_test_data()
+
+		self._assert_order('last_present', ['1', '2', '3', '4', '5'])
+		self._assert_order('-last_present', ['4', '5', '3', '2', '1'])
+		self._assert_order('last_present__nulls_last', ['1', '2', '3', '4', '5'])
+		self._assert_order('-last_present__nulls_last', ['3', '2', '1', '4', '5'])
+		self._assert_order('last_present__nulls_first', ['4', '5', '1', '2', '3'])
+		self._assert_order('-last_present__nulls_first', ['4', '5', '3', '2', '1'])
 
 	def _load_test_data(self):
 		Caretaker.objects.all().delete()

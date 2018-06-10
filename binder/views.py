@@ -745,12 +745,25 @@ class ModelView(View):
 					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], partial='-')
 				else:
 					queryset, order, nulls_last = self._parse_order_by(queryset, o)
+
 				if nulls_last is not None:
-					order = F(order[1:]).desc if order.startswith('-') else F(order).asc
-					if nulls_last:
-						order = order(nulls_last=True)
+					if order.startswith('-'):
+						order = order[1:]
+						desc = True
 					else:
-						order = order(nulls_first=True)
+						desc = False
+					annotation = self.annotations.get(order)
+					if annotation is None:
+						expr = F(order)
+					else:
+						expr = annotation['expr']
+					directed_expr = expr.desc if desc else expr.asc
+					order = (
+						directed_expr(nulls_last=True)
+						if nulls_last else
+						directed_expr(nulls_first=True)
+					)
+
 				orders.append(order)
 			# Append model default orders to the API orders.
 			# This guarantees stable result sets when paging.

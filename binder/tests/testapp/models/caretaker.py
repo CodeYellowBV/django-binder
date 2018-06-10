@@ -20,3 +20,4 @@ class Caretaker(BinderModel):
 		best_animal = Max('animals__name')
 		animal_count = Count('animals')
 		bsn = F('ssn')  # simple alias
+		last_present = F('last_seen')
