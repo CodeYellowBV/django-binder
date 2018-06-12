@@ -753,8 +753,10 @@ class ModelView(View):
 						order = order[1:]
 					else:
 						desc = False
-					if order in self.annotations:
-						expr = RawSQL('"{}"'.format(order), ())
+					if order in queryset.query.annotation_select:
+						expr = Ref(order, queryset.query.annotation_select[order])
+					elif order in queryset.query.annotations:
+						expr = queryset.query.annotations[order]
 					else:
 						expr = F(order)
 					directed_expr = expr.desc if desc else expr.asc
