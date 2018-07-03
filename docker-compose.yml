@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  db:
+    image: postgres
+  binder:
+    build: .
+    volumes:
+      - .:/binder
+    depends_on:
+      - db

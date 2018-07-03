@@ -1,10 +1,18 @@
 from django import setup
 from django.conf import settings
+import os
+
 
 settings.configure(**{
 	'DEBUG': True,
 	'DATABASES': {
 		'default': {
+			'ENGINE': 'django.db.backends.postgresql',
+			'NAME': 'postgres',
+			'USER': 'postgres',
+			'HOST': 'db',
+			'PORT': 5432,
+		} if os.path.exists('/.dockerenv') else {
 			'ENGINE': 'django.db.backends.postgresql_psycopg2',
 			'NAME': 'binder-test',
 		},

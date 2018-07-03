@@ -6,3 +6,9 @@
 Code Yellow backend framework for SPA webapps with REST-like API.
 
 **This framework is a work-in-progress. There is no complete documentation yet. We are using it for a couple of projects and fine-tuning it.**
+
+## Running the tests
+
+There are two ways to run the tests:
+- Run directly `./setup.py test` (requires you to have python3 and postgres installed)
+- Run with docker `docker-compose run binder ./setup.py test`
