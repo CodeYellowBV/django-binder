@@ -96,7 +96,6 @@ class TestValidationErrors(TestCase):
 		self.assertEqual(response.status_code, 200)
 
 
-
 	def test_post_validate_blank_null_getsnull(self):
 		model_data = { 'animal': self.animal_id, 'description': None }
 
@@ -134,6 +133,29 @@ class TestValidationErrors(TestCase):
 			MAYBE('debug'): ANY(),
 		})
 
+
+
+	def test_post_validate_field_gets_invalid_string_representation_for_data_type(self):
+		model_data = { 'name': 'Gettysburg', 'founding_date': 'Four score and seven years ago' }
+
+		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 400)
+
+		returned_data = jsonloads(response.content)
+
+		assert_json(returned_data, {
+			'errors': {
+				'zoo': {
+					'null': {
+						'founding_date': [
+							{'code': 'invalid', MAYBE('message'): ANY(str)}
+						]
+					},
+				},
+			},
+			'code': 'ValidationError',
+			MAYBE('debug'): ANY(),
+		})
 
 
 	def test_put_validate_max_length(self):
