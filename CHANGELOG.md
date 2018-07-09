@@ -7,6 +7,7 @@
 - Filtering on datetime fields allows filtering on (milli)second instead of date granulatity. (#41)
 - The `_store`, `_store_field` and `_store__<fieldname>` methods now must accept a `pk` keyword argument (#64; **backwards incompatible**).
 - BinderValidationError no longer accepts an `object` keyword argument (#64; **backwards incompatible**).
+- The _parse_order_by function now must return a tuple of 3 objects, not 2 objects.  The final object should be a boolean that indicates whether nulls should be last (or None if there's no preference).
 
 ### Router
 
