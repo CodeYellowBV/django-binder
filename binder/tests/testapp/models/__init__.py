@@ -8,5 +8,6 @@ from .costume import Costume
 from .feeding_schedule import FeedingSchedule
 from .gate import Gate
 from .lion import Lion
+from .picture import Picture
 from .zoo import Zoo
 from .zoo_employee import ZooEmployee

@@ -1,4 +1,3 @@
-import json
 from PIL import Image
 from os import urandom
 from tempfile import NamedTemporaryFile

@@ -14,8 +14,6 @@ from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.cache import never_cache
 from django.utils.translation import ugettext as _
 
-from hijack.helpers import login_user, release_hijack
-
 from binder.permissions.views import no_scoping_required
 from binder.exceptions import BinderForbidden, BinderReadOnlyFieldError, BinderMethodNotAllowed, BinderIsNotDeleted, \
 	BinderIsDeleted, BinderNotAuthenticated, BinderFieldTypeError, BinderRequestError, BinderValidationError, \
@@ -32,6 +30,8 @@ class MasqueradeMixin:
 	@detail_route(name='masquerade')
 	@no_scoping_required()
 	def masquerade(self, request, pk=None):
+		from hijack.helpers import login_user
+
 		if request.method != 'POST':
 			raise BinderMethodNotAllowed()
 
@@ -48,6 +48,8 @@ class MasqueradeMixin:
 	@list_route(name='endmasquerade')
 	@no_scoping_required()
 	def endmasquerade(self, request):
+		from hijack.helpers import release_hijack
+
 		if request.method != 'POST':
 			raise BinderMethodNotAllowed()
 
