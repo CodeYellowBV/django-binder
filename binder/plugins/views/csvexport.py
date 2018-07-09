@@ -15,25 +15,27 @@ class CsvExportView:
 	# CSV setting contains all the information that is needed to define a csv file. This must be one an instance of
 	# CSVExportSettings
 	csv_settings = None
-	csv_default_fname = 'download'
 
 	class CsvExportSettings:
 		"""
 		This is a fake struct which contains the definition of the CSV Export
 		"""
-		def __init__(self, withs, column_map, file_name=None, multi_value_delimiter=' ', extra_permission=None):
+		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ', extra_permission=None):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
 				(key, title) or (key, title, callback)
-			@param file_name: String[] The file name of the outputted csv file, without the csv extension
+			@param file_name: String The file name of the outputted csv file, without the csv extension, if it is a callable it will
+				be called on the data retrieved from the get request
+			@param default_file_name: String The fallback for when resolving file_name gives back None
 			@param multi_value_delimiter: String When one column has multiple values, they are joined, with this value
-			as delimiter between them. This may be if an array is returned, or if we have a one to many relation
+				as delimiter between them. This may be if an array is returned, or if we have a one to many relation
 			@param extra_permission: String When set, an extra binder permission check will be done on this permission.
 			"""
 			self.withs = withs
 			self.column_map = column_map
 			self.file_name = file_name
+			self.default_file_name = default_file_name
 			self.multi_value_delimiter = multi_value_delimiter
 			self.extra_permission = extra_permission
 
@@ -64,11 +66,11 @@ class CsvExportView:
 		parent_result = self.get(request)
 		parent_data = jsonloads(parent_result.content)
 
-		fname = self.csv_settings.file_name
+		file_name = self.csv_settings.file_name
 		if callable(fname):
-			fname = fname(parent_data)
-		if fname is None:
-			fname = self.csv_default_fname
+			file_name = file_name(parent_data)
+		if file_name is None:
+			file_name = self.csv_settings.default_file_name
 
 		response = HttpResponse(content_type='text/csv')
 		response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(self.csv_settings.file_name)
