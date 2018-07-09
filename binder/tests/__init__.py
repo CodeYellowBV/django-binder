@@ -2,20 +2,27 @@ from django import setup
 from django.conf import settings
 import os
 
+if (
+	os.path.exists('/.dockerenv') and
+	'CY_RUNNING_INSIDE_TRAVIS' not in os.environ
+):
+	db_settings = {
+		'ENGINE': 'django.db.backends.postgresql',
+		'NAME': 'postgres',
+		'USER': 'postgres',
+		'HOST': 'db',
+		'PORT': 5432,
+	}
+else:
+	db_settings = {
+		'ENGINE': 'django.db.backends.postgresql_psycopg2',
+		'NAME': 'binder-test',
+	}
 
 settings.configure(**{
 	'DEBUG': True,
 	'DATABASES': {
-		'default': {
-			'ENGINE': 'django.db.backends.postgresql',
-			'NAME': 'postgres',
-			'USER': 'postgres',
-			'HOST': 'db',
-			'PORT': 5432,
-		} if os.path.exists('/.dockerenv') else {
-			'ENGINE': 'django.db.backends.postgresql_psycopg2',
-			'NAME': 'binder-test',
-		},
+		'default': db_settings,
 	},
 	'MIDDLEWARE': [
 		# TODO: Try to reduce the set of absolutely required middlewares

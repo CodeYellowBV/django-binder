@@ -16,6 +16,7 @@ script:
     - coverage run --include="binder/*" setup.py test
 before_script:
   - psql -c 'create database "binder-test";' -U postgres
+  - export CY_RUNNING_INSIDE_TRAVIS=1
 services:
   - postgresql
 addons:
