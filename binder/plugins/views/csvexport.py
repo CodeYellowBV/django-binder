@@ -67,13 +67,13 @@ class CsvExportView:
 		parent_data = jsonloads(parent_result.content)
 
 		file_name = self.csv_settings.file_name
-		if callable(fname):
+		if callable(file_name):
 			file_name = file_name(parent_data)
 		if file_name is None:
 			file_name = self.csv_settings.default_file_name
 
 		response = HttpResponse(content_type='text/csv')
-		response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(self.csv_settings.file_name)
+		response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(file_name)
 
 		writer = csv.writer(response)
 		# CSV header
