@@ -15,6 +15,7 @@ class CsvExportView:
 	# CSV setting contains all the information that is needed to define a csv file. This must be one an instance of
 	# CSVExportSettings
 	csv_settings = None
+	csv_default_fname = 'download'
 
 	class CsvExportSettings:
 		"""
@@ -67,7 +68,7 @@ class CsvExportView:
 		if callable(fname):
 			fname = fname(parent_data)
 		if fname is None:
-			fname = 'download'
+			fname = self.csv_default_fname
 
 		response = HttpResponse(content_type='text/csv')
 		response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(self.csv_settings.file_name)
