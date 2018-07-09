@@ -56,6 +56,6 @@ class CsvExportTest(TestCase):
 		self.assertEqual(data[0], ['picture identifier', 'animal identifier', 'squared picture identifier'])
 
 		# All other data needs to be ordered using the default ordering (by id, asc)
-		self.assertEqual(data[1], ['1', '1', '1'])
-		self.assertEqual(data[2], ['2', '1', '4'])
-		self.assertEqual(data[3], ['3', '1', '9' 	])
+		self.assertEqual(data[1], [str(self.pictures[0].id), str(self.pictures[0].animal_id), str(self.pictures[0].id ** 2)])
+		self.assertEqual(data[2], [str(self.pictures[1].id), str(self.pictures[1].animal_id), str(self.pictures[1].id ** 2)])
+		self.assertEqual(data[3], [str(self.pictures[2].id), str(self.pictures[2].animal_id), str(self.pictures[2].id ** 2)])
