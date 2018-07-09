@@ -53,8 +53,7 @@ class ImageTest(TestCase):
 
 	def testRotate(self):
 		picture = self._get_picture(50, 100)
-		result = self.client.patch('/picture/rotate/', data=json.dumps({"ids": [picture.id], "angle":
-			-90}))
+		result = self.client.patch('/picture/rotate/', data=json.dumps({"ids": [picture.id], "angle": -90}))
 
 		self.assertEqual(200, result.status_code)
 
@@ -67,8 +66,10 @@ class ImageTest(TestCase):
 
 	def testCrop(self):
 		picture = self._get_picture(50, 100)
-		result = self.client.patch('/picture/crop/', data=json.dumps({"ids": [picture.id], "x_1":10,
-																			 "x_2": 40, "y_1": 20, "y_2": 30}))
+		result = self.client.patch('/picture/crop/', data=json.dumps({
+			"ids": [picture.id], "x_1": 10,
+			"x_2": 40, "y_1": 20, "y_2": 30
+		}))
 		self.assertEqual(200, result.status_code)
 
 		original_file = Image.open(picture.original_file)
@@ -80,8 +81,10 @@ class ImageTest(TestCase):
 
 	def testReset(self):
 		picture = self._get_picture(50, 100)
-		result = self.client.patch('/picture/crop/', data=json.dumps({"ids": [picture.id], "x_1": 10,
-																	  "x_2": 40, "y_1": 20, "y_2": 30}))
+		result = self.client.patch('/picture/crop/', data=json.dumps({
+			"ids": [picture.id], "x_1": 10,
+			"x_2": 40, "y_1": 20, "y_2": 30
+		}))
 		self.assertEqual(200, result.status_code)
 		result = self.client.patch('/picture/reset/', data=json.dumps({"ids": [picture.id]}))
 		self.assertEqual(200, result.status_code)

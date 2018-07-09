@@ -1,3 +1,4 @@
+import os
 from django.db import models
 from django.db.models.signals import post_delete
 
@@ -9,7 +10,7 @@ def delete_files(sender, instance=None, **kwargs):
 			try:
 				file = getattr(instance, field.name).path
 				os.unlink(file)
-			except:
+			except Exception:
 				pass
 
 # At the website of the zoo there are some pictures of animals. This model links the picture to an animal.
@@ -17,8 +18,8 @@ def delete_files(sender, instance=None, **kwargs):
 # A picture has two files, the original uploaded file, and the modified file. This model is used for testing the
 # ImageView plugin
 class Picture(BinderModel):
-	animal = models.ForeignKey('Animal', on_delete=models.CASCADE, related_name='picture' )
-	file=models.ImageField(upload_to='floor-plans')
+	animal = models.ForeignKey('Animal', on_delete=models.CASCADE, related_name='picture')
+	file = models.ImageField(upload_to='floor-plans')
 	original_file = models.ImageField(upload_to='floor-plans')
 
 	def __str__(self):
