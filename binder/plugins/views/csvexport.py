@@ -32,7 +32,7 @@ class CsvExportView:
 			"""
 			self.withs = withs
 			self.column_map = column_map
-			self.file_name = file_name if file_name is not None else 'download'
+			self.file_name = file_name
 			self.multi_value_delimiter = multi_value_delimiter
 			self.extra_permission = extra_permission
 
@@ -60,11 +60,17 @@ class CsvExportView:
 		request.GET['with'] = ",".join(self.csv_settings.withs)
 		request.GET._mutable = mutable
 
-		response = HttpResponse(content_type='text/csv')
-		response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(self.csv_settings.file_name)
-
 		parent_result = self.get(request)
 		parent_data = jsonloads(parent_result.content)
+
+		fname = self.csv_settings.file_name
+		if callable(fname):
+			fname = fname(parent_data)
+		if fname is None:
+			fname = 'download'
+
+		response = HttpResponse(content_type='text/csv')
+		response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(self.csv_settings.file_name)
 
 		writer = csv.writer(response)
 		# CSV header
