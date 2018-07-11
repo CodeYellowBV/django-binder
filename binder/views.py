@@ -738,8 +738,8 @@ class ModelView(View):
 		#### order_by
 		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
 
+		orders = []
 		if order_bys:
-			orders = []
 			for o in order_bys:
 				if o.startswith('-'):
 					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], partial='-')
@@ -765,10 +765,18 @@ class ModelView(View):
 					)
 
 				orders.append(order)
-			# Append model default orders to the API orders.
-			# This guarantees stable result sets when paging.
+
+		# Append model default orders to the API orders.
+		# This guarantees stable result sets when paging.
+		if queryset.model._meta.ordering:
 			orders += queryset.model._meta.ordering
-			queryset = queryset.order_by(*orders)
+		else:
+			# If model._meta.ordering is empty, use the Binder default ordering.
+			# This frequently happens due to Meta declarations that don't properly
+			# inherit from BinderModel.Meta and don't specify an ordering themselves.
+			orders += BinderModel.Meta.ordering
+		queryset = queryset.order_by(*orders)
+
 		return queryset
 
 

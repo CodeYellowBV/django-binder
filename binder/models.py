@@ -330,7 +330,7 @@ class BinderModel(models.Model):
 
 	class Meta:
 		abstract = True
-		ordering = ['id']
+		ordering = ['pk']
 
 	_annotations = None
 
