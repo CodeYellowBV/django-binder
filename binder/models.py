@@ -1,5 +1,6 @@
 import re
 import warnings
+from contextlib import suppress
 
 from django.db import models
 from django.db.models.fields.reverse_related import ForeignObjectRel
@@ -288,7 +289,24 @@ class JSONFieldFilter(FieldFilter):
 			return jsonloads(bytes(v, 'utf-8'))
 
 
-class BinderModel(models.Model):
+
+class BinderModelBase(models.base.ModelBase):
+	def __new__(cls, name, bases, attrs):
+		# Verify that any Foo(BinderModel).Meta descends from BinderModel.Meta. Django messes
+		# around with Meta a lot in its metaclass, to the point where we can no longer check this.
+		# So we have to inject our own metaclass.__new__ to find this. See #96
+		# Bonus points: this way we throw all these warnings at startup.
+
+		# NameError: happens when name='BinderModel' -> ignore
+		# KeyError:  happens when Foo doesn't declare Meta -> ignore
+		with suppress(NameError, KeyError):
+			if not issubclass(attrs['Meta'], BinderModel.Meta):
+				warnings.warn(RuntimeWarning('{}.{}.Meta does not descend from BinderModel.Meta'.format(attrs.get('__module__'), name)))
+		return super().__new__(cls, name, bases, attrs)
+
+
+
+class BinderModel(models.Model, metaclass=BinderModelBase):
 	def binder_concrete_fields_as_dict(self):
 		fields = {}
 		for field in [f for f in self._meta.get_fields() if f.concrete and not f.many_to_many]:
