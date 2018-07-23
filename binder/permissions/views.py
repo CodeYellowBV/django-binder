@@ -297,10 +297,9 @@ class PermissionView(ModelView):
 
 
 	def delete(self, request, pk=None, undelete=False):
-		query = self.get_queryset(request)
-		object = query.get(pk=pk)
-
-		if len(object) == 0:
+		try:
+			object = self.get_queryset(request).get(pk=pk)
+		except self.model.DoesNotExist:
 			raise BinderNotFound()
 
 		self.scope_delete(request, object, {})
