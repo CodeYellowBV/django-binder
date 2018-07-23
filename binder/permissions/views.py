@@ -327,11 +327,8 @@ class PermissionView(ModelView):
 			except Exception as e:
 				# Call with queryset instead of object for backwards compat
 				try:
-					scope = scope_func(
-						request,
-						type(object).objects.filter(pk=object.pk),
-						values,
-					)
+					qs = self.get_queryset(request).filter(pk=object.pk)
+					scope = scope_func(request, qs, values)
 				except Exception:
 					# Both failed so exception probably was not related to
 					# instance vs queryset so raise original exception
