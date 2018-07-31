@@ -35,6 +35,24 @@ class DateTimeFiltersTest(TestCase):
 		self.assertEqual('Marcel', result['data'][0]['name'])
 
 
+	def test_datetime_filter_range(self):
+		response = self.client.get('/caretaker/', data={'.last_seen:range': '2017-03-24T14:44:54Z,2017-03-24T14:44:56Z'})
+
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+		self.assertEqual('Peter', result['data'][0]['name'])
+
+		# Alt syntax
+		response = self.client.get('/caretaker/', data={'order_by': 'name', '.last_seen:range': '2017-03-23T10:00:00+0100,2017-03-25T00:00:00+0100'})
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
+		self.assertEqual('Marcel', result['data'][0]['name'])
+		self.assertEqual('Peter', result['data'][1]['name'])
+
+
 	def test_datetime_filter_gte_match(self):
 		response = self.client.get('/caretaker/', data={'.last_seen:gte': '2017-03-23T11:26:14Z', 'order_by': 'last_seen'})
 
