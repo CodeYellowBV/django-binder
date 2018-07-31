@@ -7,7 +7,7 @@ from django.db.models.signals import post_save
 # Some of our fictitious animals actually wear clothes/costumes...
 # Each costume is unique to an animal (one to one mapping)
 class Costume(BinderModel):
-	class Meta:
+	class Meta(BinderModel.Meta):
 		ordering = ['animal_id']
 
 	nickname = models.TextField(blank=True)

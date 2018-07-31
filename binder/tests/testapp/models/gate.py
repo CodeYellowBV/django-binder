@@ -2,7 +2,7 @@ from django.db import models
 from binder.models import BinderModel
 
 class Gate(BinderModel):
-	class Meta:
+	class Meta(BinderModel.Meta):
 		ordering = ['zoo_id']
 
 	serial_number = models.UUIDField(blank=True, null=True)
