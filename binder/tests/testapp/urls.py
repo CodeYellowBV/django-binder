@@ -5,6 +5,7 @@ import binder.websocket # noqa
 import binder.views # noqa
 import binder.history # noqa
 import binder.models # noqa
+import binder.plugins.token_auth.views # noqa
 from .views import animal, caretaker, costume, custom, zoo, contact_person, gate # noqa
 
 router = binder.router.Router().register(binder.views.ModelView)
@@ -12,6 +13,7 @@ room_controller = binder.websocket.RoomController().register(binder.views.ModelV
 
 urlpatterns = [
 	url(r'^custom/route', custom.custom, name='custom'),
+	url(r'^user/$', custom.user, name='user'),
 	url(r'^', include(router.urls)),
 	url(r'^', binder.views.api_catchall, name='catchall'),
 ]

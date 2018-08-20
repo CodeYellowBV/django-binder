@@ -29,6 +29,7 @@ settings.configure(**{
 		'request_id.middleware.RequestIdMiddleware',
 		'django.contrib.sessions.middleware.SessionMiddleware',
 		'django.contrib.auth.middleware.AuthenticationMiddleware',
+		'binder.plugins.token_auth.middleware.TokenAuthMiddleware',
 	],
 	'INSTALLED_APPS': [
 		# TODO: Try to reduce the set of absolutely required applications
@@ -36,6 +37,7 @@ settings.configure(**{
 		'django.contrib.contenttypes',
 		'django.contrib.sessions',
 		'binder',
+		'binder.plugins.token_auth',
 		'binder.tests.testapp',
 	],
 	'MIGRATION_MODULES': {
@@ -44,6 +46,7 @@ settings.configure(**{
 		'sessions': None,
 		'contenttypes': None,
 		'binder': None,
+		'token_auth': None,
 	},
 	'USE_TZ': True,
 	'ROOT_URLCONF': 'binder.tests.testapp.urls',
@@ -64,7 +67,7 @@ settings.configure(**{
 				'level': 'ERROR',
 			},
 		}
-	}
+	},
 })
 
 setup()
