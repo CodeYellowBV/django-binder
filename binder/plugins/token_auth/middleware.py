@@ -45,23 +45,23 @@ class TokenAuthMiddleware:
 	"""
 
 	def __init__(self, get_response):
-		self.get_response_auth = csrf_exempt(get_response)
-		self.get_response_no_auth = get_response
+		self.get_response_no_csrf = csrf_exempt(get_response)
+		self.get_response = get_response
 
 	def __call__(self, request):
 		if request.user.is_authenticated:
 			# Already authenticated
-			return self.get_response_no_auth(request)
+			return self.get_response(request)
 
 		auth = request.META.get('HTTP_AUTHORIZATION')
 
 		if auth is None:
 			# No auth header sent
-			return self.get_response_no_auth(request)
+			return self.get_response(request)
 
 		if not auth.startswith('Token '):
 			# Auth header of wrong type
-			return self.get_response_no_auth(request)
+			return self.get_response(request)
 
 		token = auth[6:]
 		try:
@@ -85,4 +85,6 @@ class TokenAuthMiddleware:
 
 		request.user = token.user
 		token.save()  # Auto updates last_used_at
-		return self.get_response_auth(request)
+		# CSRF not needed because the token already establishes that the
+		# request was not forged
+		return self.get_response_no_csrf(request)
