@@ -4,7 +4,7 @@ from django.test import TestCase, Client, override_settings
 from django.contrib.auth.models import User
 
 from binder.plugins.token_auth.models import Token
-from binder.json import jsonloads, jsondumps
+from binder.json import jsonloads
 
 from binder.tests.compare import assert_json, ANY, EXTRA
 
