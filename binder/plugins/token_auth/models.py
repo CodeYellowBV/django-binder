@@ -47,3 +47,8 @@ class Token(BinderModel):
 			return False
 
 		return timezone.now() > expires_at
+
+	class Meta(BinderModel.Meta):
+		permissions = [
+			('manage_token', 'Manage authorization tokens.'),
+		]
