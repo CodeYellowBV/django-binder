@@ -69,7 +69,7 @@ class UserViewMixIn:
 		We need to be very careful about permission assumptions after this point
 		"""
 		# If the user is trying to change a superuser and is not a superuser, disallow
-		if pk and User.objects.get(pk=int(pk)).is_superuser and not request.user.is_superuser:
+		if pk and self.model.objects.get(pk=int(pk)).is_superuser and not request.user.is_superuser:
 			# Maybe BinderRequestError?
 			raise BinderForbidden('modify superuser', request.user)
 
@@ -94,7 +94,7 @@ class UserViewMixIn:
 		Add the has_permission as a filter
 		"""
 		if field == 'has_permission':
-			users = User.objects.filter(
+			users = self.model.objects.filter(
 				Q(groups__permissions__codename=value) |
 				Q(user_permissions__codename=value) |
 				Q(is_superuser=True)
@@ -131,17 +131,20 @@ class UserViewMixIn:
 		try:
 			decoded = request.body.decode()
 			body = json.loads(decoded)
-			username = body.get('username', '')
+			username = body.get(self.model.USERNAME_FIELD, '')
 			password = body.get('password', '')
 		except Exception:
-			username = request.POST.get('username', '')
+			username = request.POST.get(self.model.USERNAME_FIELD, '')
 			password = request.POST.get('password', '')
 
-		user = auth.authenticate(username=username.lower(), password=password)
+		user = auth.authenticate(**{
+			self.model.USERNAME_FIELD: username.lower(),
+			'password': password,
+		})
 		self._require_model_perm('login', request)
 
 		if user is None:
-			logger.info('login failed for "{}"'.format(request.POST.get('username')))
+			logger.info('login failed for "{}"'.format(username))
 			raise BinderNotAuthenticated()
 		else:
 			auth.login(request, user)
@@ -181,8 +184,10 @@ class UserViewMixIn:
 
 		Copied from django.contrib.auth.forms.PasswordResetForm
 		"""
-		active_users = self.model._default_manager.filter(
-			username__iexact=username, is_active=True)
+		active_users = self.model._default_manager.filter(**{
+			self.model.USERNAME_FIELD + '__iexact': username,
+			'is_active': True,
+		})
 		return (u for u in active_users if u.has_usable_password())
 
 	def _store__username(self, user, field, value, request, pk=None):
@@ -256,9 +261,9 @@ class UserViewMixIn:
 		except ValueError:
 			raise BinderRequestError(_('Invalid request body: not a JSON document.'))
 
-		logger.info('password reset attempt for {}'.format(body.get('username', '')))
+		logger.info('password reset attempt for {}'.format(body.get(self.model.USERNAME_FIELD, '')))
 
-		for user in self.get_users(body.get('username', '').lower()):
+		for user in self.get_users(body.get(self.model.USERNAME_FIELD, '').lower()):
 			token = default_token_generator.make_token(user)
 			self._send_reset_mail(request, user, token)
 
@@ -523,7 +528,7 @@ class UserViewMixIn:
 		self._require_model_perm('email_exists', request)
 
 		email = request.GET.get('email')
-		if User.objects.filter(username=email.lower()).exists():
+		if self.model.objects.filter(email=email.lower()).exists():
 			return JsonResponse({})
 		else:
 			raise BinderNotFound()
