@@ -247,6 +247,7 @@ class ModelViewBasicsTest(TestCase):
 		# Quick check that foreign key relations are excluded unless we ask for them
 		response = self.client.get('/animal/', data={'order_by': 'name'})
 		self.assertEqual(response.status_code, 200)
+		self.assertIsNone(response.get('with_related_name_mapping'))
 		self.assertIsNone(response.get('with_mapping'))
 		self.assertIsNone(response.get('with'))
 
@@ -259,6 +260,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(2, len(result['with']['zoo']))
 		# TODO: Add test for relations with different name than models
 		self.assertEqual('zoo', result['with_mapping']['zoo'])
+		self.assertEqual('animals', result['with_related_name_mapping']['zoo'])
 
 		self.assertEqual(gaia.pk, result['data'][0]['zoo'])
 		zoo_by_id = {zoo['id']: zoo for zoo in result['with']['zoo']}
@@ -294,6 +296,7 @@ class ModelViewBasicsTest(TestCase):
 		response = self.client.get('/zoo/', data={'order_by': 'name'})
 		self.assertEqual(response.status_code, 200)
 		self.assertIsNone(response.get('with_mapping'))
+		self.assertIsNone(response.get('with_related_name_mapping'))
 		self.assertIsNone(response.get('with'))
 
 		# Ordering on an attribute of the relation should not mess with result set size!
@@ -304,6 +307,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(2, len(result['data']))
 		self.assertEqual(3, len(result['with']['animal']))
 		self.assertEqual('animal', result['with_mapping']['animals'])
+		self.assertEqual('zoo', result['with_related_name_mapping']['animals'])
 
 		self.assertSetEqual(set([roadrunner.pk, coyote.pk]), set(result['data'][0]['animals']))
 		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
@@ -342,6 +346,7 @@ class ModelViewBasicsTest(TestCase):
 		response = self.client.get('/animal/', data={'order_by': 'name'})
 		self.assertEqual(response.status_code, 200)
 		self.assertIsNone(response.get('with_mapping'))
+		self.assertIsNone(response.get('with_related_name_mapping'))
 		self.assertIsNone(response.get('with'))
 
 
@@ -353,6 +358,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(2, len(result['with']['costume']))
 		# TODO: Add test for relations with different name than models
 		self.assertEqual('costume', result['with_mapping']['costume'])
+		self.assertEqual('animal', result['with_related_name_mapping']['costume'])
 
 		self.assertEqual(sailor.pk, result['data'][0]['costume'])
 		self.assertIsNone(result['data'][1]['costume'])
@@ -384,7 +390,9 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(1, len(result['with']['gate']))
 		self.assertEqual(1, len(result['with']['caretaker']))
 		self.assertEqual('gate', result['with_mapping']['gate'])
+		self.assertEqual('zoo', result['with_related_name_mapping']['gate'])
 		self.assertEqual('caretaker', result['with_mapping']['gate.keeper'])
+		self.assertEqual('gate', result['with_related_name_mapping']['gate.keeper'])
 		self.assertEqual('fabbby', result['with']['caretaker'][0]['name'])
 
 	def test_get_collection_filtering_following_nested_references(self):
