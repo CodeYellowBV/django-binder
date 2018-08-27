@@ -4,7 +4,7 @@ import json
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-from .testapp.models import Animal, Costume, Zoo, Caretaker, Gate, ContactPerson
+from .testapp.models import Animal, Costume, Zoo, Caretaker, Gate
 
 class ModelViewBasicsTest(TestCase):
 	def setUp(self):
