@@ -288,6 +288,8 @@ class ModelViewBasicsTest(TestCase):
 		roadrunner.full_clean()
 		roadrunner.save()
 
+		gaia.most_popular_animals.add(coyote)
+
 		woody = Animal(name='Woody Woodpecker', zoo=emmen)
 		woody.full_clean()
 		woody.save()
@@ -300,16 +302,23 @@ class ModelViewBasicsTest(TestCase):
 		self.assertIsNone(response.get('with'))
 
 		# Ordering on an attribute of the relation should not mess with result set size!
-		response = self.client.get('/zoo/', data={'order_by': 'name', 'with': 'animals'})
+		response = self.client.get('/zoo/', data={'order_by': 'name', 'with': 'animals,most_popular_animals'})
 		self.assertEqual(response.status_code, 200)
 
 		result = jsonloads(response.content)
 		self.assertEqual(2, len(result['data']))
 		self.assertEqual(3, len(result['with']['animal']))
+		self.assertSetEqual({'animals', 'most_popular_animals'}, set(result['with_mapping'].keys()))
+		# most_popular_animals should not be present because the
+		# related_name is "+", so you cannot access it from animal.
+		self.assertSetEqual({'animals'}, set(result['with_related_name_mapping'].keys()))
 		self.assertEqual('animal', result['with_mapping']['animals'])
+		self.assertEqual('animal', result['with_mapping']['most_popular_animals'])
 		self.assertEqual('zoo', result['with_related_name_mapping']['animals'])
 
 		self.assertSetEqual(set([roadrunner.pk, coyote.pk]), set(result['data'][0]['animals']))
+		self.assertSetEqual(set([coyote.pk]), set(result['data'][0]['most_popular_animals']))
+
 		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
 		self.assertEqual('Wile E. Coyote', animal_by_id[coyote.pk]['name'])
 		self.assertEqual('Roadrunner', animal_by_id[roadrunner.pk]['name'])
@@ -317,6 +326,52 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(emmen.pk, animal_by_id[woody.pk]['zoo'])
 		self.assertEqual(gaia.pk, animal_by_id[roadrunner.pk]['zoo'])
 		self.assertEqual(gaia.pk, animal_by_id[coyote.pk]['zoo'])
+
+
+	def test_get_collection_with_disabled_reverse_foreignkey(self):
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.full_clean()
+		emmen.save()
+
+		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
+		coyote.full_clean()
+		coyote.save()
+
+		gaia.most_popular_animals.add(coyote)
+
+		roadrunner = Animal(name='Roadrunner', zoo=gaia)
+		roadrunner.full_clean()
+		roadrunner.save()
+
+		woody = Animal(name='Woody Woodpecker', zoo=emmen)
+		woody.full_clean()
+		woody.save()
+
+		# Quick check that foreign key relations are excluded unless we ask for them
+		response = self.client.get('/animal/', data={'order_by': 'name'})
+		self.assertEqual(response.status_code, 200)
+		self.assertIsNone(response.get('with_mapping'))
+		self.assertIsNone(response.get('with_related_name_mapping'))
+		self.assertIsNone(response.get('with'))
+
+		# Ordering on an attribute of the relation should not mess with result set size!
+		response = self.client.get('/animal/', data={'order_by': 'name', 'with': 'zoo'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(3, len(result['data']))
+		self.assertEqual(2, len(result['with']['zoo']))
+		self.assertSetEqual({'zoo'}, set(result['with_mapping'].keys()))
+		self.assertSetEqual({'zoo'}, set(result['with_related_name_mapping'].keys()))
+
+		zoo_by_id = {zoo['id']: zoo for zoo in result['with']['zoo']}
+		self.assertSetEqual(set([emmen.pk, gaia.pk]), set(zoo_by_id.keys()))
+		self.assertEqual('GaiaZOO', zoo_by_id[gaia.pk]['name'])
+		self.assertEqual('Wildlands Adventure Zoo Emmen', zoo_by_id[emmen.pk]['name'])
 
 
 	def test_get_collection_with_one_to_one(self):

@@ -488,10 +488,11 @@ class ModelView(View):
 			(view, new_ids) = self._get_with(w, pks, request=request, where_map=where_map)
 			if view:
 				extras_mapping[w] = view
+				extras[view].update(set(new_ids))
 
 				related_model_info = self._follow_related(w)[-1]
-				extras_reverse_mapping_dict[w] = related_model_info.reverse_fieldname
-				extras[view].update(set(new_ids))
+				if related_model_info.reverse_fieldname is not None:
+					extras_reverse_mapping_dict[w] = related_model_info.reverse_fieldname
 
 		extras_dict = {}
 		# FIXME: delegate this to a router or something
@@ -535,6 +536,9 @@ class ModelView(View):
 			# Forward relations
 			related_model = field.remote_field.model
 			related_field = field.remote_field.related_name # For completeness
+
+		if '+' in related_field: # Skip missing related fields
+			related_field = None
 
 		# {router-view-instance}
 		# TODO: This should be refactored so that router
