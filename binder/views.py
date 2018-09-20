@@ -18,7 +18,6 @@ from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidd
 from django.http.request import RawPostDataException
 from django.db import models
 from django.db.models import Q, F
-from django.db.models.expressions import Ref, RawSQL
 from django.utils import timezone
 from django.db import transaction
 
