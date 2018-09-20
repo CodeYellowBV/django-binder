@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from binder.json import jsonloads
 
 # from .compare import assert_json, MAYBE, ANY, EXTRA
-from .testapp.models import Animal, Costume, Zoo
+from .testapp.models import Animal, Costume, Zoo, Caretaker
 
 
 
@@ -197,3 +197,33 @@ class TestOrderBy(TestCase):
 			returned_data = jsonloads(response.content)
 
 		self.assertEqual(returned_data['data']['animals'], [a9, a8, a7, a6, a5, a4, a3, a2, a1, a0])
+
+class TestOrderByNullsLastOnAnnotation(TestCase):
+	def setUp(self):
+		super().setUp()
+		u = User(username='testuser', is_active=True, is_superuser=True)
+		u.set_password('test')
+		u.save()
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
+
+		self.c1 = Caretaker(name='c1')
+		self.c2 = Caretaker(name='c2')
+		self.c3 = Caretaker(name='c3')
+
+		self.c1.save()
+		self.c2.save()
+		self.c3.save()
+
+
+		self.a1 = Animal(name='a1', caretaker=self.c1)
+		self.a1.save()
+		self.a2 = Animal(name='a2', caretaker=self.c2)
+		self.a2.save()
+
+	def test_order_by_nulls_last_on_annotation(self):
+		# ASC, Nulls last gives c1 (name='a1'), C2 (name='a2'), C3 (nulls)
+		response = self.client.get('/caretaker/?order_by=best_animal__nulls_last')
+		self.assertEquals(200, response.status_code)
+		print(jsonloads(response.content))
