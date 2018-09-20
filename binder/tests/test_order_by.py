@@ -222,8 +222,11 @@ class TestOrderByNullsLastOnAnnotation(TestCase):
 		self.a2 = Animal(name='a2', caretaker=self.c2)
 		self.a2.save()
 
-	def test_order_by_nulls_last_on_annotation(self):
+	def test_order_by_nulls_last_on_annotation_aggregate(self):
 		# ASC, Nulls last gives c1 (name='a1'), C2 (name='a2'), C3 (nulls)
 		response = self.client.get('/caretaker/?order_by=best_animal__nulls_last')
 		self.assertEquals(200, response.status_code)
-		print(jsonloads(response.content))
+
+	def test_order_by_nulls_last_on_annotation_noaggregate(self):
+		response = self.client.get('/caretaker/?order_by=bsn__nulls_last')
+		self.assertEquals(200, response.status_code)

@@ -772,11 +772,7 @@ class ModelView(View):
 						desc = True
 					else:
 						desc = False
-					annotation = self.annotations.get(order)
-					if annotation is None:
-						expr = F(order)
-					else:
-						expr = annotation['expr']
+					expr = F(order)
 					directed_expr = expr.desc if desc else expr.asc
 					order = (
 						directed_expr(nulls_last=True)
