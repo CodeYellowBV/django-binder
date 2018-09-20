@@ -1,3 +1,5 @@
+import unittest
+
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
@@ -5,6 +7,7 @@ from binder.json import jsonloads
 
 # from .compare import assert_json, MAYBE, ANY, EXTRA
 from .testapp.models import Animal, Costume, Zoo, Caretaker
+import os
 
 
 
@@ -222,11 +225,19 @@ class TestOrderByNullsLastOnAnnotation(TestCase):
 		self.a2 = Animal(name='a2', caretaker=self.c2)
 		self.a2.save()
 
+	@unittest.skipIf(
+		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) >= (2, 1, 0),
+		"Only available from DJango >2.1"
+	)
 	def test_order_by_nulls_last_on_annotation_aggregate(self):
 		# ASC, Nulls last gives c1 (name='a1'), C2 (name='a2'), C3 (nulls)
 		response = self.client.get('/caretaker/?order_by=best_animal__nulls_last')
-		self.assertEquals(200, response.status_code)
+		self.assertEqual(200, response.status_code)
 
+	@unittest.skipIf(
+		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) >= (2, 1, 0),
+		"Only available from DJango >2.1"
+	)
 	def test_order_by_nulls_last_on_annotation_noaggregate(self):
 		response = self.client.get('/caretaker/?order_by=bsn__nulls_last')
-		self.assertEquals(200, response.status_code)
+		self.assertEqual(200, response.status_code)
