@@ -226,7 +226,7 @@ class TestOrderByNullsLastOnAnnotation(TestCase):
 		self.a2.save()
 
 	@unittest.skipIf(
-		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) >= (2, 1, 0),
+		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) < (2, 1, 0),
 		"Only available from DJango >2.1"
 	)
 	def test_order_by_nulls_last_on_annotation_aggregate(self):
@@ -235,7 +235,7 @@ class TestOrderByNullsLastOnAnnotation(TestCase):
 		self.assertEqual(200, response.status_code)
 
 	@unittest.skipIf(
-		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) >= (2, 1, 0),
+		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) < (2, 1, 0),
 		"Only available from DJango >2.1"
 	)
 	def test_order_by_nulls_last_on_annotation_noaggregate(self):
