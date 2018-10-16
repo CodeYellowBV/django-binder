@@ -831,7 +831,10 @@ class ModelView(View):
 		queryset = self.order_by(queryset, request)
 
 		if not pk:
-			meta['total_records'] = queryset.count()
+			# Only 'pk' values should reduce DB server memory a (little?) bit, making
+			# things faster.  Not prefetching related models here makes it faster still.
+			# See also https://code.djangoproject.com/ticket/23771 and related tickets.
+			meta['total_records'] = queryset.prefetch_related(None).values('pk').count()
 
 		queryset = self._paginate(queryset, request)
 
