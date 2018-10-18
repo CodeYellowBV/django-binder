@@ -103,5 +103,8 @@ class TestWithPermButOutOfScope(TestCase):
             'with_mapping': {
                 'feeding_schedule': 'feeding_schedule',
             },
+            'with_related_name_mapping': {
+                'feeding_schedule': 'animal',
+            },
             EXTRA(): None,
         })

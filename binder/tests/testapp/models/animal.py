@@ -6,6 +6,7 @@ from binder.exceptions import BinderValidationError
 class Animal(BinderModel):
 	name = models.TextField(max_length=64)
 	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
+	zoo_of_birth = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='+', blank=True, null=True) # might've been born outside captivity
 	caretaker = models.ForeignKey('Caretaker', on_delete=models.PROTECT, related_name='animals', blank=True, null=True)
 	deleted = models.BooleanField(default=False)  # Softdelete
 

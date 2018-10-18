@@ -71,6 +71,7 @@ class FileUploadTest(TestCase):
 		result = jsonloads(response.content)
 		self.assertEqual(donald.id, result['data']['id'])
 		self.assertEqual({'zoo': 'zoo'}, result['with_mapping'])
+		self.assertEqual({'zoo': 'animals'}, result['with_related_name_mapping'])
 
 		zoo = result['with']['zoo'][0]
 		self.assertEqual(emmen.id, zoo['id'])

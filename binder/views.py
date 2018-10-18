@@ -55,7 +55,7 @@ def ellipsize(msg, length=2048):
 
 
 
-RelatedModel = namedtuple('RelatedModel', 'fieldname model')
+RelatedModel = namedtuple('RelatedModel', 'fieldname model reverse_fieldname')
 
 # Stolen and improved from https://stackoverflow.com/a/30462851
 def image_transpose_exif(im):
@@ -413,9 +413,19 @@ class ModelView(View):
 		return where_map
 
 	# Find which objects of which models to include according to <withs> for the objects in <queryset>.
-	# returns two dictionaries:
-	# - withs: { related_modal_name: [ids]}
-	# - mappings: { with_name: related_model_name}
+	# returns three dictionaries:
+	# - withs: { related_modal_name: [ids] }
+	# - mappings: { with_name: related_model_name }
+	# - related_name_mappings: { with_name: related_model_reverse_key }
+	#
+	# The related name mappings are useful when requesting a related
+	# model in the with via its reverse relation and not putting it in
+	# the m2m_fields, because for example there may be a huge number
+	# of objects (and we're using a where filter to scope them).  Then
+	# one might not be interested in the complete list of IDs, only in
+	# the ones requested.  The reverse key allows the frontend to
+	# reconstruct to which property in the main model the "with'ed"
+	# model belongs.
 	def _get_withs(self, pks, withs, request, wheres=None):
 		if withs is None and request is not None:
 			withs = list(filter(None, request.GET.get('with', '').split(',')))
@@ -466,6 +476,7 @@ class ModelView(View):
 		withs = set(withs)
 		extras = defaultdict(set)
 		extras_mapping = {}
+		extras_reverse_mapping_dict = {}
 
 		for w in withs:
 			# Make sure the _get_with only gets the wheres relevant to the relation
@@ -478,6 +489,10 @@ class ModelView(View):
 			if view:
 				extras_mapping[w] = view
 				extras[view].update(set(new_ids))
+
+				related_model_info = self._follow_related(w)[-1]
+				if related_model_info.reverse_fieldname is not None:
+					extras_reverse_mapping_dict[w] = related_model_info.reverse_fieldname
 
 		extras_dict = {}
 		# FIXME: delegate this to a router or something
@@ -492,7 +507,7 @@ class ModelView(View):
 			extras_dict[view._model_name()] = os
 		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
 
-		return (extras_dict, extras_mapping_dict)
+		return (extras_dict, extras_mapping_dict, extras_reverse_mapping_dict)
 
 
 
@@ -516,16 +531,21 @@ class ModelView(View):
 		if isinstance(field, django.db.models.fields.reverse_related.ForeignObjectRel):
 			# Reverse relations
 			related_model = field.related_model
+			related_field = field.remote_field.name
 		else:
 			# Forward relations
 			related_model = field.remote_field.model
+			related_field = field.remote_field.related_name # For completeness
+
+		if '+' in related_field: # Skip missing related fields
+			related_field = None
 
 		# {router-view-instance}
 		# TODO: This should be refactored so that router
 		# returns an instance which has the router set on it.
 		view = self.router.model_view(related_model)()
 		view.router = self.router
-		return (RelatedModel(fieldname, related_model),) + view._follow_related(fieldspec)
+		return (RelatedModel(fieldname, related_model, related_field),) + view._follow_related(fieldspec)
 
 
 
@@ -811,13 +831,16 @@ class ModelView(View):
 		queryset = self.order_by(queryset, request)
 
 		if not pk:
-			meta['total_records'] = queryset.count()
+			# Only 'pk' values should reduce DB server memory a (little?) bit, making
+			# things faster.  Not prefetching related models here makes it faster still.
+			# See also https://code.djangoproject.com/ticket/23771 and related tickets.
+			meta['total_records'] = queryset.prefetch_related(None).values('pk').count()
 
 		queryset = self._paginate(queryset, request)
 
 		#### with
 		# parse wheres from request
-		extras, extras_mapping = self._get_withs(queryset, withs, request=request)
+		extras, extras_mapping, extras_reverse_mapping = self._get_withs(queryset, withs, request=request)
 
 		data = self._get_objs(queryset, request=request)
 		if pk:
@@ -834,7 +857,7 @@ class ModelView(View):
 			debug['queries'] = ['{}s: {}'.format(q['time'], q['sql'].replace('"', '')) for q in django.db.connection.queries]
 			debug['query_count'] = len(django.db.connection.queries)
 
-		response_data = {'data': data, 'with': extras, 'with_mapping': extras_mapping, 'meta': meta, 'debug': debug}
+		response_data = {'data': data, 'with': extras, 'with_mapping': extras_mapping, 'with_related_name_mapping': extras_reverse_mapping, 'meta': meta, 'debug': debug}
 
 		return JsonResponse(response_data)
 
@@ -1379,7 +1402,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request, withs=None)
+		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'] = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
@@ -1408,7 +1431,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'] = self._get_withs([new['id']], request=request, withs=None)
+		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'] = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):

@@ -4,7 +4,7 @@ import json
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-from .testapp.models import Animal, Costume, Zoo, Caretaker, Gate, ContactPerson
+from .testapp.models import Animal, Costume, Zoo, Caretaker, Gate
 
 class ModelViewBasicsTest(TestCase):
 	def setUp(self):
@@ -232,6 +232,14 @@ class ModelViewBasicsTest(TestCase):
 		emmen.full_clean()
 		emmen.save()
 
+		artis = Zoo(name='Artis')
+		artis.full_clean()
+		artis.save()
+
+		harderwijk = Zoo(name='Dolfinarium Harderwijk') # Should not be in result set
+		harderwijk.full_clean()
+		harderwijk.save()
+
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
 		coyote.full_clean()
 		coyote.save()
@@ -240,30 +248,39 @@ class ModelViewBasicsTest(TestCase):
 		roadrunner.full_clean()
 		roadrunner.save()
 
-		woody = Animal(name='Woody Woodpecker', zoo=emmen)
+		woody = Animal(name='Woody Woodpecker', zoo=emmen, zoo_of_birth=artis)
 		woody.full_clean()
 		woody.save()
 
 		# Quick check that foreign key relations are excluded unless we ask for them
 		response = self.client.get('/animal/', data={'order_by': 'name'})
 		self.assertEqual(response.status_code, 200)
+		self.assertIsNone(response.get('with_related_name_mapping'))
 		self.assertIsNone(response.get('with_mapping'))
 		self.assertIsNone(response.get('with'))
 
 
-		response = self.client.get('/animal/', data={'order_by': 'name', 'with': 'zoo'})
+		response = self.client.get('/animal/', data={'order_by': 'name', 'with': 'zoo,zoo_of_birth'})
 		self.assertEqual(response.status_code, 200)
 
 		result = jsonloads(response.content)
 		self.assertEqual(3, len(result['data']))
-		self.assertEqual(2, len(result['with']['zoo']))
+		self.assertEqual(3, len(result['with']['zoo']))
 		# TODO: Add test for relations with different name than models
 		self.assertEqual('zoo', result['with_mapping']['zoo'])
+		self.assertEqual('animals', result['with_related_name_mapping']['zoo'])
 
 		self.assertEqual(gaia.pk, result['data'][0]['zoo'])
+		self.assertIsNone(result['data'][0]['zoo_of_birth'])
+		self.assertEqual(gaia.pk, result['data'][1]['zoo'])
+		self.assertIsNone(result['data'][1]['zoo_of_birth'])
+		self.assertEqual(emmen.pk, result['data'][2]['zoo'])
+		self.assertEqual(artis.pk, result['data'][2]['zoo_of_birth'])
+
 		zoo_by_id = {zoo['id']: zoo for zoo in result['with']['zoo']}
 		self.assertEqual('GaiaZOO', zoo_by_id[gaia.pk]['name'])
 		self.assertEqual('Wildlands Adventure Zoo Emmen', zoo_by_id[emmen.pk]['name'])
+		self.assertEqual('Artis', zoo_by_id[artis.pk]['name'])
 		self.assertSetEqual(set([coyote.pk, roadrunner.pk]),
 							set(zoo_by_id[gaia.pk]['animals']))
 		self.assertSetEqual(set([woody.pk]), set(zoo_by_id[emmen.pk]['animals']))
@@ -278,6 +295,10 @@ class ModelViewBasicsTest(TestCase):
 		emmen.full_clean()
 		emmen.save()
 
+		artis = Zoo(name='Artis')
+		artis.full_clean()
+		artis.save()
+
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
 		coyote.full_clean()
 		coyote.save()
@@ -286,7 +307,9 @@ class ModelViewBasicsTest(TestCase):
 		roadrunner.full_clean()
 		roadrunner.save()
 
-		woody = Animal(name='Woody Woodpecker', zoo=emmen)
+		gaia.most_popular_animals.add(coyote)
+
+		woody = Animal(name='Woody Woodpecker', zoo=emmen, zoo_of_birth=artis)
 		woody.full_clean()
 		woody.save()
 
@@ -294,26 +317,113 @@ class ModelViewBasicsTest(TestCase):
 		response = self.client.get('/zoo/', data={'order_by': 'name'})
 		self.assertEqual(response.status_code, 200)
 		self.assertIsNone(response.get('with_mapping'))
+		self.assertIsNone(response.get('with_related_name_mapping'))
 		self.assertIsNone(response.get('with'))
 
 		# Ordering on an attribute of the relation should not mess with result set size!
-		response = self.client.get('/zoo/', data={'order_by': 'name', 'with': 'animals'})
+		response = self.client.get('/zoo/', data={'order_by': 'name', 'with': 'animals,most_popular_animals'})
 		self.assertEqual(response.status_code, 200)
 
 		result = jsonloads(response.content)
-		self.assertEqual(2, len(result['data']))
+		self.assertEqual(3, len(result['data']))
 		self.assertEqual(3, len(result['with']['animal']))
+		self.assertSetEqual({'animals', 'most_popular_animals'}, set(result['with_mapping'].keys()))
+		# most_popular_animals should not be present because the
+		# related_name is "+", so you cannot access it from animal.
+		self.assertSetEqual({'animals'}, set(result['with_related_name_mapping'].keys()))
 		self.assertEqual('animal', result['with_mapping']['animals'])
+		self.assertEqual('animal', result['with_mapping']['most_popular_animals'])
+		self.assertEqual('zoo', result['with_related_name_mapping']['animals'])
 
-		self.assertSetEqual(set([roadrunner.pk, coyote.pk]), set(result['data'][0]['animals']))
+		self.assertEqual('Artis', result['data'][0]['name'])
+		self.assertSetEqual(set([]), set(result['data'][0]['animals']))
+		self.assertSetEqual(set([]), set(result['data'][0]['most_popular_animals']))
+		self.assertEqual('GaiaZOO', result['data'][1]['name'])
+		self.assertSetEqual(set([roadrunner.pk, coyote.pk]), set(result['data'][1]['animals']))
+		self.assertSetEqual(set([coyote.pk]), set(result['data'][1]['most_popular_animals']))
+		self.assertEqual('Wildlands Adventure Zoo Emmen', result['data'][2]['name'])
+		self.assertSetEqual(set([woody.pk]), set(result['data'][2]['animals']))
+		self.assertSetEqual(set([]), set(result['data'][2]['most_popular_animals']))
+
 		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
 		self.assertEqual('Wile E. Coyote', animal_by_id[coyote.pk]['name'])
 		self.assertEqual('Roadrunner', animal_by_id[roadrunner.pk]['name'])
 		self.assertEqual('Woody Woodpecker', animal_by_id[woody.pk]['name'])
 		self.assertEqual(emmen.pk, animal_by_id[woody.pk]['zoo'])
+		self.assertEqual(artis.pk, animal_by_id[woody.pk]['zoo_of_birth'])
 		self.assertEqual(gaia.pk, animal_by_id[roadrunner.pk]['zoo'])
+		self.assertIsNone(animal_by_id[roadrunner.pk]['zoo_of_birth'])
 		self.assertEqual(gaia.pk, animal_by_id[coyote.pk]['zoo'])
+		self.assertIsNone(animal_by_id[coyote.pk]['zoo_of_birth'])
 
+
+	def test_get_collection_with_disabled_reverse_foreignkey(self):
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.full_clean()
+		emmen.save()
+
+		artis = Zoo(name='Artis')
+		artis.full_clean()
+		artis.save()
+
+		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
+		coyote.full_clean()
+		coyote.save()
+
+		gaia.most_popular_animals.add(coyote)
+
+		roadrunner = Animal(name='Roadrunner', zoo=gaia)
+		roadrunner.full_clean()
+		roadrunner.save()
+
+		woody = Animal(name='Woody Woodpecker', zoo=emmen, zoo_of_birth=artis)
+		woody.full_clean()
+		woody.save()
+
+		# Quick check that foreign key relations are excluded unless we ask for them
+		response = self.client.get('/animal/', data={'order_by': 'name'})
+		self.assertEqual(response.status_code, 200)
+		self.assertIsNone(response.get('with_mapping'))
+		self.assertIsNone(response.get('with_related_name_mapping'))
+		self.assertIsNone(response.get('with'))
+
+		# Ordering on an attribute of the relation should not mess with result set size!
+		response = self.client.get('/animal/', data={'order_by': 'name', 'with': 'zoo'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(3, len(result['data']))
+		self.assertEqual(2, len(result['with']['zoo']))
+		self.assertSetEqual({'zoo'}, set(result['with_mapping'].keys()))
+		self.assertSetEqual({'zoo'}, set(result['with_related_name_mapping'].keys()))
+
+		zoo_by_id = {zoo['id']: zoo for zoo in result['with']['zoo']}
+		# Zoo of birth was not "with"ed, so it should not be present
+		self.assertSetEqual(set([emmen.pk, gaia.pk]), set(zoo_by_id.keys()))
+		self.assertEqual('GaiaZOO', zoo_by_id[gaia.pk]['name'])
+		self.assertEqual('Wildlands Adventure Zoo Emmen', zoo_by_id[emmen.pk]['name'])
+
+
+		response = self.client.get('/animal/', data={'order_by': 'name', 'with': 'zoo,zoo_of_birth'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(3, len(result['data']))
+		self.assertEqual(3, len(result['with']['zoo']))
+		self.assertSetEqual({'zoo', 'zoo_of_birth'}, set(result['with_mapping'].keys()))
+		# There's no zoo_of_birth here because the related_name is "+"
+		self.assertSetEqual({'zoo'}, set(result['with_related_name_mapping'].keys()))
+
+		zoo_by_id = {zoo['id']: zoo for zoo in result['with']['zoo']}
+		# Zoo of birth *was* "with"ed this time, so it should also be present (once)
+		self.assertSetEqual(set([emmen.pk, gaia.pk, artis.pk]), set(zoo_by_id.keys()))
+		self.assertEqual('Artis', zoo_by_id[artis.pk]['name'])
+		self.assertEqual('GaiaZOO', zoo_by_id[gaia.pk]['name'])
+		self.assertEqual('Wildlands Adventure Zoo Emmen', zoo_by_id[emmen.pk]['name'])
 
 	def test_get_collection_with_one_to_one(self):
 		scrooge = Animal(name='Scrooge McDuck')
@@ -342,6 +452,7 @@ class ModelViewBasicsTest(TestCase):
 		response = self.client.get('/animal/', data={'order_by': 'name'})
 		self.assertEqual(response.status_code, 200)
 		self.assertIsNone(response.get('with_mapping'))
+		self.assertIsNone(response.get('with_related_name_mapping'))
 		self.assertIsNone(response.get('with'))
 
 
@@ -353,6 +464,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(2, len(result['with']['costume']))
 		# TODO: Add test for relations with different name than models
 		self.assertEqual('costume', result['with_mapping']['costume'])
+		self.assertEqual('animal', result['with_related_name_mapping']['costume'])
 
 		self.assertEqual(sailor.pk, result['data'][0]['costume'])
 		self.assertIsNone(result['data'][1]['costume'])
@@ -384,7 +496,9 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(1, len(result['with']['gate']))
 		self.assertEqual(1, len(result['with']['caretaker']))
 		self.assertEqual('gate', result['with_mapping']['gate'])
+		self.assertEqual('zoo', result['with_related_name_mapping']['gate'])
 		self.assertEqual('caretaker', result['with_mapping']['gate.keeper'])
+		self.assertEqual('gate', result['with_related_name_mapping']['gate.keeper'])
 		self.assertEqual('fabbby', result['with']['caretaker'][0]['name'])
 
 	def test_get_collection_filtering_following_nested_references(self):
@@ -520,61 +634,6 @@ class ModelViewBasicsTest(TestCase):
 		artis = Zoo.objects.get(id=returned_data.get('id'))
 		self.assertEqual('Artis', artis.name)
 		self.assertSetEqual(set([scooby.id, scrappy.id]), set([a.id for a in artis.animals.all()]))
-
-
-	# This is a regression test for a deprecation issue that was
-	# removed in Django 2.0: now you need to use .set on m2m
-	# relations when updating the reference list.
-	# This apparently only happened in the multi-put, but still....
-	def test_put_update_model_with_m2m_field_causes_no_error(self):
-		artis = Zoo(name='Artis')
-		artis.full_clean()
-		artis.save()
-
-		contact1 = ContactPerson(name='cp1')
-		contact1.full_clean()
-		contact1.save()
-		contact1.zoos.add(artis)
-
-		contact2 = ContactPerson(name='cp2')
-		contact2.full_clean()
-		contact2.save()
-		contact2.zoos.add(artis)
-
-		model_data = {
-			'id': artis.id,
-			'contacts': [contact1.pk],
-		}
-		response = self.client.put('/zoo/{}/'.format(artis.pk), data=json.dumps(model_data), content_type='application/json')
-
-		self.assertEqual(response.status_code, 200)
-
-		returned_data = jsonloads(response.content)
-		self.assertIsNotNone(returned_data.get('id'))
-		self.assertEqual('Artis', returned_data.get('name'))
-		self.assertSetEqual(set([contact1.pk]), set(returned_data.get('contacts')))
-
-		artis = Zoo.objects.get(id=returned_data.get('id'))
-		self.assertEqual('Artis', artis.name)
-		self.assertSetEqual(set([contact1.pk]), set([c.pk for c in artis.contacts.all()]))
-
-		# Now from the other end
-		model_data = {
-			'id': contact1.id,
-			'zoos': [],
-		}
-		response = self.client.put('/contact_person/{}/'.format(contact1.pk), data=json.dumps(model_data), content_type='application/json')
-
-		self.assertEqual(response.status_code, 200)
-
-		returned_data = jsonloads(response.content)
-		self.assertIsNotNone(returned_data.get('id'))
-		self.assertEqual('cp1', returned_data.get('name'))
-		self.assertSetEqual(set([]), set(returned_data.get('zoos')))
-
-		contact1 = ContactPerson.objects.get(id=returned_data.get('id'))
-		self.assertEqual('cp1', contact1.name)
-		self.assertSetEqual(set([]), set([c.pk for c in contact1.zoos.all()]))
 
 
 	def test_post_put_respect_with_clause(self):
