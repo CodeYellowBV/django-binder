@@ -43,6 +43,7 @@ def multi_request_view(request):
 			for i, data in enumerate(requests):
 				key = data.pop('key', i)
 
+				# Get response from request
 				try:
 					req = parse_request(
 						data, allowed_methods, key_responses, request,
@@ -52,14 +53,15 @@ def multi_request_view(request):
 				else:
 					res = handler.get_response(req)
 
+				# Serialize and add to responses
 				res_data = serialize_response(res)
 				responses.append(res_data)
 
-				res_data['key'] = key
+				# Add by key so that we can reference it in other requests
 				key_responses[key] = res_data
 
+				# Rollback the transaction if the request has a failing code
 				if res.status_code >= 400:
-					# rollback the transaction
 					raise ErrorStatus(res.status_code)
 	except ErrorStatus as e:
 		status = e.status
