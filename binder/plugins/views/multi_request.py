@@ -33,8 +33,8 @@ def multi_request_view(request):
 	responses = []
 	key_responses = {}
 
-	if not isinstance(requests, list) or not requests:
-		raise BinderRequestError('requests should be a non empty list')
+	if not isinstance(requests, list):
+		raise BinderRequestError('requests should be a list')
 
 	handler = RequestHandler()
 
