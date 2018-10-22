@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.http import HttpRequest, JsonResponse
 from django.db import transaction
 from django.core.handlers.base import BaseHandler
@@ -86,7 +88,7 @@ def parse_request(data, allowed_methods, responses, request):
 
 	# Transform data
 	transforms = data.pop('transforms', [])
-	path_params = {}
+	str_params = defaultdict(dict)
 
 	if not isinstance(transforms, list):
 		raise BinderRequestError('transforms should be a list')
@@ -123,22 +125,10 @@ def parse_request(data, allowed_methods, responses, request):
 				)
 
 		# Set value according to target
-		if transform['target'][0] == 'path':
-			# Special case path to allow for formatting
-			if len(transform['target']) == 1:
-				data['path'] = value
-			elif len(transform['target']) == 2:
-				path_params[transform['target'][1]] = value
-			else:
-				raise BinderRequestError('path target must have length 1 or 2')
-		else:
-			target = data
-			target_key = transform['target'][0]
-			for key in transform['target'][1:]:
-				if not isinstance(target, (list, dict)):
-					raise BinderRequestError(
-						'target can only iterate through lists and dicts'
-					)
+		target = data
+		target_key = transform['target'][0]
+		for i, key in enumerate(transform['target'][1:]):
+			if isinstance(target, (list, dict)):
 				try:
 					target = target[target_key]
 				except (KeyError, IndexError):
@@ -147,10 +137,12 @@ def parse_request(data, allowed_methods, responses, request):
 						.format(transform['target'], target_key)
 					)
 				target_key = key
-			if not isinstance(target, (list, dict)):
+			else:
 				raise BinderRequestError(
 					'target can only iterate through lists and dicts'
 				)
+
+		if isinstance(target, (list, dict)):
 			try:
 				target[target_key] = value
 			except IndexError:
@@ -158,14 +150,37 @@ def parse_request(data, allowed_methods, responses, request):
 					'invalid target {}, error at key {}'
 					.format(transform['target'], target_key)
 				)
-
-	if 'path' in data:
-		try:
-			data['path'] = data['path'].format(**path_params)
-		except KeyError as e:
+		elif isinstance(target, str):
+			str_params[tuple(transform['target'][:-1])][transform['target'][-1]] = value
+		else:
 			raise BinderRequestError(
-				'missing key for path: {}'.format(e.args[0])
+				'target can only modify lists, dicts and strs'
 			)
+
+	try:
+		for keys, params in str_params.items():
+			target = data
+			target_key = keys[0]
+			for key in keys[1:]:
+				target = target[target_key]
+				target_key = key
+			s = target[target_key]
+			try:
+				s = s.format(**params)
+			except KeyError as e:
+				raise BinderRequestError(
+					'str formatting at {}, missing key: {}'
+					.format(keys, e.args[0])
+				)
+			target[target_key] = target[target_key].format(**params)
+	except Exception:
+		# All kind of things can go wrong when the data is altered through
+		# a transform that occured after the str_params where determined
+		# causing the target not to exist anymore or not be a str
+		raise BinderRequestError(
+			'transforms altered data in such a way that str params became '
+			'invalid'
+		)
 
 	# Validate request
 	if 'method' not in data:
@@ -175,7 +190,6 @@ def parse_request(data, allowed_methods, responses, request):
 
 	# Validate method is allowed
 	if data['method'] not in allowed_methods:
-		print('METHODS', data['method'], allowed_methods)
 		raise BinderMethodNotAllowed()
 
 	# Create request
