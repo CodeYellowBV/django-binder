@@ -27,14 +27,22 @@ def multi_request_view(request):
 	elif request.method == 'POST':
 		allowed_methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 	else:
-		raise BinderMethodNotAllowed()
+		try:
+			raise BinderMethodNotAllowed()
+		except BinderException as e:
+			e.log()
+			return e.response(request)
 
 	requests = jsonloads(request.body)
 	responses = []
 	key_responses = {}
 
 	if not isinstance(requests, list):
-		raise BinderRequestError('requests should be a list')
+		try:
+			raise BinderRequestError('requests should be a list')
+		except BinderException as e:
+			e.log()
+			return e.response(request)
 
 	handler = RequestHandler()
 
@@ -49,6 +57,7 @@ def multi_request_view(request):
 						data, allowed_methods, key_responses, request,
 					)
 				except BinderException as e:
+					e.log()
 					res = e.response(request)
 				else:
 					res = handler.get_response(req)
