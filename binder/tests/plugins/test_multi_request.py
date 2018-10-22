@@ -86,3 +86,10 @@ class MultiRequestTest(TestCase):
 
 		with self.assertRaises(Animal.DoesNotExist):
 			Animal.objects.get(pk=response[0]['body']['id'])
+
+	def test_invalid_method(self):
+		response = self.client.put(
+			'/multi/', data=b'[]',
+			content_type='application/json',
+		)
+		self.assertEqual(response.status_code, 405)
