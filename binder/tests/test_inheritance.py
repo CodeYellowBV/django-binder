@@ -47,8 +47,6 @@ class InheritanceTest(TestCase):
 				},
 			}),
 		)
-		if (response.status_code != 200):
-			print(response.content)
 		self.assertEqual(response.status_code, 200)
 
 		zoo.refresh_from_db()
@@ -61,4 +59,59 @@ class InheritanceTest(TestCase):
 		self.assertEqual(mane_magnificence_map, {
 			'Mufasa': 10,
 			'Scar': 4,
+		})
+
+	def test_create_lion_with_animal(self):
+		response = self.client.put(
+			'/animal/',
+			content_type='application/json',
+			data=json.dumps({
+				'data': [{
+					'id': -1,
+					'name': 'OVERRIDE THIS SHIET',
+				}],
+				'with': {'lion': [{
+					'id': -1,
+					'name': 'Mufasa',
+					'mane_magnificence': 10,
+				}]},
+			}),
+		)
+
+		self.assertEqual(response.status_code, 200)
+		res_data = json.loads(response.content.decode())
+		lion_id = res_data['idmap']['lion'][0][1]
+		self.assertEqual(res_data, {
+			'idmap': {
+				'animal': [[-1, lion_id]],
+				'lion': [[-1, lion_id]],
+			},
+		})
+
+	def test_create_lion_with_animal_with_ref(self):
+		response = self.client.put(
+			'/animal/',
+			content_type='application/json',
+			data=json.dumps({
+				'data': [{
+					'id': -1,
+					'name': 'OVERRIDE THIS SHIET',
+					'lion': -1,
+				}],
+				'with': {'lion': [{
+					'id': -1,
+					'name': 'Mufasa',
+					'mane_magnificence': 10,
+				}]},
+			}),
+		)
+
+		self.assertEqual(response.status_code, 200)
+		res_data = json.loads(response.content.decode())
+		lion_id = res_data['idmap']['lion'][0][1]
+		self.assertEqual(res_data, {
+			'idmap': {
+				'animal': [[-1, lion_id]],
+				'lion': [[-1, lion_id]],
+			},
 		})
