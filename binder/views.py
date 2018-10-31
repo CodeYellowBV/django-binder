@@ -1220,6 +1220,41 @@ class ModelView(View):
 		return objects
 
 
+	def _multi_put_override_superclass(self, objects):
+		objects_todo = list(objects)
+		overrides = defaultdict(list)
+
+		while objects_todo:
+			cls, mid = objects_todo.pop()
+			if (cls, mid) not in objects:
+				# Skip if already deleted by subclass
+				continue
+
+			for supcls in getmro(cls)[1:]:
+				# Skip if not a valid superclass
+				if (
+					supcls is BinderModel or
+					not issubclass(supcls, BinderModel) or
+					(
+						hasattr(supcls, 'Meta') and
+						getattr(supcls.Meta, 'abstract', False)
+					)
+				):
+					continue
+				# Check if superclass is in objects with same id
+				if (supcls, mid) in objects:
+					overrides[(cls, mid)].append((supcls, mid))
+					if (supcls, mid) in overrides:
+						overrides[(cls, mid)].extend(overrides.pop((supcls, mid)))
+					values = objects.pop((supcls, mid))
+					for key, val in values.items():
+						if key == cls._meta.pk.remote_field.name:
+							# Skip fk pointing to this model
+							continue
+						objects[(cls, mid)].setdefault(key, val)
+
+		return objects, overrides
+
 
 	def _multi_put_convert_backref_to_forwardref(self, objects):
 		for (model, mid), values in objects.items():
@@ -1356,16 +1391,24 @@ class ModelView(View):
 		return new_id_map
 
 
+	def _multi_put_id_map_add_overrides(self, new_id_map, overrides):
+		for key, old_keys in overrides.items():
+			if key in new_id_map:
+				for old_key in old_keys:
+					new_id_map[old_key] = new_id_map[key]
+
 
 	def multi_put(self, request):
 		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
 
 		data = self._multi_put_parse_request(request)
 		objects = self._multi_put_collect_objects(data)
+		objects, overrides = self._multi_put_override_superclass(objects)
 		objects = self._multi_put_convert_backref_to_forwardref(objects)
 		dependencies = self._multi_put_calculate_dependencies(objects)
 		ordered_objects = self._multi_put_order_dependencies(dependencies)
 		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request)
+		self._multi_put_id_map_add_overrides(new_id_map, overrides)
 
 		output = defaultdict(list)
 		for (model, oid), nid in new_id_map.items():
