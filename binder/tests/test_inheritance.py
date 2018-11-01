@@ -69,9 +69,10 @@ class InheritanceTest(TestCase):
 				'data': [{
 					'id': -1,
 					'name': 'OVERRIDE THIS SHIET',
+					'lion': -2,
 				}],
 				'with': {'lion': [{
-					'id': -1,
+					'id': -2,
 					'name': 'Mufasa',
 					'mane_magnificence': 10,
 				}]},
@@ -84,11 +85,11 @@ class InheritanceTest(TestCase):
 		self.assertEqual(res_data, {
 			'idmap': {
 				'animal': [[-1, lion_id]],
-				'lion': [[-1, lion_id]],
+				'lion': [[-2, lion_id]],
 			},
 		})
 
-	def test_create_lion_with_animal_with_ref(self):
+	def test_create_lion_with_animal_and_zoo(self):
 		response = self.client.put(
 			'/animal/',
 			content_type='application/json',
@@ -96,22 +97,28 @@ class InheritanceTest(TestCase):
 				'data': [{
 					'id': -1,
 					'name': 'OVERRIDE THIS SHIET',
-					'lion': -1,
+					'lion': -2,
 				}],
-				'with': {'lion': [{
-					'id': -1,
-					'name': 'Mufasa',
-					'mane_magnificence': 10,
-				}]},
+				'with': {
+					'lion': [{
+						'id': -2,
+						'name': 'Mufasa',
+						'mane_magnificence': 10,
+					}],
+					'zoo': [{
+						'id': -3,
+						'name': 'Artis',
+						'animals': [-1],
+					}],
+				},
 			}),
 		)
 
 		self.assertEqual(response.status_code, 200)
 		res_data = json.loads(response.content.decode())
-		lion_id = res_data['idmap']['lion'][0][1]
-		self.assertEqual(res_data, {
-			'idmap': {
-				'animal': [[-1, lion_id]],
-				'lion': [[-1, lion_id]],
-			},
-		})
+		zoo_id = res_data['idmap']['zoo'][0][1]
+		animal_id = res_data['idmap']['animal'][0][1]
+
+		zoo = Zoo.objects.get(pk=zoo_id)
+		zoo_animal_ids = [animal.id for animal in zoo.animals.all()]
+		self.assertEqual(zoo_animal_ids, [animal_id])
