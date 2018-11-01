@@ -1221,37 +1221,59 @@ class ModelView(View):
 
 
 	def _multi_put_override_superclass(self, objects):
-		objects_todo = list(objects)
-		overrides = defaultdict(list)
+		overrides = {}
 
-		while objects_todo:
-			cls, mid = objects_todo.pop()
-			if (cls, mid) not in objects:
-				# Skip if already deleted by subclass
-				continue
-
-			for supcls in getmro(cls)[1:]:
-				# Skip if not a valid superclass
-				if (
-					supcls is BinderModel or
-					not issubclass(supcls, BinderModel) or
-					(
-						hasattr(supcls, 'Meta') and
-						getattr(supcls.Meta, 'abstract', False)
-					)
-				):
+		# Collect overrides
+		for (cls, mid), data in objects.items():
+			for subcls in getsubclasses(cls):
+				# Get key of field pointing to subclass
+				subkey = subcls._meta.pk.remote_field.name
+				# Get id of subclass
+				subid = data.get(subkey)
+				if subid is None:
 					continue
-				# Check if superclass is in objects with same id
-				if (supcls, mid) in objects:
-					overrides[(cls, mid)].append((supcls, mid))
-					if (supcls, mid) in overrides:
-						overrides[(cls, mid)].extend(overrides.pop((supcls, mid)))
-					values = objects.pop((supcls, mid))
-					for key, val in values.items():
-						if key == cls._meta.pk.remote_field.name:
-							# Skip fk pointing to this model
-							continue
-						objects[(cls, mid)].setdefault(key, val)
+				# Check if class is in objects
+				if (subcls, subid) not in objects:
+					continue
+				# Add to overrides
+				overrides[(cls, mid)] = (subcls, subid)
+				break
+
+		# Move data to overrides
+		for source in list(overrides):
+			# Follow overrides to final override
+			target = overrides[source]
+			while target in overrides:
+				target = overrides[target]
+			overrides[source] = target
+			# Pop data of source and set as default for target
+			for key, value in objects.pop(source).items():
+				if key == target[0]._meta.pk.remote_field.name:
+					# Skip field pointing to the subclass instance
+					continue
+				objects[target].setdefault(key, value)
+
+		# Fix foreign keys in data according to overrides
+		for (cls, _), data in objects.items():
+			for field in cls._meta.get_fields():
+				if (
+					field.name not in data or
+					not field.is_relation or
+					field.related_model is None
+				):
+					# Only look at relations that are included
+					continue
+
+				if isinstance(data[field.name], int):
+					target = (field.related_model, data[field.name])
+					if target in overrides:
+						data[field.name] = overrides[target][1]
+				elif isinstance(data[field.name], list):
+					for i, mid in enumerate(data[field.name]):
+						if isinstance(mid, int):
+							target = (field.related_model, mid)
+							if target in overrides:
+								data[field.name][i] = overrides[target][1]
 
 		return objects, overrides
 
@@ -1392,10 +1414,9 @@ class ModelView(View):
 
 
 	def _multi_put_id_map_add_overrides(self, new_id_map, overrides):
-		for key, old_keys in overrides.items():
-			if key in new_id_map:
-				for old_key in old_keys:
-					new_id_map[old_key] = new_id_map[key]
+		for source, target in overrides.items():
+			if target in new_id_map:
+				new_id_map[source] = new_id_map[target]
 
 
 	def multi_put(self, request):
