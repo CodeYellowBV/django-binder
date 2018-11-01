@@ -1229,7 +1229,7 @@ class ModelView(View):
 				# Get key of field pointing to subclass
 				subkey = subcls._meta.pk.remote_field.name
 				# Get id of subclass
-				subid = data.get(subkey)
+				subid = data.pop(subkey, None)
 				if subid is None:
 					continue
 				# Check if class is in objects
@@ -1237,7 +1237,6 @@ class ModelView(View):
 					continue
 				# Add to overrides
 				overrides[(cls, mid)] = (subcls, subid)
-				break
 
 		# Move data to overrides
 		for source in list(overrides):
@@ -1248,9 +1247,6 @@ class ModelView(View):
 			overrides[source] = target
 			# Pop data of source and set as default for target
 			for key, value in objects.pop(source).items():
-				if key == target[0]._meta.pk.remote_field.name:
-					# Skip field pointing to the subclass instance
-					continue
 				objects[target].setdefault(key, value)
 
 		# Fix foreign keys in data according to overrides
