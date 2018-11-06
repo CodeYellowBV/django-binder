@@ -30,7 +30,7 @@ class Token(BinderModel):
 
 	@property
 	def expires_at(self):
-		expire_time = settings.BINDER_TOKEN_EXPIRE_TIME
+		expire_time = getattr(settings, 'BINDER_TOKEN_EXPIRE_TIME', None)
 
 		if expire_time is None:
 			return None
