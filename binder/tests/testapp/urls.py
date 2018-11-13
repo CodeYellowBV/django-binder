@@ -14,7 +14,7 @@ room_controller = binder.websocket.RoomController().register(binder.views.ModelV
 
 urlpatterns = [
 	url(r'^custom/route', custom.custom, name='custom'),
-	url(r'^user/$', custom.user, name='user'),
+	# url(r'^user/$', custom.user, name='user'),
 	url(r'^multi/$', multi_request_view, name='multi_request'),
 	url(r'^', include(router.urls)),
 	url(r'^', binder.views.api_catchall, name='catchall'),

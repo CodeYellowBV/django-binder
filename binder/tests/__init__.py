@@ -21,6 +21,7 @@ else:
 
 settings.configure(**{
 	'DEBUG': True,
+	'ALLOWED_HOSTS': ['*'],
 	'DATABASES': {
 		'default': db_settings,
 	},
@@ -68,6 +69,11 @@ settings.configure(**{
 			},
 		}
 	},
+	'BINDER_PERMISSION': {
+		'default': [
+			('auth.reset_password_user', None),
+		]
+	}
 })
 
 setup()

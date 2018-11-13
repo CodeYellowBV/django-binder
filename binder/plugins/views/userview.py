@@ -19,11 +19,23 @@ from binder.exceptions import BinderForbidden, BinderReadOnlyFieldError, BinderM
 	BinderNotFound
 from binder.router import list_route, detail_route
 from binder.json import JsonResponse
+from binder.views import annotate
 
 logger = logging.getLogger(__name__)
 
 
-class MasqueradeMixin:
+class UserBaseMixin:
+	__metaclass__ = ABCMeta
+
+	def respond_with_user(self, request, user_id):
+		return JsonResponse(
+			annotate(
+				self._get_objs(user_id, request=request)
+			)[0]
+		)
+
+
+class MasqueradeMixin(UserBaseMixin):
 	__metaclass__ = ABCMeta
 
 	@detail_route(name='masquerade')
@@ -42,7 +54,7 @@ class MasqueradeMixin:
 		self._require_model_perm('masquerade', request)
 
 		login_user(request, user)  # Ignore returned redirect response object
-		return JsonResponse(self._get_obj(user.id, request=request))
+		return self.respond_with_user(user.id)
 
 	@list_route(name='endmasquerade')
 	@no_scoping_required()
@@ -55,10 +67,10 @@ class MasqueradeMixin:
 		self._require_model_perm('unmasquerade', request)
 
 		release_hijack(request)  # Ignore returned redirect response object
-		return JsonResponse(self ._get_obj(request.user.id, request=request))
+		return self.respond_with_user(request.user.id)
 
 
-class UserViewMixIn:
+class UserViewMixIn(UserBaseMixin):
 	__metaclass__ = ABCMeta
 
 	def _require_model_perm(self, perm_type, request, pk=None):
@@ -148,7 +160,7 @@ class UserViewMixIn:
 		else:
 			auth.login(request, user)
 			logger.info('login for {}/{}'.format(user.id, user))
-			return JsonResponse(self._get_obj(user.id, request=request))
+			return self.respond_with_user(user.id, request=request)
 
 	@list_route(name='logout')
 	@no_scoping_required()
@@ -382,7 +394,7 @@ class UserViewMixIn:
 		user.is_active = True
 		user.save()
 		auth.login(request, user)
-		return JsonResponse(self._get_obj(user.id, request=request))
+		return self.respond_with_user(request, user.id)
 
 	@method_decorator(sensitive_post_parameters())
 	@never_cache
@@ -442,7 +454,7 @@ class UserViewMixIn:
 		user.set_password(password)
 		user.save()
 		auth.login(request, user)
-		return JsonResponse(self._get_obj(user.id, request=request))
+		return self.respond_with_user(request, user.id)
 
 	@method_decorator(sensitive_post_parameters())
 	@never_cache
@@ -505,7 +517,7 @@ class UserViewMixIn:
 			"""
 			update_session_auth_hash(request, user)
 
-		return JsonResponse(self._get_obj(user.id, request=request))
+		return self.respond_with_user(request, user.id)
 
 	@list_route(name='email_exists', unauthenticated=True, methods=['GET'])
 	@no_scoping_required()
