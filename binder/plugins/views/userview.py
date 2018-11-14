@@ -29,8 +29,9 @@ class UserBaseMixin:
 
 	def respond_with_user(self, request, user_id):
 		return JsonResponse(
-			annotate(
-				self._get_objs(user_id, request=request)
+			self._get_objs(
+				annotate(self.get_queryset(request).filter(pk=user_id)),
+				request=request,
 			)[0]
 		)
 
@@ -54,7 +55,7 @@ class MasqueradeMixin(UserBaseMixin):
 		self._require_model_perm('masquerade', request)
 
 		login_user(request, user)  # Ignore returned redirect response object
-		return self.respond_with_user(user.id)
+		return self.respond_with_user(request, user.id)
 
 	@list_route(name='endmasquerade')
 	@no_scoping_required()
@@ -67,7 +68,7 @@ class MasqueradeMixin(UserBaseMixin):
 		self._require_model_perm('unmasquerade', request)
 
 		release_hijack(request)  # Ignore returned redirect response object
-		return self.respond_with_user(request.user.id)
+		return self.respond_with_user(request, request.user.id)
 
 
 class UserViewMixIn(UserBaseMixin):
@@ -160,7 +161,7 @@ class UserViewMixIn(UserBaseMixin):
 		else:
 			auth.login(request, user)
 			logger.info('login for {}/{}'.format(user.id, user))
-			return self.respond_with_user(user.id, request=request)
+			return self.respond_with_user(request, user.id)
 
 	@list_route(name='logout')
 	@no_scoping_required()
