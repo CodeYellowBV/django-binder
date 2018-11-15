@@ -21,6 +21,7 @@ else:
 
 settings.configure(**{
 	'DEBUG': True,
+	'ALLOWED_HOSTS': ['*'],
 	'DATABASES': {
 		'default': db_settings,
 	},
@@ -68,6 +69,18 @@ settings.configure(**{
 			},
 		}
 	},
+	'BINDER_PERMISSION': {
+		'default': [
+			('auth.reset_password_user', None),
+			('auth.view_user', 'own'),
+			('auth.activate_user', None),
+			('auth.unmasquerade_user', None),  # If you are masquarade, the user must be able to unmasquarade
+			('auth.login_user', None),
+			('auth.signup_user', None),
+			('auth.logout_user', None),
+			('auth.change_own_password_user', None),
+		]
+	}
 })
 
 setup()

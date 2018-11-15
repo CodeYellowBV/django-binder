@@ -890,6 +890,13 @@ class ModelView(View):
 				func = self._store_field
 			return func(obj, field, value, request, pk=pk)
 
+		def store_m2m_field(obj, field, value):
+			try:
+				func = getattr(self, '_store_m2m__' + field)
+			except AttributeError:
+				func = self._store_m2m_field
+			return func(obj, field, value)
+
 		for field, value in values.items():
 			try:
 				res = store_field(obj, field, value, request, pk=pk)
@@ -950,52 +957,10 @@ class ModelView(View):
 		obj.save()
 
 		for field, value in deferred_m2ms.items():
-			# Can't use isinstance() because apparantly ManyToManyDescriptor is a subclass of
-			# ReverseManyToOneDescriptor. Yes, really.
-			if getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseManyToOneDescriptor:
-				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
-				if any(v for v in value if v < 0):
-					continue
-				# If the m2m to be set is actually a reverse FK relation, we need to do extra magic.
-				# We figure out if the remote objects are added or removed. The added ones, we modify/save
-				# explicitly rather than using the reverse relation manager, otherwise the history layer
-				# doesn't see the changes. The same goes for the removed objects, except there we also
-				# DELETE them if the FK is non-nullable. Interesting stuff.
-				obj_field = getattr(obj, field)
-				old_ids = set(obj_field.values_list('id', flat=True))
-				new_ids = set(value)
-				for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
-					method = getattr(rmobj, '_binder_unset_relation_{}'.format(obj_field.field.name), None)
-					if callable(method):
-						try:
-							method()
-						except BinderValidationError as bve:
-							validation_errors.append(bve)
-					elif obj_field.field.null:
-						setattr(rmobj, obj_field.field.name, None)
-						rmobj.save()
-					elif hasattr(rmobj, 'deleted'):
-						if not rmobj.deleted:
-							rmobj.deleted = True
-							rmobj.save()
-					else:
-						rmobj.delete()
-				for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
-					setattr(addobj, obj_field.field.name, obj)
-					addobj.save()
-			elif getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor:
-				remote_obj = obj._meta.get_field(field).related_model.objects.get(pk=value[0])
-				setattr(obj, field, remote_obj)
-				remote_obj.save()
-			elif any(f.name == field for f in self._get_reverse_relations()):
-				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
-				if any(v for v in value if v < 0):
-					continue
-				getattr(obj, field).set(value)
-			elif any(f.name == field for f in self.model._meta.many_to_many):
-				getattr(obj, field).set(value)
-			else:
-				setattr(obj, field, value)
+			try:
+				store_m2m_field(obj, field, value)
+			except BinderValidationError as bve:
+				validation_errors.append(bve)
 
 		if validation_errors:
 			raise sum(validation_errors, None)
@@ -1012,6 +977,62 @@ class ModelView(View):
 		)[0]
 		data['_meta'] = {'ignored_fields': ignored_fields}
 		return data
+
+
+
+	def _store_m2m_field(self, obj, field, value):
+		validation_errors = []
+
+		# Can't use isinstance() because apparantly ManyToManyDescriptor is a subclass of
+		# ReverseManyToOneDescriptor. Yes, really.
+		if getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseManyToOneDescriptor:
+			#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
+			if any(v for v in value if v < 0):
+				return
+			# If the m2m to be set is actually a reverse FK relation, we need to do extra magic.
+			# We figure out if the remote objects are added or removed. The added ones, we modify/save
+			# explicitly rather than using the reverse relation manager, otherwise the history layer
+			# doesn't see the changes. The same goes for the removed objects, except there we also
+			# DELETE them if the FK is non-nullable. Interesting stuff.
+			obj_field = getattr(obj, field)
+			old_ids = set(obj_field.values_list('id', flat=True))
+			new_ids = set(value)
+			for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
+				method = getattr(rmobj, '_binder_unset_relation_{}'.format(obj_field.field.name), None)
+				if callable(method):
+					try:
+						method()
+					except BinderValidationError as bve:
+						validation_errors.append(bve)
+				elif obj_field.field.null:
+					setattr(rmobj, obj_field.field.name, None)
+					rmobj.save()
+				elif hasattr(rmobj, 'deleted'):
+					if not rmobj.deleted:
+						rmobj.deleted = True
+						rmobj.save()
+				else:
+					rmobj.delete()
+			for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
+				setattr(addobj, obj_field.field.name, obj)
+				addobj.save()
+		elif getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor:
+			remote_obj = obj._meta.get_field(field).related_model.objects.get(pk=value[0])
+			setattr(obj, field, remote_obj)
+			remote_obj.save()
+		elif any(f.name == field for f in self._get_reverse_relations()):
+			#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
+			if any(v for v in value if v < 0):
+				return
+			getattr(obj, field).set(value)
+		elif any(f.name == field for f in self.model._meta.many_to_many):
+			getattr(obj, field).set(value)
+		else:
+			setattr(obj, field, value)
+
+		if validation_errors:
+			raise sum(validation_errors, None)
+
 
 
 
@@ -1234,7 +1255,7 @@ class ModelView(View):
 				# Get key of field pointing to subclass
 				subkey = subcls._meta.pk.remote_field.name
 				# Get id of subclass
-				subid = data.get(subkey)
+				subid = data.pop(subkey, None)
 				if subid is None:
 					continue
 				# Check if class is in objects
@@ -1242,7 +1263,6 @@ class ModelView(View):
 					continue
 				# Add to overrides
 				overrides[(cls, mid)] = (subcls, subid)
-				break
 
 		# Move data to overrides
 		for source in list(overrides):
@@ -1253,9 +1273,6 @@ class ModelView(View):
 			overrides[source] = target
 			# Pop data of source and set as default for target
 			for key, value in objects.pop(source).items():
-				if key == target[0]._meta.pk.remote_field.name:
-					# Skip field pointing to the subclass instance
-					continue
 				objects[target].setdefault(key, value)
 
 		# Fix foreign keys in data according to overrides
