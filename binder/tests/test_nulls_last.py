@@ -1,3 +1,4 @@
+import unittest
 from datetime import datetime
 
 from django.test import TestCase, Client
@@ -31,6 +32,10 @@ class NullsLastTest(TestCase):
 		self._assert_order('last_seen__nulls_first', ['4', '5', '1', '2', '3'])
 		self._assert_order('-last_seen__nulls_first', ['4', '5', '3', '2', '1'])
 
+	@unittest.skipIf(
+		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) < (2, 1, 0),
+		"Only available from DJango >2.1"
+	)
 	def test_order_by_nulls_last_on_annotation(self):
 		self._load_test_data()
 
@@ -41,6 +46,10 @@ class NullsLastTest(TestCase):
 		self._assert_order('last_present__nulls_first', ['4', '5', '1', '2', '3'])
 		self._assert_order('-last_present__nulls_first', ['4', '5', '3', '2', '1'])
 
+	@unittest.skipIf(
+		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) < (2, 1, 0),
+		"Only available from DJango >2.1"
+	)
 	def test_order_by_nulls_last_on_aggregate_annotation(self):
 		self._load_test_data_with_animals()
 
