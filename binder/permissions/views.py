@@ -1,4 +1,5 @@
 import logging
+import warnings
 from enum import Enum
 from functools import reduce
 
@@ -296,10 +297,9 @@ class PermissionView(ModelView):
 
 
 	def delete(self, request, pk=None, undelete=False):
-		query = self.get_queryset(request)
-		object = query.filter(pk=pk)
-
-		if len(object) == 0:
+		try:
+			object = self.get_queryset(request).get(pk=pk)
+		except self.model.DoesNotExist:
 			raise BinderNotFound()
 
 		self.scope_delete(request, object, {})
@@ -321,7 +321,26 @@ class PermissionView(ModelView):
 			if getattr(self, scope_name, None) is None:
 				raise UnexpectedScopeException(
 					'Scope {} is not implemented for model {}'.format(scope_name, self.model))
-			can_change |= getattr(self, scope_name)(request, object, values)
+			scope_func = getattr(self, scope_name)
+			try:
+				scope = scope_func(request, object, values)
+			except Exception as e:
+				# Call with queryset instead of object for backwards compat
+				try:
+					qs = self.get_queryset(request).filter(pk=object.pk)
+					scope = scope_func(request, qs, values)
+				except Exception:
+					# Both failed so exception probably was not related to
+					# instance vs queryset so raise original exception
+					raise e
+				# Only reached when scope on queryset doesnt raise an exception
+				# while scope on instance did
+				warnings.warn(RuntimeWarning(
+					'{}.{} still scopes on querysets instead of instances.'
+					.format(type(self).__name__, scope_name)
+				))
+
+			can_change |= scope
 
 		if not can_change:
 			raise ScopingError(user=request.user, perm='You do not have a scope that allows you to delete model={}'.format(self.model))
