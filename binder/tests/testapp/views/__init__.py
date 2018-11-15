@@ -7,7 +7,9 @@ from .contact_person import ContactPersonView
 from .costume import CostumeView
 from .feeding_schedule import FeedingScheduleView
 from .gate import GateView
+from .lion import Lion
 from .picture import PictureView
 from .user import UserView
 from .zoo import ZooView
 from .zoo_employee import ZooEmployeeView
+

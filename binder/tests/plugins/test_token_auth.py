@@ -23,26 +23,26 @@ class TokenAuthTest(TestCase):
 		self.client = Client(HTTP_AUTHORIZATION='Token ' + self.token.token)
 
 	def test_token_auth(self):
-		res = self.client.get('/user/')
+		res = self.client.get('/user/identify/')
 		self.assertEqual(res.status_code, 200)
 		res = jsonloads(res.content)
 		self.assertEqual(res, {'username': 'foo', 'email': ''})
 
 	def test_no_token_auth(self):
-		res = Client().get('/user/')
+		res = Client().get('/user/identify/')
 		self.assertEqual(res.status_code, 403)
 
 	def test_session_auth(self):
 		client = Client()
 		self.assertTrue(client.login(username='foo', password='bar'))
-		res = client.get('/user/')
+		res = client.get('/user/identify/')
 		self.assertEqual(res.status_code, 200)
 
 	@override_settings(
 		BINDER_TOKEN_EXPIRE_TIME=timedelta(days=-1),
 	)
 	def test_token_expired(self):
-		res = self.client.get('/user/')
+		res = self.client.get('/user/identify/')
 		self.assertEqual(res.status_code, 400)
 		res = jsonloads(res.content)
 		assert_json(res, {
@@ -58,7 +58,7 @@ class TokenAuthTest(TestCase):
 		self.token.token = 'foo'
 		self.token.save()
 
-		res = self.client.get('/user/')
+		res = self.client.get('/user/identify/')
 		self.assertEqual(res.status_code, 404)
 		res = jsonloads(res.content)
 		assert_json(res, {
@@ -70,7 +70,7 @@ class TokenAuthTest(TestCase):
 
 	def test_other_auth_type(self):
 		client = Client(HTTP_AUTHORIZATION='Foo ' + self.token.token)
-		res = client.get('/user/')
+		res = client.get('/user/identify/')
 		self.assertEqual(res.status_code, 403)
 
 
@@ -80,6 +80,7 @@ class TokenAuthTest(TestCase):
 			('auth.login_user', None),
 			('token_auth.add_token', 'own'),
 			('token_auth.view_token', 'own'),
+			('auth.view_user', 'own'),
 			('token_auth.change_token', 'own'),
 			('token_auth.delete_token', 'own'),
 		],
@@ -104,7 +105,9 @@ class TokenLoginTest(TestCase):
 		self.assertEqual(res['user'], self.user.pk)
 
 		client = Client(HTTP_AUTHORIZATION='Token ' + res['token'])
-		res = client.get('/user/')
+
+		res = client.get('/user/identify/')
+
 		self.assertEqual(res.status_code, 200)
 		res = jsonloads(res.content)
 		self.assertEqual(res['username'], 'foo')
