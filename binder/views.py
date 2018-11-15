@@ -768,15 +768,11 @@ class ModelView(View):
 
 				if nulls_last is not None:
 					if order.startswith('-'):
-						order = order[1:]
 						desc = True
+						order = order[1:]
 					else:
 						desc = False
-					annotation = self.annotations.get(order)
-					if annotation is None:
-						expr = F(order)
-					else:
-						expr = annotation['expr']
+					expr = F(order)
 					directed_expr = expr.desc if desc else expr.asc
 					order = (
 						directed_expr(nulls_last=True)

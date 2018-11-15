@@ -6,8 +6,9 @@ python:
 cache:
   pip: true
 env:
-  - DJANGO_VERSION=1.11.9
-  - DJANGO_VERSION=2.0.1
+  - DJANGO_VERSION=1.11.15
+  - DJANGO_VERSION=2.0.8
+  - DJANGO_VERSION=2.1.1
 install:
     - pip install -q psycopg2 Pillow django-request-id requests django==$DJANGO_VERSION
     - pip install flake8 codecov coverage

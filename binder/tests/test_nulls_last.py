@@ -1,3 +1,4 @@
+import unittest
 from datetime import datetime
 
 from django.test import TestCase, Client
@@ -5,8 +6,8 @@ from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
-from .testapp.models import Caretaker
-
+from .testapp.models import Caretaker, Animal
+import os
 
 class NullsLastTest(TestCase):
 
@@ -31,6 +32,10 @@ class NullsLastTest(TestCase):
 		self._assert_order('last_seen__nulls_first', ['4', '5', '1', '2', '3'])
 		self._assert_order('-last_seen__nulls_first', ['4', '5', '3', '2', '1'])
 
+	@unittest.skipIf(
+		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) < (2, 1, 0),
+		"Only available from DJango >2.1"
+	)
 	def test_order_by_nulls_last_on_annotation(self):
 		self._load_test_data()
 
@@ -40,6 +45,20 @@ class NullsLastTest(TestCase):
 		self._assert_order('-last_present__nulls_last', ['3', '2', '1', '4', '5'])
 		self._assert_order('last_present__nulls_first', ['4', '5', '1', '2', '3'])
 		self._assert_order('-last_present__nulls_first', ['4', '5', '3', '2', '1'])
+
+	@unittest.skipIf(
+		'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) < (2, 1, 0),
+		"Only available from DJango >2.1"
+	)
+	def test_order_by_nulls_last_on_aggregate_annotation(self):
+		self._load_test_data_with_animals()
+
+		self._assert_order('best_animal', ['1', '2', '3', '4', '5'])
+		self._assert_order('-best_animal', ['5', '4', '3', '2', '1'])
+		self._assert_order('best_animal__nulls_last', ['1', '2', '3', '4', '5'])
+		self._assert_order('-best_animal__nulls_last', ['5', '4', '3', '2', '1'])
+		self._assert_order('best_animal__nulls_first', ['1', '2', '3', '4', '5'])
+		self._assert_order('-best_animal__nulls_first', ['5', '4', '3', '2', '1'])
 
 	def _load_test_data(self):
 		Caretaker.objects.all().delete()
@@ -51,6 +70,12 @@ class NullsLastTest(TestCase):
 			('5', None),
 		]:
 			Caretaker(name=name, last_seen=last_seen).save()
+
+	def _load_test_data_with_animals(self):
+		self._load_test_data()
+		Animal.objects.all().delete()
+		for caretaker in Caretaker.objects.all():
+			Animal(name=caretaker.name, caretaker=caretaker).save()
 
 	def _assert_order(self, order_by, expected):
 		res = self.client.get('/caretaker/', {'order_by': order_by})
