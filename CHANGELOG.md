@@ -1,4 +1,21 @@
-# master
+
+## Version 1.3.0
+
+### Features
+- Add support for `nulls_first` and `nulls_last` sorting postfixes on annotations (only in Django >=2.1)
+- Add automated test discovery script. All tests in the application are automatically discovered when including binder.load_tests in the `__init__.py` from the main application
+- Allow usage of custom user model in TokenView and UserView plugins
+
+
+### Bugfixes
+- `UserviewPlugin` custom functions do not break anymore if the user object has annotations
+- `UserviewPlugin` doesn't use deprecated `_get_obj` function anymore
+
+### Deprecations / removals
+- Removed (broken) `nulls_first` and `nulls_last` sorting postfixes for annotations (Django <= 2.0), in favour of a totally working version from Django > 2.1
+- `get_obj` is deprecated in favour of `_get_objs` endpoint
+
+## OLD
 
 ### Views
 
