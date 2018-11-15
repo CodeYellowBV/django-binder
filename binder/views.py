@@ -965,6 +965,11 @@ class ModelView(View):
 		if validation_errors:
 			raise sum(validation_errors, None)
 
+		# Skip re-fetch and serialization via get_objs if we're in
+		# multi-put (data is discarded!).
+		if getattr(request, '_is_multi_put', False):
+			return None
+
 		# Permission checks are done at this point, so we can avoid get_queryset()
 		data = self._get_objs(
 			annotate(self.model.objects.filter(pk=obj.pk)),
@@ -1438,6 +1443,10 @@ class ModelView(View):
 
 	def multi_put(self, request):
 		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
+
+		# Hack to communicate to _store() that we're not interested in
+		# the new data (for perf reasons).
+		request._is_multi_put = True
 
 		data = self._multi_put_parse_request(request)
 		objects = self._multi_put_collect_objects(data)
