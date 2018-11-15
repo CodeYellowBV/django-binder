@@ -29,4 +29,3 @@ class UserPasswordResetTestCase(TestCase):
 		self.assertEqual(200, res.status_code)
 
 		reset_mock.assert_called_once_with(res.wsgi_request, self.user.pk, self.token, 'foobar')
-
