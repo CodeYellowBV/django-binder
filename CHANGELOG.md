@@ -1,3 +1,44 @@
+## Version 1.4.0
+
+### Features
+- Add `Router.bootstrap()`function, which automatically imports all `views` directories of all the registered apps in django. Also, it automatically registers the default ModelView of binder.
+  
+  Old:
+  
+	```python
+	from binder.router import Router
+	from binder.views import ModelView
+	
+	# needed for binder.router to work
+	import cyrm.views  # noqa
+	import base.orders.views  # noqa
+	import ib.ib_orders.views  # noqa
+	....
+	import base.planning.views # noqa
+	
+	router = Router().register(ModelView)
+	
+	api_urls = [
+		re_path('^', include(router.urls)),
+	]
+	
+	```
+	
+	New:
+	```python
+	from binder.router import Router
+	router = Router.bootstrap()
+	api_urls = [
+		re_path('^', include(router.urls)),
+	]
+	```
+	
+
+
+
+### Bugfixes
+
+### Deprecations / removals
 
 ## Version 1.3.0
 
