@@ -1,6 +1,10 @@
+from importlib import import_module
+
 import django
+from django.apps import apps
 from django.urls import reverse
 
+from binder.views import ModelView
 from .exceptions import BinderRequestError, BinderCSRFFailure, BinderMethodNotAllowed
 
 
@@ -53,6 +57,22 @@ class Route(object):
 
 
 class Router(object):
+
+	@staticmethod
+	def bootstrap():
+		me = Router()
+
+		# import all views
+		for app in apps.get_app_configs():
+			try:
+				import_module('.views', app.name)
+			except ImportError:
+				# No views to be imported for this app
+				pass
+		me.register(ModelView)
+		return me
+
+
 	def __init__(self):
 		self.model_views = {}
 		self.model_routes = {}
