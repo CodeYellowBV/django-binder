@@ -537,7 +537,7 @@ class ModelView(View):
 			related_model = field.remote_field.model
 			related_field = field.remote_field.related_name # For completeness
 
-		if '+' in related_field: # Skip missing related fields
+		if field.remote_field.hidden: # Skip missing related fields
 			related_field = None
 
 		# {router-view-instance}
