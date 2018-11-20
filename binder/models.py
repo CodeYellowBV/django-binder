@@ -377,8 +377,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 					else:
 						warnings.warn(
 							'{}.Annotations.{} was ignored because it is not '
-							'a valid django query expression.'
-								.format(cls.__name__, attr)
+							'a valid django query expression.'.format(cls.__name__, attr)
 						)
 						continue
 
