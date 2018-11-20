@@ -33,6 +33,15 @@
 	]
 	```
 	
+- Allow callables for annotations, deferring their initializations until the corresponding view is initialized. Example:
+```python
+    class Annotations:
+        @staticmethod
+        def ready_to_go_cb():
+            from base.orders.models import PlannedStep
+            return Exists(PlannedStep.objects.filter(works__works__route=OuterRef('pk')))
+        ready_to_go = ready_to_go_cb
+```
 
 
 
