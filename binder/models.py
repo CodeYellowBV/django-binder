@@ -365,6 +365,9 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 					expr = getattr(cls.Annotations, attr)
 					fix_output_field(expr, cls)
 
+					if callable(expr) and not isinstance(expr, F) and not isinstance(expr, BaseExpression):
+						expr = expr()
+
 					if isinstance(expr, F):
 						field = expr._output_field_or_none
 					elif isinstance(expr, BaseExpression):
@@ -375,13 +378,12 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 						warnings.warn(
 							'{}.Annotations.{} was ignored because it is not '
 							'a valid django query expression.'
-							.format(cls.__name__, attr)
+								.format(cls.__name__, attr)
 						)
 						continue
 
 					cls._annotations[attr] = {'field': field, 'expr': expr}
 		return cls._annotations
-
 
 
 def history_obj_post_init(sender, instance, **kwargs):
