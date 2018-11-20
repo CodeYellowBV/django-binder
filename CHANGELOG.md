@@ -37,6 +37,7 @@
 
 
 ### Bugfixes
+- Fix error when `related_name=None`
 
 ### Deprecations / removals
 
