@@ -39,7 +39,8 @@ settings.configure(**{
 		'django.contrib.sessions',
 		'binder',
 		'binder.plugins.token_auth',
-		'binder.tests.testapp',
+		'tests',
+		'tests.testapp',
 	],
 	'MIGRATION_MODULES': {
 		'testapp': None,
@@ -50,7 +51,7 @@ settings.configure(**{
 		'token_auth': None,
 	},
 	'USE_TZ': True,
-	'ROOT_URLCONF': 'binder.tests.testapp.urls',
+	'ROOT_URLCONF': 'tests.testapp.urls',
 	'LOGGING': {
 		'version': 1,
 		'handlers': {

@@ -9,7 +9,7 @@ from django.core.management.base import CommandError
 from binder.plugins.token_auth.models import Token
 from binder.json import jsonloads
 
-from binder.tests.compare import assert_json, ANY, EXTRA
+from ..compare import assert_json, ANY, EXTRA
 
 
 @override_settings(
