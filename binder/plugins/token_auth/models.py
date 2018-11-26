@@ -23,7 +23,10 @@ class Token(BinderModel):
 	the expire calculation.
 	"""
 
-	user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+	user = models.ForeignKey(
+		settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+		related_name='tokens',
+	)
 	token = models.TextField(default=generate_token, unique=True)
 	created_at = models.DateTimeField(auto_now_add=True)
 	last_used_at = models.DateTimeField(auto_now=True)
