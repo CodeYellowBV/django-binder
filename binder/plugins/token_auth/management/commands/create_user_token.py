@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.utils.translation import ugettext as _
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from binder.plugins.token_auth.models import Token
@@ -15,8 +15,10 @@ class Command(BaseCommand):
 
 	@transaction.atomic
 	def handle(self, *args, **options):
+		User = get_user_model()
+
 		try:
-			user = User.objects.get(username=options['username'])
+			user = User.objects.get(**{User.USERNAME_FIELD: options['username']})
 		except User.DoesNotExist:
 			raise CommandError(_('User with username "%s" does not exist') % options['username'])
 
