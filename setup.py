@@ -11,8 +11,9 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
 	name='django-binder',
-	version='1.0.0',
-	packages=find_packages(include=['binder', 'binder.*']),
+	version='1.4.1',
+	package_dir={'binder':'binder'},
+	packages=find_packages(),
 	include_package_data=True,
 	license='MIT License',
 	description='Code Yellow backend framework for SPA webapps with REST-like API.',
