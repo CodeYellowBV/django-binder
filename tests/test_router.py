@@ -10,10 +10,10 @@ from . import urls_module
 
 # Two unique local models, to use for view registration
 class FooModel(BinderModel):
-	class Meta:
+	class Meta(BinderModel.Meta):
 		app_label = 'test'
 class BarModel(BinderModel):
-	class Meta:
+	class Meta(BinderModel.Meta):
 		app_label = 'test'
 
 
