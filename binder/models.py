@@ -182,7 +182,7 @@ class FloatFieldFilter(FieldFilter):
 
 
 
-class DateFilter(FieldFilter):
+class DateFieldFilter(FieldFilter):
 	fields = [models.DateField]
 	# Maybe allow __startswith? And __year etc?
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
