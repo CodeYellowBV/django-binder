@@ -43,6 +43,10 @@
         ready_to_go = ready_to_go_cb
 ```
 
+- When using date-only syntax for filtering on DateTimeFields, ranges
+  are now inclusive of the end date, and "greater than" filters will
+  now do the right thing and skip the given date completely instead of
+  using midnight of that date as a starting point.
 
 
 ### Bugfixes

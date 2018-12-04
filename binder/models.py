@@ -1,5 +1,6 @@
 import re
 import warnings
+from datetime import date, datetime
 from contextlib import suppress
 
 from django.db import models
@@ -9,6 +10,7 @@ from django.db.models import signals, F
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
 from django.db.models.expressions import BaseExpression
+from django.utils.dateparse import parse_date, parse_datetime
 
 from binder.json import jsonloads
 
@@ -190,6 +192,8 @@ class DateFieldFilter(FieldFilter):
 	def clean_value(self, qualifier, v):
 		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', v):
 			raise ValidationError('Invalid YYYY-MM-DD value {{{}}} for {}.'.format(v, self.field_description()))
+		else:
+			return parse_date(v)
 		return v
 
 
@@ -200,9 +204,50 @@ class DateTimeFieldFilter(FieldFilter):
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
 	def clean_value(self, qualifier, v):
-		if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})?)?$', v):
+		if re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})$', v):
+			return parse_datetime(v)
+		if re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', v):
+			return parse_date(v)
+		else:
 			raise ValidationError('Invalid YYYY-MM-DD(.mmm)ZONE value {{{}}} for {}.'.format(v, self.field_description()))
 		return v
+
+
+	def get_q(self, qualifier, value, invert, partial=''):
+		self.check_qualifier(qualifier)
+
+		# TODO: Try to make the splitting and cleaning more re-usable
+		if qualifier in ('in', 'range'):
+			values = value.split(',')
+			if qualifier == 'range':
+				if len(values) != 2:
+					raise BinderRequestError('Range requires exactly 2 values for {}.'.format(self.field_description()))
+		else:
+			values = [value]
+
+
+		if qualifier == 'isnull':
+			cleaned_value = True
+		elif qualifier in ('in', 'range'):
+			cleaned_value = [self.clean_value(qualifier, v) for v in values]
+			types = {type(v) for v in cleaned_value}
+			if len(types) != 1:
+				raise ValidationError('Values for filter {{{}}}.{{{}}} must be the same types.'.format(self.field.model.__name__, self.field.name))
+			if isinstance(cleaned_value[0], date) and not isinstance(cleaned_value[0], datetime):
+				qualifier = 'date__' + qualifier
+		else:
+			try:
+				cleaned_value = self.clean_value(qualifier, values[0])
+				if isinstance(cleaned_value, date) and not isinstance(cleaned_value, datetime):
+					qualifier = 'date__' + qualifier if qualifier else 'date'
+			except IndexError:
+				raise ValidationError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.field.model.__name__, self.field.name))
+
+		suffix = '__' + qualifier if qualifier else ''
+		if invert:
+			return ~Q(**{partial + self.field.name + suffix: cleaned_value})
+		else:
+			return Q(**{partial + self.field.name + suffix: cleaned_value})
 
 
 
