@@ -73,7 +73,7 @@ class MasqueradeMixin(UserBaseMixin):
 
 class UserViewMixIn(UserBaseMixin):
 	__metaclass__ = ABCMeta
-	log_request_body = False
+	token_generator = default_token_generator
 
 	def _require_model_perm(self, perm_type, request, pk=None):
 		"""
@@ -277,7 +277,7 @@ class UserViewMixIn(UserBaseMixin):
 		logger.info('password reset attempt for {}'.format(body.get(self.model.USERNAME_FIELD, '')))
 
 		for user in self.get_users(body.get(self.model.USERNAME_FIELD, '').lower()):
-			token = default_token_generator.make_token(user)
+			token = self.token_generator.make_token(user)
 			self._send_reset_mail(request, user, token)
 
 		return HttpResponse(status=204)
@@ -388,7 +388,7 @@ class UserViewMixIn(UserBaseMixin):
 		except (TypeError, ValueError, OverflowError, self.model.DoesNotExist):
 			user = None
 
-		if user is None or not default_token_generator.check_token(user, body.get('activation_code')):
+		if user is None or not self.token_generator.check_token(user, body.get('activation_code')):
 			raise BinderNotFound()
 
 		logger.info('login for {}/{} via successful activation'.format(user.id, user))
@@ -437,13 +437,13 @@ class UserViewMixIn(UserBaseMixin):
 	def _reset_pass_for_user(self, request, user_id, token, password):
 		"""
 		Helper function that actually resets the password for an user
-		"""
+        """
 		try:
 			user = self.model._default_manager.get(pk=user_id)
 		except (TypeError, ValueError, OverflowError, self.model.DoesNotExist):
 			user = None
 
-		if user is None or not default_token_generator.check_token(user, token):
+		if user is None or not self.token_generator.check_token(user, token):
 			raise BinderNotFound()
 
 		logger.info('login for {}/{} via successful password reset'.format(user.id, user))
