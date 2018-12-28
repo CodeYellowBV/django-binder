@@ -73,6 +73,7 @@ class MasqueradeMixin(UserBaseMixin):
 
 class UserViewMixIn(UserBaseMixin):
 	__metaclass__ = ABCMeta
+	log_request_body = False
 	token_generator = default_token_generator
 
 	def _require_model_perm(self, perm_type, request, pk=None):
