@@ -438,7 +438,7 @@ class UserViewMixIn(UserBaseMixin):
 	def _reset_pass_for_user(self, request, user_id, token, password):
 		"""
 		Helper function that actually resets the password for an user
-        """
+		"""
 		try:
 			user = self.model._default_manager.get(pk=user_id)
 		except (TypeError, ValueError, OverflowError, self.model.DoesNotExist):
