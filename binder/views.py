@@ -482,7 +482,10 @@ class ModelView(View):
 			where_map = self._parse_wheres(where_params, withs)
 
 		if isinstance(pks, django.db.models.query.QuerySet):
-			pks = pks.values_list('pk', flat=True)
+			if not withs:
+				pks = []  # No sense in re-executing the query just for the ids if there are no withs
+			else:
+				pks = pks.values_list('pk', flat=True)
 		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
 		pks = list(pks)
 
