@@ -866,8 +866,14 @@ class ModelView(View):
 
 		debug = {'request_id': request.request_id}
 		if django.conf.settings.DEBUG and 'debug' in request.GET:
-			debug['queries'] = ['{}s: {}'.format(q['time'], q['sql'].replace('"', '')) for q in django.db.connection.queries]
-			debug['query_count'] = len(django.db.connection.queries)
+			debug['queries'] = {}
+			qc = 0
+
+			for connection in django.db.connections:
+				debug['queries'][connection] = ['{}s: {}'.format(q['time'], q['sql'].replace('"', '')) for q in django.db.connections[connection].queries]
+
+				qc += len(django.db.connections[connection].queries)
+			debug['query_count'] = qc
 
 		response_data = {'data': data, 'with': extras, 'with_mapping': extras_mapping, 'with_related_name_mapping': extras_reverse_mapping, 'meta': meta, 'debug': debug}
 
