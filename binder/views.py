@@ -817,7 +817,7 @@ class ModelView(View):
 		meta = {}
 		queryset = self.get_queryset(request)
 		if pk:
-			queryset = queryset.filter(pk=int(pk))
+			queryset = queryset.filter(pk=pk)
 
 		# No parameter repetition. Should be extended to .params too after filters have been refactored.
 		for k, v in request.GET.lists():
@@ -1521,10 +1521,10 @@ class ModelView(View):
 		values = jsonloads(request.body)
 
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
+			obj = self.get_queryset(request).select_for_update().get(pk=pk)
 			# Permission checks are done at this point, so we can avoid get_queryset()
 			old = self._get_objs(
-				annotate(self.model.objects.filter(pk=int(pk))),
+				annotate(self.model.objects.filter(pk=pk)),
 				request,
 			)[0]
 		except ObjectDoesNotExist:
@@ -1594,7 +1594,7 @@ class ModelView(View):
 			pass
 
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
+			obj = self.get_queryset(request).select_for_update().get(pk=pk)
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
@@ -1648,7 +1648,7 @@ class ModelView(View):
 			pk = obj.pk
 		else:
 			try:
-				obj = self.get_queryset(request).get(pk=int(pk))
+				obj = self.get_queryset(request).get(pk=pk)
 			except ObjectDoesNotExist:
 				raise BinderNotFound()
 
