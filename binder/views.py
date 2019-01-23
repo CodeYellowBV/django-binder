@@ -25,7 +25,8 @@ from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExc
 from . import history
 from .models import FieldFilter, BinderModel
 from .json import JsonResponse, jsonloads
-
+from contextlib import ExitStack
+from django.db import router
 
 
 # Haha kill me now
@@ -217,8 +218,12 @@ class ModelView(View):
 
 		response = None
 		try:
+
 			#### START TRANSACTION
-			with transaction.atomic(), history.atomic(source='http', user=request.user, uuid=request.request_id):
+			with ExitStack() as stack, history.atomic(source='http', user=request.user, uuid=request.request_id):
+				for db in django.conf.settings.DATABASES:
+					stack.enter_context(transaction.atomic(using=db))
+
 				if not kwargs.pop('unauthenticated', False) and not request.user.is_authenticated:
 					raise BinderNotAuthenticated()
 
@@ -1285,8 +1290,8 @@ class ModelView(View):
 					raise BinderRequestError('with.{}[{}] should be a dictionary'.format(modelname, idx))
 				if not 'id' in obj:
 					raise BinderRequestError('missing id in with.{}[{}]'.format(modelname, idx))
-				if not isinstance(obj['id'], int):
-					raise BinderRequestError('non-numeric id in with.{}[{}]'.format(modelname, idx))
+				# if not isinstance(obj['id'], int):
+				# 	raise BinderRequestError('non-numeric id in with.{}[{}]'.format(modelname, idx))
 
 				objects[(model, obj['id'])] = obj
 
@@ -1431,7 +1436,7 @@ class ModelView(View):
 			values = objects[(model, oid)]
 			logger.info('Saving {} {}'.format(model.__name__, oid))
 
-			if oid >= 0:
+			if isinstance(oid, int) and oid >= 0:
 				try:
 					obj = model.objects.select_for_update().get(pk=oid)
 				except ObjectDoesNotExist:
@@ -1466,7 +1471,7 @@ class ModelView(View):
 				view._store(obj, values, request, pk=oid)
 			except BinderValidationError as e:
 				validation_errors.append(e)
-			if oid < 0:
+			if isinstance(oid, int) and oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				for base in getmro(model)[1:]:
 					if not (
