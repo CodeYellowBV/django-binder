@@ -56,6 +56,16 @@ class TokenView(PermissionView):
 		data = self._store(Token(), {'user': user.pk}, request)
 		meta = data.setdefault('_meta', {})
 		withs = self._get_withs([data['id']], request=request, withs=None)
-		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'] = withs
+		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'], field_results = withs
+
+		for datum in data:
+			for (w, (view, ids_dict, is_singular)) in field_results.items():
+				if is_singular:
+					try:
+						datum[w] = list(ids_dict[datum['id']])[0]
+					except IndexError:
+						datum[w] = None
+				else:
+					datum[w] = list(ids_dict[datum['id']])
 
 		return JsonResponse(data)

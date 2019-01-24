@@ -45,7 +45,7 @@ class WithFilterTest(TestCase):
 			'data': [
 				{
 					'id': zoo.id,
-					'animals': [antlion.id, sealion.id, goat.id],  # Currently we only filter the withs, not foreign keys
+					'animals': [antlion.id, sealion.id],
 					EXTRA(): None,
 				}
 			],
@@ -100,7 +100,7 @@ class WithFilterTest(TestCase):
 			'data': [
 				{
 					'id': zoo.id,
-					'animals': [antlion.id, sealion.id, goat.id],  # Currently we only filter the withs, not foreign keys
+					'animals': [antlion.id, sealion.id],
 					EXTRA(): None,
 				}
 			],
@@ -221,7 +221,7 @@ class WithFilterTest(TestCase):
 			'data': [
 				{
 					'id': zoo.id,
-					'contacts': [cp1.id, cp2.id, cp3.id],
+					'contacts': [cp1.id, cp2.id],
 					EXTRA(): None,
 				}
 			],
@@ -344,7 +344,7 @@ class WithFilterTest(TestCase):
 			'data': [
 				{
 					'id': zoo.id,
-					'animals': [harambe.id, bokito.id, rafiki.id],
+					'animals': [harambe.id, bokito.id],
 					EXTRA(): None,
 				}
 			],
