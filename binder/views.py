@@ -18,6 +18,7 @@ from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidd
 from django.http.request import RawPostDataException
 from django.db import models
 from django.db.models import Q, F
+from django.contrib.postgres.aggregates import ArrayAgg
 from django.utils import timezone
 from django.db import transaction
 
@@ -169,6 +170,16 @@ class ModelView(View):
 	# A dict will KeyError if you don't specify all ImageFields. Or use:
 	# collections.defaultdict(lambda: 512, foo=1024)
 	image_resize_threshold = 512
+
+	# A dict that looks like:
+	#  name: {
+	#    'model': model class,
+	#    'annotation': Q obj or method name,
+	#    'related_field': fieldname (str) or None if there is no such field,
+	#    'singular': boolean, (assumed False if missing)
+	#  }
+	virtual_relations = {}
+
 
 	@property
 	def annotations(self):
@@ -477,30 +488,48 @@ class ModelView(View):
 		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
 		pks = list(pks)
 
-		withs = set(withs)
-		extras = defaultdict(set)
+		extras_with_flat_ids = defaultdict(set)
 		extras_mapping = {}
 		extras_reverse_mapping_dict = {}
 
-		for w in withs:
-			# Make sure the _get_with only gets the wheres relevant to the relation
-			# We scope on the head of the relation, as the caretakers in animals.caretaker
-			# must also be filtered by the animal filter
-			# head = w.split('.')[0]
-			# scoped_wheres = where_map.get(head, [])
+		# ['foo.bar', 'foo.qux', 'foo.bar.hoi'] => {'foo': {'bar': {'hoi': {}}, 'qux': {}}}
+		def withs_to_nested_set(withs, result={}):
+			for w in withs:
+				head, *tail = w.split('.')
+				if head not in result:
+					result[head] = {}
+				if tail:
+					withs_to_nested_set(['.'.join(tail)], result[head])
 
-			(view, new_ids) = self._get_with(w, pks, request=request, where_map=where_map)
-			if view:
-				extras_mapping[w] = view
-				extras[view].update(set(new_ids))
+			return result
 
-				related_model_info = self._follow_related(w)[-1]
-				if related_model_info.reverse_fieldname is not None:
-					extras_reverse_mapping_dict[w] = related_model_info.reverse_fieldname
+		with_map = withs_to_nested_set(withs)
+
+		# Make sure the _get_with only gets the wheres relevant to the relation
+		# We scope on the head of the relation, as the caretakers in animals.caretaker
+		# must also be filtered by the animal filter
+		# head = w.split('.')[0]
+		# scoped_wheres = where_map.get(head, [])
+
+		field_results = self._get_with_ids(pks, request=request, with_map=with_map, where_map=where_map)
+		for (w, (view, new_ids_dict, is_singular)) in field_results.items():
+			model_name = view._model_name()
+			extras_mapping[w] = model_name
+
+			(view, flat_ids) = extras_with_flat_ids.get(model_name, (view, set()))
+
+			for new_ids in new_ids_dict.values():
+				flat_ids.update(set(new_ids))
+
+			extras_with_flat_ids[model_name] = (view, flat_ids)
+
+			related_model_info = self._follow_related(w)[-1]
+			if related_model_info.reverse_fieldname is not None:
+				extras_reverse_mapping_dict[w] = related_model_info.reverse_fieldname
 
 		extras_dict = {}
 		# FIXME: delegate this to a router or something
-		for view, with_pks in extras.items():
+		for (model_name, (view, with_pks)) in extras_with_flat_ids.items():
 			view = view()
 			# {router-view-instance}
 			view.router = self.router
@@ -508,10 +537,9 @@ class ModelView(View):
 				annotate(view.get_queryset(request).filter(pk__in=with_pks)),
 				request=request,
 			)
-			extras_dict[view._model_name()] = os
-		extras_mapping_dict = {fk: view()._model_name() for fk, view in extras_mapping.items()}
+			extras_dict[model_name] = os
 
-		return (extras_dict, extras_mapping_dict, extras_reverse_mapping_dict)
+		return (extras_dict, extras_mapping, extras_reverse_mapping_dict, field_results)
 
 
 
@@ -526,23 +554,33 @@ class ModelView(View):
 
 		try:
 			field = self.model._meta.get_field(fieldname)
+
+			if not field.is_relation:
+				raise BinderRequestError('Field is not a related object {{{}}}.{{{}}}.'.format(self.model.__name__, fieldname))
+
+			if isinstance(field, django.db.models.fields.reverse_related.ForeignObjectRel):
+				# Reverse relations
+				related_model = field.related_model
+				related_field = field.remote_field.name
+			else:
+				# Forward relations
+				related_model = field.remote_field.model
+				related_field = field.remote_field.related_name # For completeness
+
+			if field.remote_field.hidden: # Skip missing related fields
+				related_field = None
+
 		except FieldDoesNotExist:
-			raise BinderRequestError('Unknown field {{{}}}.{{{}}}.'.format(self.model.__name__, fieldname))
+			try:
+				vr = self.virtual_relations[fieldname]
+				try:
+					related_model = vr['model']
+					related_field = vr.get('related_field', None)
+				except KeyError:
+					raise BinderRequestError('No model defined for virtual relation field {{{}}}.{{{}}}.'.format(self.model.__name__, fieldname))
+			except KeyError:
+				raise BinderRequestError('Unknown field {{{}}}.{{{}}}.'.format(self.model.__name__, fieldname))
 
-		if not field.is_relation:
-			raise BinderRequestError('Field is not a related object {{{}}}.{{{}}}.'.format(self.model.__name__, fieldname))
-
-		if isinstance(field, django.db.models.fields.reverse_related.ForeignObjectRel):
-			# Reverse relations
-			related_model = field.related_model
-			related_field = field.remote_field.name
-		else:
-			# Forward relations
-			related_model = field.remote_field.model
-			related_field = field.remote_field.related_name # For completeness
-
-		if field.remote_field.hidden: # Skip missing related fields
-			related_field = None
 
 		# {router-view-instance}
 		# TODO: This should be refactored so that router
@@ -552,48 +590,110 @@ class ModelView(View):
 		return (RelatedModel(fieldname, related_model, related_field),) + view._follow_related(fieldspec)
 
 
+	# This will return a dictionary of dotted "with string" keys and
+	# tuple values of (view_class, id_dict).  These ids do not require
+	# permission scoping.  This will be done when fetching the actual
+	# objects.
+	def _get_with_ids(self, pks, request, with_map, where_map):
+		result = {}
 
-	def _get_with(self, wth, pks, request, where_map):
-		head, *tail = wth.split('.')
+		annotations = {}
+		singular_fields = set()
+		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(set))
+		virtual_fields = set()
 
-		next = self._follow_related(head)[0].model
-
-		# _get_with doesn't fully recurse the relation tree
-		# but it lags behind 1 recursion
-		rel_ids = self.model.objects.filter(pk__in=pks).values_list(head + '__pk', flat=True)
-
-		view_class = self.router.model_view(next)
-		rel_ids = view_class()._filter_relation(next, rel_ids, where_map.get(head, None))
-
-		if not tail:
-			return (view_class, rel_ids)
-		else:
+		for field in with_map:
+			next = self._follow_related(field)[0].model
+			view_class = self.router.model_view(next)
 			view = view_class()
 			# {router-view-instance}
 			view.router = self.router
-			wm_scoped = where_map.get(head)
-			wm_scoped = wm_scoped['subrels'] if wm_scoped else {}
-			return view._get_with('.'.join(tail), rel_ids, request, wm_scoped)
+			qs = view._filter_relation(next, where_map.get(field, None))
+
+			vr = self.virtual_relations.get(field, None)
+			# Virtual relation
+			if vr:
+				virtual_fields.add(field)
+				try:
+					virtual_annotation = vr['annotation']
+				except KeyError:
+					raise BinderRequestError('Virtual relation {{{}}}.{{{}}} has no annotation defined.'.format(self.model.__name__, field))
+
+				if vr.get('singular', False):
+					singular_fields.add(field)
+
+				# Some virtual withs cannot be (easily) expressed as
+				# annotations, so allow for fetching of ids, instead.
+				# This does mean you can't filter on this relation
+				# unless you write a custom filter, too.
+				if isinstance(virtual_annotation, Q):
+					q = Q(**{field+'__in': qs}) if qs else Q()
+					annotations[field+'___annotation'] = ArrayAgg(virtual_annotation, filter=q)
+				else:
+					try:
+						func = getattr(self, virtual_annotation)
+					except AttributeError:
+						raise BinderRequestError('Annotation for virtual relation {{{}}}.{{{}}} is {{{}}}, but no method by that name exists.'.format(
+							self.model.__name__, field, virtual_annotation
+						))
+					rel_ids_by_field_by_id[field] = func(request, pks, Q(pk__in=qs) if qs else Q())
+			# Actual relation
+			else:
+				if (getattr(self.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor or
+					not any(f.name == field for f in (list(self.model._meta.many_to_many) + list(self._get_reverse_relations())))):
+					singular_fields.add(field)
+
+				q = Q(**{field+'__in': qs}) if qs else Q()
+				q &= Q(**{field+'__pk__isnull': False})
+				annotations[field+'___annotation'] = ArrayAgg(field+'__pk', filter=q)
+
+		qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**annotations)
+		for record in qs:
+			for field in with_map:
+				if field not in virtual_fields:
+					rel_ids_by_field_by_id[field][record['pk']] |= set(record[field+'___annotation'])
+
+		for field, sub_fields in with_map.items():
+			next = self._follow_related(field)[0].model
+
+			view_class = self.router.model_view(next)
+			view = view_class()
+			# {router-view-instance}
+			view.router = self.router
+
+			result[field] = (view_class, rel_ids_by_field_by_id[field], field in singular_fields)
+
+			# And recur for subrelations
+			if sub_fields:
+				wm_scoped = where_map.get(field)
+				wm_scoped = wm_scoped['subrels'] if wm_scoped else {}
+
+				flattened_ids = [id for ids in rel_ids_by_field_by_id[field].values() for id in ids]
+				subrelations = view._get_with_ids(flattened_ids, request=request, with_map=sub_fields, where_map=wm_scoped)
+				for subrelation, data in subrelations.items():
+					result['.'.join([field, subrelation])] = data
+
+		return result
 
 
 	# We have a queryset resulting in a set of ids where model M
 	# should be scoped on, but also a set of wheres where model M
 	# should further be scoped on.
 	#
-	# Returns a further scoped list of ids
-	def _filter_relation(self, M, ids, where_map):
-		# If there are no filters, return the given ids
+	# Returns a queryset for this field we should filter on further.
+	def _filter_relation(self, M, where_map):
+		# If there are no filters, do nothing
 		if where_map is None:
-			return ids
+			return None
 
 		wheres = where_map['filters']
 
-		qs = M.objects.filter(pk__in=ids)
+		qs = M.objects.all()
 		for where in wheres:
 			field, val = where.split('=')
 			qs = self._parse_filter(qs, field, val)
 
-		return qs.values_list('pk', flat=True)
+		return qs
 
 
 	def _parse_filter(self, queryset, field, value, partial=''):
@@ -845,9 +945,19 @@ class ModelView(View):
 
 		#### with
 		# parse wheres from request
-		extras, extras_mapping, extras_reverse_mapping = self._get_withs(queryset, withs, request=request)
+		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(queryset, withs, request=request)
 
 		data = self._get_objs(queryset, request=request)
+		for datum in data:
+			for (w, (view, ids_dict, is_singular)) in field_results.items():
+				if is_singular:
+					try:
+						datum[w] = list(ids_dict[datum['id']])[0]
+					except IndexError:
+						datum[w] = None
+				else:
+					datum[w] = list(ids_dict[datum['id']])
+
 		if pk:
 			if data:
 				data = data[0]
@@ -1526,7 +1636,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'] = self._get_withs([new['id']], request=request, withs=None)
+		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'], field_results = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
@@ -1555,7 +1665,7 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'] = self._get_withs([new['id']], request=request, withs=None)
+		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'], field_results = self._get_withs([new['id']], request=request, withs=None)
 
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
