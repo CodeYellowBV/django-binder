@@ -226,6 +226,8 @@ class DateTimeFieldFilter(FieldFilter):
 			values = [value]
 
 
+
+
 		if qualifier == 'isnull':
 			cleaned_value = True
 		elif qualifier in ('in', 'range'):
@@ -247,6 +249,10 @@ class DateTimeFieldFilter(FieldFilter):
 		if invert:
 			return ~Q(**{partial + self.field.name + suffix: cleaned_value})
 		else:
+			print(
+				partial + self.field.name + suffix,
+				cleaned_value
+			)
 			return Q(**{partial + self.field.name + suffix: cleaned_value})
 
 
