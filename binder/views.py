@@ -451,30 +451,19 @@ class ModelView(View):
 		if wheres is None and request is not None:
 			where_str = request.GET.get('where', '')
 
-			# Find all splits
-			splits = []
-			pos = 0
-			while pos < len(where_str):
-				if where_str[pos] == ',':
-					splits.append(pos)
-				if where_str[pos] == '(':
-					# Skip until matching )
-					depth = 1
-					while pos + 1 < len(where_str) and depth > 0:
-						pos += 1
-						if where_str[pos] == '(':
-							depth += 1
-						elif where_str[pos] == ')':
-							depth -= 1
-				pos += 1
-
-			# Get params based on splits
-			starts = [0] + [split + 1 for split in splits]
-			ends = splits + [len(where_str)]
-			where_params = [
-				where_str[start:end]
-				for start, end in zip(starts, ends)
-			]
+			# Split on top level commas
+			where_params = []
+			start = 0
+			depth = 0
+			for i, c in enumerate(where_str):
+				if c == '(':
+					depth += 1
+				elif c == ')':
+					depth -= 1
+				elif c == ',' and depth == 0:
+					where_params.append(where_str[start:i])
+					start = i + 1
+			where_params.append(where_str[start:])
 
 			# Filter out empty params
 			where_params = list(filter(bool, where_params))
