@@ -1,5 +1,5 @@
 [flake8]
-extend-ignore = W191,E501,E301,E302,E303,E265,E201,E202,E713,E126,E128,E226,E221,E266,E127,E251,E305,E241,E272,E261,W504
+extend-ignore = W191,E501,E301,E302,E303,E265,E201,E202,E713,E126,E128,E226,E221,E266,E127,E251,E305,E241,E272,E261,W504,E117
 
 # W191            indentation uses tabs
 # E501            line too long
@@ -18,3 +18,4 @@ extend-ignore = W191,E501,E301,E302,E303,E265,E201,E202,E713,E126,E128,E226,E221
 # E272            multiple spaces before keyword
 # E261            at least two spaces before inline comment
 # W504            line break after binary operator
+# E116            over-indented (doesn't correctly with tabs)
