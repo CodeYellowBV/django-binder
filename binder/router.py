@@ -147,7 +147,25 @@ class Router(object):
 
 		for route, view in self.route_views.items():
 			name = view.model.__name__ if view.model else route.route
-			# List and detail endpoints
+
+			# Custom endpoints
+			for m in dir(view):
+				method = getattr(view, m)
+				if hasattr(method, 'detail_route') or hasattr(method, 'list_route'):
+					route_name = method.route_name
+					extra = method.extra_route
+					kwargs = {'method': m, 'router': self}
+					if method.unauthenticated:
+						kwargs['unauthenticated'] = True
+					if hasattr(method, 'detail_route'):
+						urls.append(django.conf.urls.url(r'^{}/{}/{}$'.format(route.route, pk_regex, route_name, extra),
+														 view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
+					if hasattr(method, 'list_route'):
+						urls.append(django.conf.urls.url(r'^{}/{}/{}$'.format(route.route, route_name, extra),
+														 view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
+
+
+				# List and detail endpoints
 			if route.list_endpoint:
 				urls.append(django.conf.urls.url(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 			if route.detail_endpoint:
@@ -162,21 +180,5 @@ class Router(object):
 			for ff in view.file_fields:
 				urls.append(django.conf.urls.url(r'^{}/{}/{}/$'.format(route.route, pk_regex, ff),
 						view.as_view(), {'file_field': ff, 'router': self}, name='{}.{}'.format(name, ff)))
-
-			# Custom endpoints
-			for m in dir(view):
-				method = getattr(view, m)
-				if hasattr(method, 'detail_route') or hasattr(method, 'list_route'):
-					route_name = method.route_name
-					extra = method.extra_route
-					kwargs = {'method': m, 'router': self}
-					if method.unauthenticated:
-						kwargs['unauthenticated'] = True
-					if hasattr(method, 'detail_route'):
-						urls.append(django.conf.urls.url(r'^{}/{}/{}$'.format(route.route, pk_regex, route_name, extra),
-								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
-					if hasattr(method, 'list_route'):
-						urls.append(django.conf.urls.url(r'^{}/{}/{}$'.format(route.route, route_name, extra),
-								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
 
 		return urls
