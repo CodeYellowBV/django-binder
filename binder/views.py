@@ -488,6 +488,7 @@ class ModelView(View):
 		pks = list(pks)
 
 		extras_with_flat_ids = defaultdict(set)
+		withs_per_model = defaultdict(dict)
 		extras_mapping = {}
 		extras_reverse_mapping_dict = {}
 
@@ -522,6 +523,12 @@ class ModelView(View):
 
 			extras_with_flat_ids[model_name] = (view, flat_ids)
 
+			# Filter all annotations we need to add to this particular model
+			for (w2, (view2, new_ids_dict2, is_singular2)) in field_results.items():
+				if w2.startswith(w+'.'):
+					rest = w2[len(w)+1:]
+					withs_per_model[model_name][rest] = (view2, new_ids_dict2, is_singular2)
+
 			related_model_info = self._follow_related(w)[-1]
 			if related_model_info.reverse_fieldname is not None:
 				extras_reverse_mapping_dict[w] = related_model_info.reverse_fieldname
@@ -532,11 +539,13 @@ class ModelView(View):
 			view = view()
 			# {router-view-instance}
 			view.router = self.router
-			os = view._get_objs(
+			objs = view._get_objs(
 				annotate(view.get_queryset(request).filter(pk__in=with_pks)),
 				request=request,
 			)
-			extras_dict[model_name] = os
+			for obj in objs:
+				view._annotate_obj_with_related_withs(obj, withs_per_model[model_name])
+			extras_dict[model_name] = objs
 
 		return (extras_dict, extras_mapping, extras_reverse_mapping_dict, field_results)
 
