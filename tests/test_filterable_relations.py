@@ -136,7 +136,7 @@ class WithFilterTest(TestCase):
 					},
 					{
 						'id': sealion.id,
-						'caretaker': alyx.id,
+						'caretaker': None, # Was filtered out!
 						EXTRA(): None,
 					},
 				],
@@ -201,7 +201,7 @@ class WithFilterTest(TestCase):
 					},
 					{
 						'id': sealion.id,
-						'caretaker': alyx.id,
+						'caretaker': None, # Was filtered out!
 						EXTRA(): None,
 					},
 					{
