@@ -18,15 +18,14 @@ from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidd
 from django.http.request import RawPostDataException
 from django.db import models
 from django.db.models import Q, F
-from django.contrib.postgres.aggregates import ArrayAgg
 from django.utils import timezone
 from django.db import transaction
 
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
+from .orderable_agg import OrderableArrayAgg
 from .models import FieldFilter, BinderModel
 from .json import JsonResponse, jsonloads
-
 
 
 # Haha kill me now
@@ -611,7 +610,7 @@ class ModelView(View):
 
 		annotations = {}
 		singular_fields = set()
-		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(set))
+		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(list))
 		virtual_fields = set()
 
 		for field in with_map:
@@ -621,6 +620,14 @@ class ModelView(View):
 			# {router-view-instance}
 			view.router = self.router
 			qs = view._filter_relation(next, where_map.get(field, None))
+
+			# Model default orders (this sometimes matters)
+			orders = []
+			for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
+				if o.startswith('-'):
+					orders.append('-'+field+'__'+o[1:])
+				else:
+					orders.append(field+'__'+o)
 
 			vr = self.virtual_relations.get(field, None)
 			# Virtual relation
@@ -640,7 +647,7 @@ class ModelView(View):
 				# unless you write a custom filter, too.
 				if isinstance(virtual_annotation, Q):
 					q = Q(**{field+'__in': qs}) if qs else Q()
-					annotations[field+'___annotation'] = ArrayAgg(virtual_annotation, filter=q)
+					annotations[field+'___annotation'] = OrderableArrayAgg(virtual_annotation, filter=q, ordering=orders)
 				else:
 					try:
 						func = getattr(self, virtual_annotation)
@@ -657,14 +664,14 @@ class ModelView(View):
 
 				q = Q(**{field+'__in': qs}) if qs is not None else Q()
 				q &= Q(**{field+'__pk__isnull': False})
-				annotations[field+'___annotation'] = ArrayAgg(field+'__pk', filter=q)
+				annotations[field+'___annotation'] = OrderableArrayAgg(field+'__pk', filter=q, ordering=orders)
 
 
 		qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**annotations)
 		for record in qs:
 			for field in with_map:
 				if field not in virtual_fields:
-					rel_ids_by_field_by_id[field][record['pk']] |= set(record[field+'___annotation'])
+					rel_ids_by_field_by_id[field][record['pk']] += record[field+'___annotation']
 
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model
@@ -913,6 +920,17 @@ class ModelView(View):
 		return queryset
 
 
+	def _annotate_obj_with_related_withs(self, obj, field_results):
+		for (w, (view, ids_dict, is_singular)) in field_results.items():
+			if '.' not in w:
+				if is_singular:
+					try:
+						obj[w] = list(ids_dict[obj['id']])[0]
+					except IndexError:
+						obj[w] = None
+				else:
+					obj[w] = list(ids_dict[obj['id']])
+
 
 	def get(self, request, pk=None, withs=None):
 		meta = {}
@@ -956,16 +974,8 @@ class ModelView(View):
 		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(queryset, withs, request=request)
 
 		data = self._get_objs(queryset, request=request)
-		for datum in data:
-			for (w, (view, ids_dict, is_singular)) in field_results.items():
-				if '.' not in w:
-					if is_singular:
-						try:
-							datum[w] = list(ids_dict[datum['id']])[0]
-						except IndexError:
-							datum[w] = None
-					else:
-						datum[w] = list(ids_dict[datum['id']])
+		for obj in data:
+			self._annotate_obj_with_related_withs(obj, field_results)
 
 		if pk:
 			if data:
@@ -1646,6 +1656,7 @@ class ModelView(View):
 
 		meta = data.setdefault('_meta', {})
 		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'], field_results = self._get_withs([new['id']], request=request, withs=None)
+		self._annotate_obj_with_related_withs(data, field_results)
 
 		logger.info('PUT updated {} #{}'.format(self._model_name(), pk))
 		for c in self._obj_diff(old, new, '{}[{}]'.format(self._model_name(), pk)):
@@ -1675,6 +1686,7 @@ class ModelView(View):
 
 		meta = data.setdefault('_meta', {})
 		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'], field_results = self._get_withs([new['id']], request=request, withs=None)
+		self._annotate_obj_with_related_withs(data, field_results)
 
 		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
 		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
