@@ -45,7 +45,7 @@ class TestFilterManyRels(TestCase):
 
 
 	def test_filter_fk_backward(self):
-		response = self.client.get('/zoo/?.animals=1')
+		response = self.client.get('/zoo/?.animals=1&with=animals')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 
