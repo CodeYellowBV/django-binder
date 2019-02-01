@@ -28,7 +28,7 @@ class TestReverseFKValidationErrors(TestCase):
 	def test_post_reverse_fk_correct(self):
 		model_data = { 'name': 'foo', 'animals': [self.animal.id] }
 
-		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		response = self.client.post('/zoo/?with=animals', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 

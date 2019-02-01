@@ -309,7 +309,7 @@ class MultiPutTest(TestCase):
 		zoo_id = returned_data['idmap']['zoo'][0][1]
 
 		update_data = {'animals': []}
-		response = self.client.put('/zoo/{}/'.format(zoo_id), data=json.dumps(update_data), content_type='application/json')
+		response = self.client.put('/zoo/{}/?with=animals'.format(zoo_id), data=json.dumps(update_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 
 		returned_data = jsonloads(response.content)
