@@ -416,6 +416,7 @@ class ModelViewBasicsTest(TestCase):
 
 		self.assertEqual('Henk', result['data']['name'])
 		self.assertEqual(gaia.pk, result['data']['zoo'])
+		self.assertEqual([coyote.id, roadrunner.id], result['with']['zoo'][0]['animals'])
 
 
 
