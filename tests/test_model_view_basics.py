@@ -493,6 +493,7 @@ class ModelViewBasicsTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual('GaiaZOO', result['data']['name'])
+		self.assertEqual(door.zoo_id, result['data']['gate']) # one to one field has no own id
 		self.assertEqual(1, len(result['with']['gate']))
 		self.assertEqual(1, len(result['with']['caretaker']))
 		self.assertEqual('gate', result['with_mapping']['gate'])
@@ -500,6 +501,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('caretaker', result['with_mapping']['gate.keeper'])
 		self.assertEqual('gate', result['with_related_name_mapping']['gate.keeper'])
 		self.assertEqual('fabbby', result['with']['caretaker'][0]['name'])
+		self.assertEqual(fabbby.id, result['with']['gate'][0]['keeper'])
 
 	def test_get_collection_filtering_following_nested_references(self):
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')

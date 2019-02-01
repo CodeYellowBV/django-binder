@@ -958,13 +958,14 @@ class ModelView(View):
 		data = self._get_objs(queryset, request=request)
 		for datum in data:
 			for (w, (view, ids_dict, is_singular)) in field_results.items():
-				if is_singular:
-					try:
-						datum[w] = list(ids_dict[datum['id']])[0]
-					except IndexError:
-						datum[w] = None
-				else:
-					datum[w] = list(ids_dict[datum['id']])
+				if '.' not in w:
+					if is_singular:
+						try:
+							datum[w] = list(ids_dict[datum['id']])[0]
+						except IndexError:
+							datum[w] = None
+					else:
+						datum[w] = list(ids_dict[datum['id']])
 
 		if pk:
 			if data:
