@@ -70,6 +70,29 @@ class WithFilterTest(TestCase):
 			EXTRA(): None,
 		})
 
+
+		# Regression test for missing filter caused by querysets being
+		# falsy when there are no records...
+		res = self.client.get('/zoo/', data={'with': 'animals.caretaker', 'where': 'animals(name:contains=nonexistent)'})
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo.id,
+					'animals': [],
+					EXTRA(): None,
+				}
+			],
+			'with': {
+				'animal': [],
+				'caretaker': [],
+			},
+			EXTRA(): None,
+		})
+
+
 	def test_multiple_wheres(self):
 		zoo = Zoo(name='Meerkerk')
 		zoo.save()

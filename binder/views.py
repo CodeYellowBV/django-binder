@@ -655,9 +655,10 @@ class ModelView(View):
 					not any(f.name == field for f in (list(self.model._meta.many_to_many) + list(self._get_reverse_relations())))):
 					singular_fields.add(field)
 
-				q = Q(**{field+'__in': qs}) if qs else Q()
+				q = Q(**{field+'__in': qs}) if qs is not None else Q()
 				q &= Q(**{field+'__pk__isnull': False})
 				annotations[field+'___annotation'] = ArrayAgg(field+'__pk', filter=q)
+
 
 		qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**annotations)
 		for record in qs:
