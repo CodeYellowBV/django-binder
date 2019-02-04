@@ -79,6 +79,108 @@ class TestFilterManyRels(TestCase):
 		})
 
 
+	# Tricky special case: Two references to the same model, one of
+	# which has m2m relations, the other does not.  This is a
+	# regression test.  Annoyingly, it would sometimes succeed and
+	# sometimes fail.
+	def test_m2m_with_multiple_relations(self):
+		expectation = {
+			'data': [
+				{
+					'id': 1,
+					'name': 'animal',
+					'zoo': 1,
+					'zoo_of_birth': None,
+					EXTRA(): None,  # Other fields are dontcare
+				}
+			],
+			'with': {
+				'zoo': [
+					{
+						'id': 1,
+						'contacts': [1],
+						EXTRA(): None,
+					},
+				],
+				'contact_person': [
+					{
+						'id': 1,
+						EXTRA(): None,
+					}
+				]
+			},
+			EXTRA(): None,  # Debug, meta, etc
+		}
+
+		response = self.client.get('/animal/?with=zoo_of_birth.contacts,zoo.contacts')
+		self.assertEqual(response.status_code, 200)
+		returned_data = jsonloads(response.content)
+		assert_json(returned_data, expectation)
+
+		# Different order of with should have no effect
+		response = self.client.get('/animal/?with=zoo.contacts,zoo_of_birth.contacts')
+		self.assertEqual(response.status_code, 200)
+		returned_data = jsonloads(response.content)
+		assert_json(returned_data, expectation)
+
+
+		# Now ensure we don't put both contact person lists on the same pile
+		ContactPerson(id=2, name='contact2').save()
+		z2 = Zoo(id=2, name='zoo2')
+		z2.save()
+		z2.contacts.set([2])
+		animal = Animal.objects.get()
+		animal.zoo_of_birth = z2
+		animal.save()
+
+		expectation = {
+			'data': [
+				{
+					'id': 1,
+					'name': 'animal',
+					'zoo': 1,
+					'zoo_of_birth': 2,
+					EXTRA(): None,  # Other fields are dontcare
+				}
+			],
+			'with': {
+				'zoo': [
+					{
+						'id': 1,
+						'contacts': [1],
+						EXTRA(): None,
+					},
+					{
+						'id': 2,
+						'contacts': [2],
+						EXTRA(): None,
+					},
+				],
+				'contact_person': [
+					{
+						'id': 1,
+						EXTRA(): None,
+					},
+					{
+						'id': 2,
+						EXTRA(): None,
+					},
+				]
+			},
+			EXTRA(): None,  # Debug, meta, etc
+		}
+
+		response = self.client.get('/animal/?with=zoo_of_birth.contacts,zoo.contacts')
+		self.assertEqual(response.status_code, 200)
+		returned_data = jsonloads(response.content)
+		assert_json(returned_data, expectation)
+
+		# Different order of with should have no effect
+		response = self.client.get('/animal/?with=zoo.contacts,zoo_of_birth.contacts')
+		self.assertEqual(response.status_code, 200)
+		returned_data = jsonloads(response.content)
+		assert_json(returned_data, expectation)
+
 
 	def test_filter_m2m_backward(self):
 		response = self.client.get('/contact_person/?.zoos=1')
