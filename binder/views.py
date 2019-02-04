@@ -539,6 +539,11 @@ class ModelView(View):
 			for (w2, (view2, new_ids_dict2, is_singular2)) in field_results.items():
 				if w2.startswith(w+'.'):
 					rest = w2[len(w)+1:]
+					try:
+						(view2_old, old_ids_dict2, is_singular2_old) = withs_per_model[model_name][rest]
+						new_ids_dict2.update(old_ids_dict2)
+					except KeyError:
+						pass
 					withs_per_model[model_name][rest] = (view2, new_ids_dict2, is_singular2)
 
 			related_model_info = self._follow_related(w)[-1]
