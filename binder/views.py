@@ -1738,9 +1738,9 @@ class ModelView(View):
 				else:
 					old_hash = None
 
-				file_field.delete()
+				file_field.delete(save=False)
+				# This triggers a save on obj
 				file_field.save(filename, django.core.files.File(file))
-				obj.save()
 
 				# FIXME: duplicate code
 				new_hash = hashlib.sha256()
