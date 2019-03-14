@@ -272,6 +272,7 @@ class PermissionView(ModelView):
 		"""
 		scopes = self._require_model_perm('view', request)
 		scope_queries = []
+		scope_querysets = []
 		for s in scopes:
 			scope_name = '_scope_view_{}'.format(s)
 			scope_func = getattr(self, scope_name, None)
@@ -286,7 +287,13 @@ class PermissionView(ModelView):
 			if isinstance(query_or_q, Q):
 				scope_queries.append(query_or_q)
 			else:
-				scope_queries.append(Q(pk__in=query_or_q.values('pk')))
+				scope_querysets.append(query_or_q.values('pk'))
+
+		# It looks like a chain of OR subqueries is *much* slower than
+		# one equivalent UNION subquery (to an insane degree).
+		if scope_querysets:
+			qs = reduce(lambda scope_qs, qs: qs.union(scope_qs), scope_querysets)
+			scope_queries.append(Q(pk__in=qs))
 
 		subfilter = reduce(lambda scope_query, q: q | scope_query, scope_queries)
 
