@@ -955,6 +955,8 @@ class ModelView(View):
 
 
 	def get(self, request, pk=None, withs=None):
+		include_meta = request.GET.get('include_meta', 'total_records').split(',')
+
 		meta = {}
 		queryset = self.get_queryset(request)
 		if pk:
@@ -983,7 +985,7 @@ class ModelView(View):
 
 		queryset = self.order_by(queryset, request)
 
-		if not pk:
+		if not pk and 'total_records' in include_meta:
 			# Only 'pk' values should reduce DB server memory a (little?) bit, making
 			# things faster.  Not prefetching related models here makes it faster still.
 			# See also https://code.djangoproject.com/ticket/23771 and related tickets.

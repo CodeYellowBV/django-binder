@@ -4,6 +4,7 @@ import json
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
+from .compare import assert_json, EXTRA
 from .testapp.models import Animal, Costume, Zoo, ZooEmployee, Caretaker, Gate
 
 class ModelViewBasicsTest(TestCase):
@@ -759,3 +760,59 @@ class ModelViewBasicsTest(TestCase):
 
 		self.assertEqual(1, len(res['data']))
 		self.assertEqual(bokito.pk, res['data'][0]['id'])
+
+
+	def test_meta_options(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+		bokito = Animal(zoo=zoo, name='Bokito')
+		bokito.save()
+		Animal(zoo=zoo, name='Harambe').save()
+
+		res = self.client.get('/zoo/')
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'name': 'Apenheul',
+					EXTRA(): None,  # Other fields are dontcare
+				}
+			],
+			'meta': {'total_records': 1},
+			EXTRA(): None,  # Debug, meta, with, etc
+		})
+
+
+		res = self.client.get('/zoo/?include_meta=')
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'name': 'Apenheul',
+					EXTRA(): None,  # Other fields are dontcare
+				}
+			],
+			'meta': {},
+			EXTRA(): None,  # Debug, meta, with, etc
+		})
+
+
+		# Explicitly requesting total_records is the same as the default
+		res = self.client.get('/zoo/?include_meta=total_records')
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'name': 'Apenheul',
+					EXTRA(): None,  # Other fields are dontcare
+				}
+			],
+			'meta': {'total_records': 1},
+			EXTRA(): None,  # Debug, meta, with, etc
+		})
