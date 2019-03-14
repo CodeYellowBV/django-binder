@@ -220,6 +220,42 @@ class WithFilterTest(TestCase):
 			EXTRA(): None,
 		})
 
+
+	def test_where_filter_on_reverse_foreign_key_field_causes_no_duplication_of_main_record(self):
+		zoo1 = Zoo(name='Meerkerk')
+		zoo1.save()
+		zoo2 = Zoo(name='Hardinxveld')
+		zoo2.save()
+
+		antlion = Animal(zoo=zoo1, name='antlion')
+		antlion.save()
+
+		sealion = Animal(zoo=zoo1, name='sealion')
+		sealion.save()
+
+		# Because one zoo has multiple animals, this creates a join.
+		# Having the join means we'll get multiple records.  Even
+		# though the ORM hides this fact from us, we do get the
+		# multiple results.  Therefore, Binder must add a distinct()
+		# call to counteract this effect.  Performance will suffer
+		# but there's not much else we can do.
+		res = self.client.get('/zoo/', data={ '.animals.name:contains': 'lion', })
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo1.id,
+					EXTRA(): None,
+				}
+			],
+			'meta': { 'total_records': 1, EXTRA(): None, },
+			'with': {},
+			EXTRA(): None,
+		})
+
+
 	def test_m2m(self):
 		zoo = Zoo(name='Meerkerk')
 		zoo.save()
@@ -263,6 +299,35 @@ class WithFilterTest(TestCase):
 			EXTRA(): None,
 		})
 
+
+	def test_where_filter_on_m2m_field_causes_no_duplication_of_main_record(self):
+		zoo = Zoo(name='Meerkerk')
+		zoo.save()
+
+		cp1 = ContactPerson(name='henk')
+		cp1.save()
+		cp2 = ContactPerson(name='hendrik')
+		cp2.save()
+		cp3 = ContactPerson(name='hans')
+		cp3.save()
+
+		zoo.contacts.set([cp1.id, cp2.id, cp3.id])
+
+		res = self.client.get('/zoo/', data={ '.contacts.name:startswith': 'he' })
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo.id,
+					EXTRA(): None,
+				}
+			],
+			'meta': { 'total_records': 1, EXTRA(): None, },
+			'with': {},
+			EXTRA(): None,
+		})
 
 
 	def test_where_complains_on_syntax_error(self):

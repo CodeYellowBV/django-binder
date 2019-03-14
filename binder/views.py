@@ -722,11 +722,19 @@ class ModelView(View):
 		head, *tail = field.split('.')
 
 		if tail:
-			next = self._follow_related(head)[0].model
-			view = self.router.model_view(next)()
+			related = self._follow_related(head)[0]
+			view = self.router.model_view(related.model)()
 			# {router-view-instance}
 			view.router = self.router
-			return view._parse_filter(queryset, '.'.join(tail), value, partial + head + '__')
+			queryset = view._parse_filter(queryset, '.'.join(tail), value, partial + head + '__')
+			# Distinct might be needed when we traverse a relation
+			# that is joined in, as it may produce duplicate records.
+			# Always doing the distinct works, but has performance
+			# implications, hence we avoid it if possible.
+			related_field = getattr(self.model, related.fieldname)
+			if isinstance(related_field, models.fields.related.ReverseManyToOneDescriptor): # m2m or reverse fk
+				queryset = queryset.distinct()
+			return queryset
 
 		invert = False
 		try:
@@ -960,7 +968,7 @@ class ModelView(View):
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
 		for field, values in filters.items():
 			for v in values:
-				queryset = self._parse_filter(queryset, field, v).distinct()
+				queryset = self._parse_filter(queryset, field, v)
 
 		#### search
 		if 'search' in request.GET:
