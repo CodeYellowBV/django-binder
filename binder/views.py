@@ -381,7 +381,7 @@ class ModelView(View):
 	# It goes through get_queryset(), so permission scoping applies.
 	# Raises model.DoesNotExist if the pk isn't found or not accessible to the user.
 	def _get_obj(self, pk, request):
-		results = self._get_objs(self.get_queryset(request).filter(pk=pk), request=request)
+		results = self._get_objs(annotate(self.get_queryset(request).filter(pk=pk)), request=request)
 		if results:
 			return results[0]
 		else:
