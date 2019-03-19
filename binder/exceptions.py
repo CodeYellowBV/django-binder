@@ -117,7 +117,8 @@ class BinderForbidden(BinderException):
 	def __init__(self, perm, user):
 		super().__init__()
 		self.fields['required_permission'] = perm
-		self.fields['current_user'] = getattr(user, user.USERNAME_FIELD)
+		username_field = getattr(user, 'USERNAME_FIELD', 'username')
+		self.fields['current_user'] = getattr(user, username_field)
 
 
 

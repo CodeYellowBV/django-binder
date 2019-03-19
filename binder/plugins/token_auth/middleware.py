@@ -1,4 +1,5 @@
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.models import AnonymousUser
 
 from binder.exceptions import BinderException
 from binder.plugins.token_auth.models import Token
@@ -49,6 +50,9 @@ class TokenAuthMiddleware:
 		self.get_response = get_response
 
 	def __call__(self, request):
+		if not hasattr(request, 'user'):
+			request.user = AnonymousUser()
+
 		if request.user.is_authenticated:
 			# Already authenticated
 			return self.get_response(request)

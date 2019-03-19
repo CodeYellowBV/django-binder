@@ -395,12 +395,11 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		abstract = True
 		ordering = ['pk']
 
-	_annotations = None
-
 	@classmethod
 	def annotations(cls):
-		if cls._annotations is None:
-			cls._annotations = {}
+		ann_name = '_{}__annotations'.format(cls.__name__)
+		if not hasattr(cls, ann_name):
+			setattr(cls, ann_name, {})
 			if hasattr(cls, 'Annotations'):
 				for attr in dir(cls.Annotations):
 					# Check for reserved python internal attribute
@@ -426,8 +425,8 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 						)
 						continue
 
-					cls._annotations[attr] = {'field': field, 'expr': expr}
-		return cls._annotations
+					getattr(cls, ann_name)[attr] = {'field': field, 'expr': expr}
+		return getattr(cls, ann_name)
 
 
 def history_obj_post_init(sender, instance, **kwargs):
