@@ -92,8 +92,7 @@ class ModelView(View):
 	# Model this is a view for. Use None for views not tied to a particular model.
 	model = None
 
-	# If True, Router().model_view(model) will return this view.
-	# Set to False for additional views for the same model.
+	# If True, Router().model_view(model) will return this view.  Set to False for additional views for the same model.
 	# FIXME: this is actually quite kludgy.
 	register_for_model = True
 
@@ -625,6 +624,11 @@ class ModelView(View):
 
 	def _filter_field(self, queryset, field_name, qualifier, value, invert, partial=''):
 		if field_name in self.annotations:
+			if partial:
+				return queryset.filter(**{partial + 'in': self._filter_field(
+					annotate(self.model.objects.all()),
+					field_name, qualifier, value, invert,
+				)})
 			field = self.annotations[field_name]['field']
 		else:
 			try:

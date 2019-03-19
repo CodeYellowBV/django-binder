@@ -82,3 +82,60 @@ class AnnotationTestCase(TestCase):
 		data = jsonloads(res.content)
 
 		self.assertEqual(data['data']['bsn'], 'blablabla')
+
+	def test_filter_on_animal_count(self):
+		caretaker_2 = Caretaker(name='caretaker 2')
+		caretaker_2.save()
+		caretaker_3 = Caretaker(name='caretaker 3')
+		caretaker_3.save()
+
+		for i in range(3):
+			Animal(
+				name='animal 2 {}'.format(i),
+				zoo=self.zoo,
+				caretaker=caretaker_2,
+			).save()
+		for i in range(2):
+			Animal(
+				name='animal 3 {}'.format(i),
+				zoo=self.zoo,
+				caretaker=caretaker_3,
+			).save()
+
+		res = self.client.get('/caretaker/?.animal_count=2')
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+
+		order = [ct['id'] for ct in data['data']]
+		self.assertEqual(order, [caretaker_3.pk])
+
+	def test_filter_on_animal_count_nested(self):
+		caretaker_2 = Caretaker(name='caretaker 2')
+		caretaker_2.save()
+		caretaker_3 = Caretaker(name='caretaker 3')
+		caretaker_3.save()
+
+		for i in range(3):
+			Animal(
+				name='animal 2 {}'.format(i),
+				zoo=self.zoo,
+				caretaker=caretaker_2,
+			).save()
+		animal_pks = set()
+		for i in range(2):
+			animal = Animal(
+				name='animal 3 {}'.format(i),
+				zoo=self.zoo,
+				caretaker=caretaker_3,
+			)
+			animal.save()
+			animal_pks.add(animal.pk)
+
+		res = self.client.get('/animal/?.caretaker.animal_count=2')
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+
+		pks = {a['id'] for a in data['data']}
+		self.assertEqual(pks, animal_pks)
