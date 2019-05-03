@@ -19,3 +19,4 @@ MySQL is supported, but only with the goal to replace it with
 PostgreSQL.  This means it has a few limitations:
 
 - `where` filtering on `with` relations is not supported.
+- Only integer primary keys are supported.
