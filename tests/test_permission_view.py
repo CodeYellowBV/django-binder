@@ -1,3 +1,5 @@
+import os, unittest
+
 from .compare import assert_json, EXTRA
 
 from django.test import TestCase, Client
@@ -5,11 +7,14 @@ from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
-from .testapp.models import Animal, FeedingSchedule
+if os.environ.get('BINDER_TEST_MYSQL', '0') == '0':
+	from .testapp.models import Animal, FeedingSchedule
 
-
+@unittest.skipIf(
+	os.environ.get('BINDER_TEST_MYSQL', '0') != '0',
+	"Only available with PostgreSQL"
+)
 class TestWithoutPerm(TestCase):
-
 	def setUp(self):
 		super().setUp()
 
@@ -54,8 +59,11 @@ class TestWithoutPerm(TestCase):
 		})
 
 
+@unittest.skipIf(
+	os.environ.get('BINDER_TEST_MYSQL', '0') != '0',
+	"Only available with PostgreSQL"
+)
 class TestWithPermButOutOfScope(TestCase):
-
 	def setUp(self):
 		super().setUp()
 

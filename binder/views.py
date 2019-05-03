@@ -16,14 +16,14 @@ from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
 from django.http.request import RawPostDataException
-from django.db import models
+from django.db import models, connections
 from django.db.models import Q, F
 from django.utils import timezone
 from django.db import transaction
 
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
-from .orderable_agg import OrderableArrayAgg
+from .orderable_agg import OrderableArrayAgg, GroupConcat
 from .models import FieldFilter, BinderModel
 from .json import JsonResponse, jsonloads
 
@@ -615,6 +615,8 @@ class ModelView(View):
 		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(list))
 		virtual_fields = set()
 
+		Agg = GroupConcat if connections[self.model.objects.db].vendor == 'mysql' else OrderableArrayAgg
+
 		for field in with_map:
 			next = self._follow_related(field)[0].model
 			view_class = self.router.model_view(next)
@@ -649,7 +651,7 @@ class ModelView(View):
 				# unless you write a custom filter, too.
 				if isinstance(virtual_annotation, Q):
 					q = Q(**{field+'__in': qs}) if qs else Q()
-					annotations[field+'___annotation'] = OrderableArrayAgg(virtual_annotation, filter=q, ordering=orders)
+					annotations[field+'___annotation'] = Agg(virtual_annotation, filter=q, ordering=orders)
 				else:
 					try:
 						func = getattr(self, virtual_annotation)
@@ -665,15 +667,21 @@ class ModelView(View):
 					singular_fields.add(field)
 
 				q = Q(**{field+'__in': qs}) if qs is not None else Q()
-				q &= Q(**{field+'__pk__isnull': False})
-				annotations[field+'___annotation'] = OrderableArrayAgg(field+'__pk', filter=q, ordering=orders)
+				if Agg != GroupConcat: # HACKK (GROUP_CONCAT can't filter and excludes NULL already)
+					q &= Q(**{field+'__pk__isnull': False})
+				annotations[field+'___annotation'] = Agg(field+'__pk', filter=q, ordering=orders)
 
 
 		qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**annotations)
 		for record in qs:
 			for field in with_map:
 				if field not in virtual_fields:
-					rel_ids_by_field_by_id[field][record['pk']] += record[field+'___annotation']
+					value = record[field+'___annotation']
+					if Agg == GroupConcat:
+						# Stupid assumption that PKs are always integers.
+						# Without this, the result types won't be right...
+						value = [int(v) for v in value]
+					rel_ids_by_field_by_id[field][record['pk']] += value
 
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model

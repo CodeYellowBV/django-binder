@@ -12,3 +12,10 @@ Code Yellow backend framework for SPA webapps with REST-like API.
 There are two ways to run the tests:
 - Run directly `./setup.py test` (requires you to have python3 and postgres installed)
 - Run with docker `docker-compose run binder ./setup.py test`
+
+## MySQL support
+
+MySQL is supported, but only with the goal to replace it with
+PostgreSQL.  This means it has a few limitations:
+
+- `where` filtering on `with` relations is not supported.

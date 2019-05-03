@@ -1,11 +1,20 @@
+import os
+
+import unittest
+
 from django.test import TestCase, Client
 
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-from .testapp.models import FeedingSchedule, Animal, Zoo
+if os.environ.get('BINDER_TEST_MYSQL', '0') == '0':
+	from .testapp.models import FeedingSchedule, Animal, Zoo
 
 # TODO: Currently these only really test filtering.  Move to test/filters?
+@unittest.skipIf(
+	os.environ.get('BINDER_TEST_MYSQL', '0') != '0',
+	"Only available with PostgreSQL"
+)
 class PostgresFieldsTest(TestCase):
 	def setUp(self):
 		super().setUp()

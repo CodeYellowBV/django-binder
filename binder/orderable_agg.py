@@ -1,5 +1,6 @@
 # Taken from https://code.djangoproject.com/ticket/26067
 # To be removed when we depend on Django 2.2
+from django.db.models import TextField
 from django.db.models.expressions import F, OrderBy
 from django.db.models.aggregates import Aggregate
 from django.contrib.postgres.fields import ArrayField
@@ -65,3 +66,25 @@ class OrderableArrayAgg(OrderableAggMixin, Aggregate):
 		if not value:
 			return []
 		return value
+
+
+class GroupConcat(OrderableAggMixin, Aggregate):
+	function = 'GROUP_CONCAT'
+	template = '%(function)s(%(distinct)s%(expressions)s %(ordering)s SEPARATOR \',\')'
+
+	@property
+	def output_field(self):
+		return TextField(self.source_expressions[0].output_field)
+
+	def __init__(self, expression, distinct=False, **extra):
+		if 'filter' in extra:
+			if extra['filter']: # not an empty Q()?
+				raise RuntimeError('Cannot filter within GroupConcat, MySQL does not support that!')
+			else:
+				del extra['filter']
+		super().__init__(expression, distinct='DISTINCT ' if distinct else '', **extra)
+
+	def convert_value(self, value, expression, connection):
+		if not value:
+			return []
+		return value.split(',')

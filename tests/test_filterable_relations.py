@@ -1,3 +1,5 @@
+import os, unittest
+
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
@@ -6,6 +8,10 @@ from binder.json import jsonloads
 from .testapp.models import Animal, Zoo, Caretaker, ContactPerson
 from .compare import assert_json, EXTRA
 
+@unittest.skipIf(
+	os.environ.get('BINDER_TEST_MYSQL', '0') != '0',
+	"Only available with PostgreSQL"
+)
 class WithFilterTest(TestCase):
 	def setUp(self):
 		super().setUp()
