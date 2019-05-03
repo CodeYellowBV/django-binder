@@ -2,8 +2,6 @@ from django.contrib.postgres.fields import ArrayField, JSONField
 from django.db import models
 from binder.models import BinderModel, ChoiceEnum
 
-
-# Zoos are really secretive about their feeding schedules
 class FeedingSchedule(BinderModel):
     FOODS = ChoiceEnum('meat', 'corn', 'oats', 'hay', 'bugs')
 
