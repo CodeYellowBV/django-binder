@@ -4,8 +4,8 @@ Binder.websockets contains functions to connect with a [high-templar](https://gi
 
 ## Flow
 
-The client = a web/native/whatever frontend
-The websocket server = a high-templar instance
+The client = a web/native/whatever frontend  
+The websocket server = a high-templar instance  
 The binder app = a server created with django-binder
 
 - The client needs live updates of certain models.
