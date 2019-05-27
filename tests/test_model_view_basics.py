@@ -341,11 +341,11 @@ class ModelViewBasicsTest(TestCase):
 		self.assertSetEqual(set([]), set(result['data'][0]['animals']))
 		self.assertSetEqual(set([]), set(result['data'][0]['most_popular_animals']))
 		self.assertEqual('GaiaZOO', result['data'][1]['name'])
-		self.assertSetEqual(set([roadrunner.pk, coyote.pk]), set(result['data'][1]['animals']))
-		self.assertSetEqual(set([coyote.pk]), set(result['data'][1]['most_popular_animals']))
+		self.assertEqual([coyote.pk, roadrunner.pk], result['data'][1]['animals'])
+		self.assertEqual([coyote.pk], result['data'][1]['most_popular_animals'])
 		self.assertEqual('Wildlands Adventure Zoo Emmen', result['data'][2]['name'])
-		self.assertSetEqual(set([woody.pk]), set(result['data'][2]['animals']))
-		self.assertSetEqual(set([]), set(result['data'][2]['most_popular_animals']))
+		self.assertEqual([woody.pk], result['data'][2]['animals'])
+		self.assertEqual([], result['data'][2]['most_popular_animals'])
 
 		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
 		self.assertEqual('Wile E. Coyote', animal_by_id[coyote.pk]['name'])

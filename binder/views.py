@@ -681,7 +681,23 @@ class ModelView(View):
 						# Stupid assumption that PKs are always integers.
 						# Without this, the result types won't be right...
 						value = [int(v) for v in value]
-					rel_ids_by_field_by_id[field][record['pk']] += value
+
+					# Make the values distinct.  We can't do this in
+					# the Agg() call, because then we get an error
+					# regarding order by and values needing to be the
+					# same :(
+					# We also can't just put it in a set, because we
+					# need to preserve the ordering.  So we use a set
+					# to keep track of what we've seen and only add
+					# new items.
+					seen_values = set()
+					distinct_values = []
+					for v in value:
+						if v not in seen_values:
+							distinct_values.append(v)
+						seen_values.add(v)
+
+					rel_ids_by_field_by_id[field][record['pk']] += distinct_values
 
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model
