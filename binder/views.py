@@ -1326,8 +1326,10 @@ class ModelView(View):
 		for f in list(self.model._meta.many_to_many) + list(self._get_reverse_relations()):
 			if f.name == field:
 				if isinstance(obj._meta.get_field(field), models.OneToOneRel):
-					value = [value]
-				if not (isinstance(value, list) and all(isinstance(v, int) for v in value)):
+					check_values = [value]
+				else:
+					check_values = value
+				if not (isinstance(check_values, list) and all(isinstance(v, int) for v in check_values)):
 					raise BinderFieldTypeError(self.model.__name__, field)
 				# FIXME
 				# Check if the ids being saved as m2m actually exist. This kinda sucks, it would be much
@@ -1336,7 +1338,7 @@ class ModelView(View):
 				# So yeah, we kludge around here. :(
 				#ids = set(value)
 				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
-				ids = set(v for v in value if v > 0)
+				ids = set(v for v in check_values if v > 0)
 				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
 				if ids:
 					field_name = obj._meta.get_field(field).remote_field.model.__name__
@@ -1506,11 +1508,18 @@ class ModelView(View):
 
 	def _multi_put_convert_backref_to_forwardref(self, objects):
 		for (model, mid), values in objects.items():
-			for field in filter(lambda f: f.one_to_many, model._meta.get_fields()):
+			for field in filter(lambda f: f.one_to_many or f.one_to_one, model._meta.get_fields()):
 				if field.name in values:
-					if not isinstance(values[field.name], list) or not all(isinstance(v, int) for v in values[field.name]):
-						raise BinderFieldTypeError(self.model.__name__, field.name)
-					for rid in values[field.name]:
+					if field.one_to_many:
+						if not isinstance(values[field.name], list) or not all(isinstance(v, int) for v in values[field.name]):
+							raise BinderFieldTypeError(self.model.__name__, field.name)
+						rids = values[field.name]
+					elif field.one_to_one:
+						if not isinstance(values[field.name], int):
+							raise BinderFieldTypeError(self.model.__name__, field.name)
+						rids = [values[field.name]]
+
+					for rid in rids:
 						if (field.related_model, rid) in objects:
 							objects[(field.related_model, rid)][field.remote_field.name] = mid
 						for submodel in getsubclasses(field.related_model):
