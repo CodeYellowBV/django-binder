@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.postgres.fields import JSONField
 from django.conf import settings
 
-from binder.models import BinderModel
+from ...models import BinderModel
 
 
 class MyFilter(BinderModel):

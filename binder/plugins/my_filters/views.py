@@ -1,8 +1,7 @@
 from django.db.models import Q
 
-from binder.permissions.views import PermissionView
-
-from ..models import MyFilter
+from ...permissions.views import PermissionView
+from .models import MyFilter
 
 
 class MyFilterView(PermissionView):
