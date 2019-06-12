@@ -39,6 +39,7 @@ INSTALLED_APPS = [
 	'django.contrib.staticfiles',
 	'binder',
 	'binder.plugins.token_auth',
+	'binder.plugins.my_filters',
 	'testapp',
 ]
 
