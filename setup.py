@@ -25,7 +25,7 @@ setup(
 	classifiers=[
 		'Environment :: Web Environment',
 		'Framework :: Django',
-		'Framework :: Django :: 1.10',
+		'Framework :: Django :: 2.0',
 		'Intended Audience :: Developers',
 		'License :: OSI Approved :: MIT License',
 		'Operating System :: OS Independent',
@@ -37,10 +37,13 @@ setup(
 		'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
 	],
 	install_requires=[
-		'Django >= 1.11',
+		'Django >= 2.0',
 		'Pillow >= 3.2.0',
 		'django-request-id >= 1.0.0',
 		'requests >= 2.13.0',
+	],
+	tests_require=[
 		'psycopg2 >= 2.7',
+		'mysqlclient >= 1.3.12',
 	],
 )

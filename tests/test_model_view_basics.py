@@ -4,7 +4,8 @@ import json
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-from .testapp.models import Animal, Costume, Zoo, Caretaker, Gate
+from .compare import assert_json, EXTRA
+from .testapp.models import Animal, Costume, Zoo, ZooEmployee, Caretaker, Gate
 
 class ModelViewBasicsTest(TestCase):
 	def setUp(self):
@@ -281,9 +282,10 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('GaiaZOO', zoo_by_id[gaia.pk]['name'])
 		self.assertEqual('Wildlands Adventure Zoo Emmen', zoo_by_id[emmen.pk]['name'])
 		self.assertEqual('Artis', zoo_by_id[artis.pk]['name'])
-		self.assertSetEqual(set([coyote.pk, roadrunner.pk]),
-							set(zoo_by_id[gaia.pk]['animals']))
-		self.assertSetEqual(set([woody.pk]), set(zoo_by_id[emmen.pk]['animals']))
+		# These are no longer in m2m_fields
+		#self.assertSetEqual(set([coyote.pk, roadrunner.pk]),
+		#					set(zoo_by_id[gaia.pk]['animals']))
+		#self.assertSetEqual(set([woody.pk]), set(zoo_by_id[emmen.pk]['animals']))
 
 
 	def test_get_collection_with_reverse_foreignkey(self):
@@ -339,11 +341,11 @@ class ModelViewBasicsTest(TestCase):
 		self.assertSetEqual(set([]), set(result['data'][0]['animals']))
 		self.assertSetEqual(set([]), set(result['data'][0]['most_popular_animals']))
 		self.assertEqual('GaiaZOO', result['data'][1]['name'])
-		self.assertSetEqual(set([roadrunner.pk, coyote.pk]), set(result['data'][1]['animals']))
-		self.assertSetEqual(set([coyote.pk]), set(result['data'][1]['most_popular_animals']))
+		self.assertEqual([coyote.pk, roadrunner.pk], result['data'][1]['animals'])
+		self.assertEqual([coyote.pk], result['data'][1]['most_popular_animals'])
 		self.assertEqual('Wildlands Adventure Zoo Emmen', result['data'][2]['name'])
-		self.assertSetEqual(set([woody.pk]), set(result['data'][2]['animals']))
-		self.assertSetEqual(set([]), set(result['data'][2]['most_popular_animals']))
+		self.assertEqual([woody.pk], result['data'][2]['animals'])
+		self.assertEqual([], result['data'][2]['most_popular_animals'])
 
 		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
 		self.assertEqual('Wile E. Coyote', animal_by_id[coyote.pk]['name'])
@@ -355,6 +357,68 @@ class ModelViewBasicsTest(TestCase):
 		self.assertIsNone(animal_by_id[roadrunner.pk]['zoo_of_birth'])
 		self.assertEqual(gaia.pk, animal_by_id[coyote.pk]['zoo'])
 		self.assertIsNone(animal_by_id[coyote.pk]['zoo_of_birth'])
+
+
+		# Same request, but starting from one animal
+		response = self.client.get('/animal/%s/' % woody.id, data={'order_by': 'name', 'with': 'zoo.animals,zoo.most_popular_animals'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['with']['zoo']))
+		self.assertEqual(1, len(result['with']['animal']))
+		self.assertSetEqual({'zoo', 'zoo.animals', 'zoo.most_popular_animals'}, set(result['with_mapping'].keys()))
+		# most popular animals is not in with_related_name_mapping (see above)
+		self.assertSetEqual({'zoo', 'zoo.animals'}, set(result['with_related_name_mapping'].keys()))
+		self.assertEqual('animal', result['with_mapping']['zoo.animals'])
+		self.assertEqual('zoo', result['with_mapping']['zoo'])
+		self.assertEqual('zoo', result['with_related_name_mapping']['zoo.animals'])
+
+		self.assertEqual('Woody Woodpecker', result['data']['name'])
+		self.assertEqual(emmen.pk, result['data']['zoo'])
+
+		self.assertSetEqual(set(), set(result['with']['zoo'][0]['most_popular_animals']))
+
+		animal_by_id = {animal['id']: animal for animal in result['with']['animal']}
+		self.assertEqual('Woody Woodpecker', result['with']['animal'][0]['name'])
+		self.assertEqual(emmen.pk, result['with']['animal'][0]['zoo'])
+		self.assertEqual(artis.pk, result['with']['animal'][0]['zoo_of_birth'])
+
+
+	def test_get_collection_with_reverse_foreignkey_through_other_relation(self):
+		gaia = Zoo(name='GaiaZOO')
+		gaia.full_clean()
+		gaia.save()
+
+		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
+		coyote.full_clean()
+		coyote.save()
+
+		roadrunner = Animal(name='Roadrunner', zoo=gaia)
+		roadrunner.full_clean()
+		roadrunner.save()
+
+		henk = ZooEmployee(zoo=gaia, name='Henk')
+		henk.full_clean()
+		henk.save()
+
+		response = self.client.get('/zoo_employee/%s/' % henk.id, data={'with': 'zoo.animals'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['with']['zoo']))
+		self.assertEqual(2, len(result['with']['animal']))
+		self.assertSetEqual({'zoo', 'zoo.animals'}, set(result['with_mapping'].keys()))
+		self.assertSetEqual({'zoo', 'zoo.animals'}, set(result['with_related_name_mapping'].keys()))
+		self.assertEqual('animal', result['with_mapping']['zoo.animals'])
+		self.assertEqual('zoo', result['with_mapping']['zoo'])
+		self.assertEqual('animal', result['with_mapping']['zoo.animals'])
+		self.assertEqual('zoo_employees', result['with_related_name_mapping']['zoo'])
+		self.assertEqual('zoo', result['with_related_name_mapping']['zoo.animals'])
+
+		self.assertEqual('Henk', result['data']['name'])
+		self.assertEqual(gaia.pk, result['data']['zoo'])
+		self.assertEqual([coyote.id, roadrunner.id], result['with']['zoo'][0]['animals'])
+
 
 
 	def test_get_collection_with_disabled_reverse_foreignkey(self):
@@ -493,6 +557,7 @@ class ModelViewBasicsTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual('GaiaZOO', result['data']['name'])
+		self.assertEqual(door.zoo_id, result['data']['gate']) # one to one field has no own id
 		self.assertEqual(1, len(result['with']['gate']))
 		self.assertEqual(1, len(result['with']['caretaker']))
 		self.assertEqual('gate', result['with_mapping']['gate'])
@@ -500,6 +565,7 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('caretaker', result['with_mapping']['gate.keeper'])
 		self.assertEqual('gate', result['with_related_name_mapping']['gate.keeper'])
 		self.assertEqual('fabbby', result['with']['caretaker'][0]['name'])
+		self.assertEqual(fabbby.id, result['with']['gate'][0]['keeper'])
 
 	def test_get_collection_filtering_following_nested_references(self):
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
@@ -621,7 +687,7 @@ class ModelViewBasicsTest(TestCase):
 			'name': 'Artis',
 			'animals': [scooby.pk, scrappy.pk],
 		}
-		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		response = self.client.post('/zoo/?with=animals', data=json.dumps(model_data), content_type='application/json')
 
 		self.assertEqual(response.status_code, 200)
 
@@ -694,3 +760,59 @@ class ModelViewBasicsTest(TestCase):
 
 		self.assertEqual(1, len(res['data']))
 		self.assertEqual(bokito.pk, res['data'][0]['id'])
+
+
+	def test_meta_options(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+		bokito = Animal(zoo=zoo, name='Bokito')
+		bokito.save()
+		Animal(zoo=zoo, name='Harambe').save()
+
+		res = self.client.get('/zoo/')
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'name': 'Apenheul',
+					EXTRA(): None,  # Other fields are dontcare
+				}
+			],
+			'meta': {'total_records': 1},
+			EXTRA(): None,  # Debug, meta, with, etc
+		})
+
+
+		res = self.client.get('/zoo/?include_meta=')
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'name': 'Apenheul',
+					EXTRA(): None,  # Other fields are dontcare
+				}
+			],
+			'meta': {},
+			EXTRA(): None,  # Debug, meta, with, etc
+		})
+
+
+		# Explicitly requesting total_records is the same as the default
+		res = self.client.get('/zoo/?include_meta=total_records')
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'name': 'Apenheul',
+					EXTRA(): None,  # Other fields are dontcare
+				}
+			],
+			'meta': {'total_records': 1},
+			EXTRA(): None,  # Debug, meta, with, etc
+		})

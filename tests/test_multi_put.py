@@ -309,7 +309,7 @@ class MultiPutTest(TestCase):
 		zoo_id = returned_data['idmap']['zoo'][0][1]
 
 		update_data = {'animals': []}
-		response = self.client.put('/zoo/{}/'.format(zoo_id), data=json.dumps(update_data), content_type='application/json')
+		response = self.client.put('/zoo/{}/?with=animals'.format(zoo_id), data=json.dumps(update_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 
 		returned_data = jsonloads(response.content)
@@ -447,3 +447,35 @@ class MultiPutTest(TestCase):
 
 		contact1.refresh_from_db()
 		self.assertSetEqual(set(), {c.pk for c in contact1.zoos.all()})
+
+
+	# Regression test: When multi-putting a one to one field from the
+	# other end it would fail hard.
+	def test_non_nullable_relation_does_not_cause_error(self):
+		model_data = {
+			'data': [{
+				'id': -1,
+				'name': 'Gaia',
+				'animals': [-2],
+			}],
+			'with': {
+				'animal': [{
+					'id': -2,
+					'name': 'Stimpson J. Cat',
+					'nickname': -3,
+				}],
+				'nickname': [{
+					'id': -3,
+					'nickname': 'Stimpy',
+				}],
+			}
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		nickname_id = returned_data['idmap']['nickname'][0][1]
+		animal_id = returned_data['idmap']['animal'][0][1]
+
+		stimpy = Animal.objects.get(pk=animal_id)
+		self.assertEqual(stimpy.nickname.id, nickname_id)

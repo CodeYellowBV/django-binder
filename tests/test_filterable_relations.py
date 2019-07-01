@@ -1,3 +1,5 @@
+import os, unittest
+
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
@@ -6,6 +8,10 @@ from binder.json import jsonloads
 from .testapp.models import Animal, Zoo, Caretaker, ContactPerson
 from .compare import assert_json, EXTRA
 
+@unittest.skipIf(
+	os.environ.get('BINDER_TEST_MYSQL', '0') != '0',
+	"Only available with PostgreSQL"
+)
 class WithFilterTest(TestCase):
 	def setUp(self):
 		super().setUp()
@@ -45,7 +51,7 @@ class WithFilterTest(TestCase):
 			'data': [
 				{
 					'id': zoo.id,
-					'animals': [antlion.id, sealion.id, goat.id],  # Currently we only filter the withs, not foreign keys
+					'animals': [antlion.id, sealion.id],
 					EXTRA(): None,
 				}
 			],
@@ -69,6 +75,29 @@ class WithFilterTest(TestCase):
 			},
 			EXTRA(): None,
 		})
+
+
+		# Regression test for missing filter caused by querysets being
+		# falsy when there are no records...
+		res = self.client.get('/zoo/', data={'with': 'animals.caretaker', 'where': 'animals(name:contains=nonexistent)'})
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo.id,
+					'animals': [],
+					EXTRA(): None,
+				}
+			],
+			'with': {
+				'animal': [],
+				'caretaker': [],
+			},
+			EXTRA(): None,
+		})
+
 
 	def test_multiple_wheres(self):
 		zoo = Zoo(name='Meerkerk')
@@ -100,7 +129,7 @@ class WithFilterTest(TestCase):
 			'data': [
 				{
 					'id': zoo.id,
-					'animals': [antlion.id, sealion.id, goat.id],  # Currently we only filter the withs, not foreign keys
+					'animals': [antlion.id, sealion.id],
 					EXTRA(): None,
 				}
 			],
@@ -113,7 +142,7 @@ class WithFilterTest(TestCase):
 					},
 					{
 						'id': sealion.id,
-						'caretaker': alyx.id,
+						'caretaker': None, # Was filtered out!
 						EXTRA(): None,
 					},
 				],
@@ -178,7 +207,7 @@ class WithFilterTest(TestCase):
 					},
 					{
 						'id': sealion.id,
-						'caretaker': alyx.id,
+						'caretaker': None, # Was filtered out!
 						EXTRA(): None,
 					},
 					{
@@ -196,6 +225,42 @@ class WithFilterTest(TestCase):
 			},
 			EXTRA(): None,
 		})
+
+
+	def test_where_filter_on_reverse_foreign_key_field_causes_no_duplication_of_main_record(self):
+		zoo1 = Zoo(name='Meerkerk')
+		zoo1.save()
+		zoo2 = Zoo(name='Hardinxveld')
+		zoo2.save()
+
+		antlion = Animal(zoo=zoo1, name='antlion')
+		antlion.save()
+
+		sealion = Animal(zoo=zoo1, name='sealion')
+		sealion.save()
+
+		# Because one zoo has multiple animals, this creates a join.
+		# Having the join means we'll get multiple records.  Even
+		# though the ORM hides this fact from us, we do get the
+		# multiple results.  Therefore, Binder must add a distinct()
+		# call to counteract this effect.  Performance will suffer
+		# but there's not much else we can do.
+		res = self.client.get('/zoo/', data={ '.animals.name:contains': 'lion', })
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo1.id,
+					EXTRA(): None,
+				}
+			],
+			'meta': { 'total_records': 1, EXTRA(): None, },
+			'with': {},
+			EXTRA(): None,
+		})
+
 
 	def test_m2m(self):
 		zoo = Zoo(name='Meerkerk')
@@ -221,7 +286,7 @@ class WithFilterTest(TestCase):
 			'data': [
 				{
 					'id': zoo.id,
-					'contacts': [cp1.id, cp2.id, cp3.id],
+					'contacts': [cp1.id, cp2.id],
 					EXTRA(): None,
 				}
 			],
@@ -240,6 +305,35 @@ class WithFilterTest(TestCase):
 			EXTRA(): None,
 		})
 
+
+	def test_where_filter_on_m2m_field_causes_no_duplication_of_main_record(self):
+		zoo = Zoo(name='Meerkerk')
+		zoo.save()
+
+		cp1 = ContactPerson(name='henk')
+		cp1.save()
+		cp2 = ContactPerson(name='hendrik')
+		cp2.save()
+		cp3 = ContactPerson(name='hans')
+		cp3.save()
+
+		zoo.contacts.set([cp1.id, cp2.id, cp3.id])
+
+		res = self.client.get('/zoo/', data={ '.contacts.name:startswith': 'he' })
+		self.assertEqual(res.status_code, 200)
+		res = jsonloads(res.content)
+
+		assert_json(res, {
+			'data': [
+				{
+					'id': zoo.id,
+					EXTRA(): None,
+				}
+			],
+			'meta': { 'total_records': 1, EXTRA(): None, },
+			'with': {},
+			EXTRA(): None,
+		})
 
 
 	def test_where_complains_on_syntax_error(self):
@@ -344,7 +438,7 @@ class WithFilterTest(TestCase):
 			'data': [
 				{
 					'id': zoo.id,
-					'animals': [harambe.id, bokito.id, rafiki.id],
+					'animals': [harambe.id, bokito.id],
 					EXTRA(): None,
 				}
 			],

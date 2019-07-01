@@ -188,14 +188,14 @@ class TestOrderBy(TestCase):
 		a1 = Animal.objects.create(zoo_id=z.id, name='a1').id
 
 		with CustomOrdering(Animal, 'name'):
-			response = self.client.get('/zoo/{}/'.format(z.id))
+			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
 			self.assertEqual(response.status_code, 200)
 			returned_data = jsonloads(response.content)
 
 		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
 
 		with CustomOrdering(Animal, '-name'):
-			response = self.client.get('/zoo/{}/'.format(z.id))
+			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
 			self.assertEqual(response.status_code, 200)
 			returned_data = jsonloads(response.content)
 
