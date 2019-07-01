@@ -16,14 +16,14 @@ from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
 from django.http.request import RawPostDataException
-from django.db import models
+from django.db import models, connections
 from django.db.models import Q, F
 from django.utils import timezone
 from django.db import transaction
 
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
-from .orderable_agg import OrderableArrayAgg
+from .orderable_agg import OrderableArrayAgg, GroupConcat
 from .models import FieldFilter, BinderModel
 from .json import JsonResponse, jsonloads
 
@@ -615,6 +615,8 @@ class ModelView(View):
 		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(list))
 		virtual_fields = set()
 
+		Agg = GroupConcat if connections[self.model.objects.db].vendor == 'mysql' else OrderableArrayAgg
+
 		for field in with_map:
 			next = self._follow_related(field)[0].model
 			view_class = self.router.model_view(next)
@@ -649,7 +651,7 @@ class ModelView(View):
 				# unless you write a custom filter, too.
 				if isinstance(virtual_annotation, Q):
 					q = Q(**{field+'__in': qs}) if qs else Q()
-					annotations[field+'___annotation'] = OrderableArrayAgg(virtual_annotation, filter=q, ordering=orders)
+					annotations[field+'___annotation'] = Agg(virtual_annotation, filter=q, ordering=orders)
 				else:
 					try:
 						func = getattr(self, virtual_annotation)
@@ -665,15 +667,37 @@ class ModelView(View):
 					singular_fields.add(field)
 
 				q = Q(**{field+'__in': qs}) if qs is not None else Q()
-				q &= Q(**{field+'__pk__isnull': False})
-				annotations[field+'___annotation'] = OrderableArrayAgg(field+'__pk', filter=q, ordering=orders)
+				if Agg != GroupConcat: # HACKK (GROUP_CONCAT can't filter and excludes NULL already)
+					q &= Q(**{field+'__pk__isnull': False})
+				annotations[field+'___annotation'] = Agg(field+'__pk', filter=q, ordering=orders)
 
 
 		qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**annotations)
 		for record in qs:
 			for field in with_map:
 				if field not in virtual_fields:
-					rel_ids_by_field_by_id[field][record['pk']] += record[field+'___annotation']
+					value = record[field+'___annotation']
+					if Agg == GroupConcat:
+						# Stupid assumption that PKs are always integers.
+						# Without this, the result types won't be right...
+						value = [int(v) for v in value]
+
+					# Make the values distinct.  We can't do this in
+					# the Agg() call, because then we get an error
+					# regarding order by and values needing to be the
+					# same :(
+					# We also can't just put it in a set, because we
+					# need to preserve the ordering.  So we use a set
+					# to keep track of what we've seen and only add
+					# new items.
+					seen_values = set()
+					distinct_values = []
+					for v in value:
+						if v not in seen_values:
+							distinct_values.append(v)
+						seen_values.add(v)
+
+					rel_ids_by_field_by_id[field][record['pk']] += distinct_values
 
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model
@@ -1302,8 +1326,10 @@ class ModelView(View):
 		for f in list(self.model._meta.many_to_many) + list(self._get_reverse_relations()):
 			if f.name == field:
 				if isinstance(obj._meta.get_field(field), models.OneToOneRel):
-					value = [value]
-				if not (isinstance(value, list) and all(isinstance(v, int) for v in value)):
+					check_values = [value]
+				else:
+					check_values = value
+				if not (isinstance(check_values, list) and all(isinstance(v, int) for v in check_values)):
 					raise BinderFieldTypeError(self.model.__name__, field)
 				# FIXME
 				# Check if the ids being saved as m2m actually exist. This kinda sucks, it would be much
@@ -1312,7 +1338,7 @@ class ModelView(View):
 				# So yeah, we kludge around here. :(
 				#ids = set(value)
 				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
-				ids = set(v for v in value if v > 0)
+				ids = set(v for v in check_values if v > 0)
 				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
 				if ids:
 					field_name = obj._meta.get_field(field).remote_field.model.__name__
@@ -1482,11 +1508,18 @@ class ModelView(View):
 
 	def _multi_put_convert_backref_to_forwardref(self, objects):
 		for (model, mid), values in objects.items():
-			for field in filter(lambda f: f.one_to_many, model._meta.get_fields()):
+			for field in filter(lambda f: f.one_to_many or f.one_to_one, model._meta.get_fields()):
 				if field.name in values:
-					if not isinstance(values[field.name], list) or not all(isinstance(v, int) for v in values[field.name]):
-						raise BinderFieldTypeError(self.model.__name__, field.name)
-					for rid in values[field.name]:
+					if field.one_to_many:
+						if not isinstance(values[field.name], list) or not all(isinstance(v, int) for v in values[field.name]):
+							raise BinderFieldTypeError(self.model.__name__, field.name)
+						rids = values[field.name]
+					elif field.one_to_one:
+						if not isinstance(values[field.name], int):
+							raise BinderFieldTypeError(self.model.__name__, field.name)
+						rids = [values[field.name]]
+
+					for rid in rids:
 						if (field.related_model, rid) in objects:
 							objects[(field.related_model, rid)][field.remote_field.name] = mid
 						for submodel in getsubclasses(field.related_model):
