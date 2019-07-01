@@ -169,6 +169,7 @@ class ModelView(View):
 	# A dict will KeyError if you don't specify all ImageFields. Or use:
 	# collections.defaultdict(lambda: 512, foo=1024)
 	image_resize_threshold = 512
+	image_format_override = None
 
 	# A dict that looks like:
 	#  name: {
@@ -1887,6 +1888,13 @@ class ModelView(View):
 					except (TypeError, ValueError):
 						max_width, max_height = max_size, max_size
 
+					try:
+						format_override = self.image_format_override.get(file_field_name)
+					except AttributeError:
+						format_override = self.image_format_override
+
+					changes = False
+
 					# FIXME: hardcoded max
 					# Flat out refuse images exceeding this size, to prevent DoS.
 					width_limit, height_limit = max(max_width, 4096), max(max_height, 4096)
@@ -1897,11 +1905,18 @@ class ModelView(View):
 					if width > max_width or height > max_height:
 						img.thumbnail((max_width, max_height), Image.ANTIALIAS)
 						logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
-						file = io.BytesIO()
 						if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
 							img = img.convert("RGB")
 						if format != 'jpeg':
 							format = 'png'
+						changes = True
+
+					if format_override and format != format_override:
+						format = format_override
+						changes = True
+
+					if changes:
+						file = io.BytesIO()
 						img.save(file, format)
 
 					filename = '{}.{}'.format(obj.id, format)

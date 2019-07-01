@@ -162,7 +162,7 @@ class FileUploadTest(TestCase):
 
 		emmen.refresh_from_db()
 		content_type = mimetypes.guess_type(emmen.floor_plan.path)[0]
-		self.assertEqual(content_type, 'image/png')
+		self.assertEqual(content_type, 'image/jpeg')
 		self.assertEqual(emmen.floor_plan.width, 500)
 		self.assertEqual(emmen.floor_plan.height, 500)
 

@@ -11,6 +11,9 @@ class ZooView(ModelView):
 	image_resize_threshold = {
 		'floor_plan': 500,
 	}
+	image_format_override = {
+		'floor_plan': 'jpeg',
+	}
 
 	def get_rooms_for_user(user):
 		return [
