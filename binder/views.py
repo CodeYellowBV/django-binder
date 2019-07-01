@@ -1900,8 +1900,9 @@ class ModelView(View):
 						file = io.BytesIO()
 						if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
 							img = img.convert("RGB")
-						img.save(file, 'png')
-						format = 'png'
+						if format != 'jpeg':
+							format = 'png'
+						img.save(file, format)
 
 					filename = '{}.{}'.format(obj.id, format)
 				else:

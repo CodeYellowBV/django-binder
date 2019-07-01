@@ -3,6 +3,7 @@ from os import urandom
 from PIL import Image
 from tempfile import NamedTemporaryFile
 from django.test import TestCase, Client
+import mimetypes
 
 from binder.json import jsonloads
 from django.core.files import File
@@ -13,9 +14,16 @@ from .testapp.models import Animal, Zoo
 def image(width, height):
 	return Image.frombytes('RGB', (width, height), urandom(width * height * 3))
 
+
+IMG_SUFFIX = {
+	'jpeg': '.jpg',
+	'png': '.png',
+}
+
+
 def temp_imagefile(width, height, format):
 	i = image(width, height)
-	f = NamedTemporaryFile(suffix='.jpg')
+	f = NamedTemporaryFile(suffix=IMG_SUFFIX[format])
 	i.save(f, format)
 	f.seek(0)
 	return f
@@ -141,3 +149,34 @@ class FileUploadTest(TestCase):
 
 			emmen.refresh_from_db()
 			self.assertFalse(emmen.floor_plan)
+
+
+	def test_upload_size_resized_png(self):
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.save()
+
+		with temp_imagefile(600, 600, 'png') as uploaded_file:
+			response = self.client.post('/zoo/%s/floor_plan/' % emmen.id, data={'file': uploaded_file})
+		print(response.content.decode())
+		self.assertEqual(response.status_code, 200)
+
+		emmen.refresh_from_db()
+		content_type = mimetypes.guess_type(emmen.floor_plan.path)[0]
+		self.assertEqual(content_type, 'image/png')
+		self.assertEqual(emmen.floor_plan.width, 500)
+		self.assertEqual(emmen.floor_plan.height, 500)
+
+
+	def test_upload_size_resized_jpeg(self):
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.save()
+
+		with temp_imagefile(600, 600, 'jpeg') as uploaded_file:
+			response = self.client.post('/zoo/%s/floor_plan/' % emmen.id, data={'file': uploaded_file})
+		self.assertEqual(response.status_code, 200)
+
+		emmen.refresh_from_db()
+		content_type = mimetypes.guess_type(emmen.floor_plan.path)[0]
+		self.assertEqual(content_type, 'image/jpeg')
+		self.assertEqual(emmen.floor_plan.width, 500)
+		self.assertEqual(emmen.floor_plan.height, 500)
