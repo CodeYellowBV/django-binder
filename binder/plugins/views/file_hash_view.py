@@ -87,7 +87,7 @@ class FileHashView:
         if request.method == 'POST':
             data = jsonloads(res.content)
             field = next(iter(data['data']))
-            data[field] += self._get_params(obj, field)
+            data['data'][field] += self._get_params(obj, field)
             return JsonResponse(data)
 
         return res
