@@ -1,8 +1,6 @@
-from collections import defaultdict
 from hashlib import md5
-from itertools import product
 from os.path import getmtime
-import mimetypes
+from mimetypes import guess_type
 
 from binder.json import jsonloads, JsonResponse
 from binder.exceptions import BinderNotFound
@@ -14,34 +12,63 @@ class FileHashView:
     file fields. This is used to detect changes in cached files.
     """
 
-    # The fields that should have the hash appended
-    file_hash_fields = []
+    file_hash_fields = True
+    file_type_fields = True
+
+    def _get_params(self, obj, field):
+        params = []
+        field_file = getattr(obj, field)
+
+        if self.file_hash_fields is True:
+            file_hash_fields = self.file_fields
+        elif self.file_hash_fields is False:
+            file_hash_fields = []
+        else:
+            file_hash_fields = self.file_hash_fields
+
+        if self.file_type_fields is True:
+            file_type_fields = self.file_fields
+        elif self.file_type_fields is False:
+            file_type_fields = []
+        else:
+            file_type_fields = self.file_type_fields
+
+        if field in file_hash_fields:
+            try:
+                path = field_file.path
+                mtime = getmtime(path)
+            except Exception:
+                pass
+            else:
+                url_hash = md5(str(mtime).encode()).hexdigest()
+                params.append('h=' + url_hash)
+
+        if field in file_type_fields:
+            if field_file.name:
+                content_type = guess_type(field_file.name)[0]
+                params.append('content_type=' + content_type)
+
+        if not params:
+            return ''
+        else:
+            return '?' + '&'.join(params)
 
     def _get_objs(self, queryset, request=None):
-        hashes = defaultdict(dict)
-        for obj, field in product(queryset, self.file_hash_fields):
-            if getattr(obj, field):
-                try:
-                    md5_hash = md5(
-                        str(getmtime(getattr(obj, field).path)).encode()
-                    ).hexdigest()
-                    content_type = mimetypes.guess_type(getattr(obj, field).path)[0]
-
-                    hashes[obj.pk][field] = {
-                        'hash': md5_hash,
-                        'content_type': content_type,
-                    }
-                except Exception:
-                    # It made an error in activity view
-                    # hashes[obj.pk][field] = {}
-                    pass
+        params = {
+            obj.pk: {
+                field: self._get_params(obj, field)
+                for field in self.file_fields
+            }
+            for obj in queryset
+        }
 
         data = super()._get_objs(queryset, request)
 
         for obj in data:
             obj.update({
-                field: '{}?h={}&content_type={}'.format(obj[field], meta['hash'], meta['content_type'])
-                for field, meta in hashes[obj['id']].items()
+                field: obj[field] + field_params
+                for field, field_params in params[obj['id']].items()
+                if obj[field] is not None
             })
 
         return data
@@ -60,21 +87,7 @@ class FileHashView:
         if request.method == 'POST':
             data = jsonloads(res.content)
             field = next(iter(data['data']))
-            if field in self.file_hash_fields:
-                try:
-                    file_hash = md5(
-                        str(getmtime(getattr(obj, field).path)).encode()
-                    ).hexdigest()
-                    content_type = mimetypes.guess_type(getattr(obj, field).path)[0]
-                except Exception:
-                    file_hash = ''
-                    content_type = ''
-
-                data['data'][field] = '{}?h={}&content_type={}'.format(
-                    data['data'][field],
-                    file_hash,
-                    content_type,
-                )
+            data[field] += self._get_params(obj, field)
             return JsonResponse(data)
 
         return res
