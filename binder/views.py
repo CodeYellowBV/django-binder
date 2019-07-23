@@ -746,8 +746,31 @@ class ModelView(View):
 	def _parse_filter(self, queryset, field, value, partial=''):
 		head, *tail = field.split('.')
 
-		if tail:
+		if not tail:
+			invert = False
+			try:
+				head, qualifier = head.split(':', 1)
+				if qualifier == 'not':
+					qualifier = None
+					invert = True
+				elif qualifier.startswith('not:'):
+					qualifier = qualifier[4:]
+					invert = True
+			except ValueError:
+				qualifier = None
+
+			queryset = self._filter_field(queryset, head, qualifier, value, invert, partial)
+
+		try:
 			related = self._follow_related(head)[0]
+		except Exception as e:
+			related = None
+			related_err = e
+
+		if tail:
+			if related is None:
+				raise related_err
+
 			view = self.router.model_view(related.model)()
 			# {router-view-instance}
 			view.router = self.router
@@ -756,24 +779,12 @@ class ModelView(View):
 			# that is joined in, as it may produce duplicate records.
 			# Always doing the distinct works, but has performance
 			# implications, hence we avoid it if possible.
+
+		if related is not None:
 			related_field = getattr(self.model, related.fieldname)
 			if isinstance(related_field, models.fields.related.ReverseManyToOneDescriptor): # m2m or reverse fk
 				queryset = queryset.distinct()
-			return queryset
-
-		invert = False
-		try:
-			head, qualifier = head.split(':', 1)
-			if qualifier == 'not':
-				qualifier = None
-				invert = True
-			elif qualifier.startswith('not:'):
-				qualifier = qualifier[4:]
-				invert = True
-		except ValueError:
-			qualifier = None
-
-		return self._filter_field(queryset, head, qualifier, value, invert, partial)
+		return queryset
 
 
 

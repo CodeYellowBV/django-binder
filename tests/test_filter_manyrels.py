@@ -23,6 +23,7 @@ class TestFilterManyRels(TestCase):
 		z.save()
 		z.contacts.set([1])
 		Animal(id=1, name='animal', zoo_id=1).save()
+		Animal(id=2, name='animal2', zoo_id=1).save()
 
 
 
@@ -35,6 +36,11 @@ class TestFilterManyRels(TestCase):
 			'data': [
 				{
 					'id': 1,
+					'zoo': 1,
+					EXTRA(): None,  # Other fields are dontcare
+				},
+				{
+					'id': 2,
 					'zoo': 1,
 					EXTRA(): None,  # Other fields are dontcare
 				}
@@ -53,7 +59,25 @@ class TestFilterManyRels(TestCase):
 			'data': [
 				{
 					'id': 1,
-					'animals': [1],
+					'animals': [1, 2],
+					EXTRA(): None,  # Other fields are dontcare
+				}
+			],
+			EXTRA(): None,  # Debug, meta, with, etc
+		})
+
+
+
+	def test_filter_fk_backward_distinct(self):
+		response = self.client.get('/zoo/?.animals:in=1,2&with=animals')
+		self.assertEqual(response.status_code, 200)
+		returned_data = jsonloads(response.content)
+
+		assert_json(returned_data, {
+			'data': [
+				{
+					'id': 1,
+					'animals': [1, 2],
 					EXTRA(): None,  # Other fields are dontcare
 				}
 			],
@@ -85,15 +109,13 @@ class TestFilterManyRels(TestCase):
 	# sometimes fail.
 	def test_m2m_with_multiple_relations(self):
 		expectation = {
-			'data': [
-				{
-					'id': 1,
-					'name': 'animal',
-					'zoo': 1,
-					'zoo_of_birth': None,
-					EXTRA(): None,  # Other fields are dontcare
-				}
-			],
+			'data': {
+				'id': 1,
+				'name': 'animal',
+				'zoo': 1,
+				'zoo_of_birth': None,
+				EXTRA(): None,  # Other fields are dontcare
+			},
 			'with': {
 				'zoo': [
 					{
@@ -112,13 +134,13 @@ class TestFilterManyRels(TestCase):
 			EXTRA(): None,  # Debug, meta, etc
 		}
 
-		response = self.client.get('/animal/?with=zoo_of_birth.contacts,zoo.contacts')
+		response = self.client.get('/animal/1/?with=zoo_of_birth.contacts,zoo.contacts')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 		assert_json(returned_data, expectation)
 
 		# Different order of with should have no effect
-		response = self.client.get('/animal/?with=zoo.contacts,zoo_of_birth.contacts')
+		response = self.client.get('/animal/1/?with=zoo.contacts,zoo_of_birth.contacts')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 		assert_json(returned_data, expectation)
@@ -129,20 +151,18 @@ class TestFilterManyRels(TestCase):
 		z2 = Zoo(id=2, name='zoo2')
 		z2.save()
 		z2.contacts.set([2])
-		animal = Animal.objects.get()
+		animal = Animal.objects.get(pk=1)
 		animal.zoo_of_birth = z2
 		animal.save()
 
 		expectation = {
-			'data': [
-				{
-					'id': 1,
-					'name': 'animal',
-					'zoo': 1,
-					'zoo_of_birth': 2,
-					EXTRA(): None,  # Other fields are dontcare
-				}
-			],
+			'data': {
+				'id': 1,
+				'name': 'animal',
+				'zoo': 1,
+				'zoo_of_birth': 2,
+				EXTRA(): None,  # Other fields are dontcare
+			},
 			'with': {
 				'zoo': [
 					{
@@ -170,13 +190,13 @@ class TestFilterManyRels(TestCase):
 			EXTRA(): None,  # Debug, meta, etc
 		}
 
-		response = self.client.get('/animal/?with=zoo_of_birth.contacts,zoo.contacts')
+		response = self.client.get('/animal/1/?with=zoo_of_birth.contacts,zoo.contacts')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 		assert_json(returned_data, expectation)
 
 		# Different order of with should have no effect
-		response = self.client.get('/animal/?with=zoo.contacts,zoo_of_birth.contacts')
+		response = self.client.get('/animal/1/?with=zoo.contacts,zoo_of_birth.contacts')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 		assert_json(returned_data, expectation)
