@@ -172,6 +172,22 @@ class TestOrderBy(TestCase):
 
 
 
+	def test_m2m_distinct(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		for i in range(2):
+			Animal.objects.create(zoo=zoo, name='a{}'.format(i))
+
+		response = self.client.get('/zoo/?order_by=animals.name'.format(zoo.id))
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		pks = [obj['id'] for obj in returned_data['data']]
+		self.assertEqual(pks, [zoo.pk])
+
+
+
 	def test_order_related_ids(self):
 		z = Zoo(name='hoi')
 		z.save()
