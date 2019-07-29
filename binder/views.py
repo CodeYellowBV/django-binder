@@ -329,6 +329,14 @@ class ModelView(View):
 			annotations &= set(self.shown_annotations)
 
 		for obj in queryset:
+			# So we tend to make binder call queryset.distinct when necessary
+			# to prevent duplicate results, this is however not always possible
+			# For example when ordering on a field from an m2m relation
+			# this field is implicitly added to the row to be able to order
+			# which makes distinct not work as expected.
+			if obj.pk in objs_by_id:
+				continue
+
 			data = {}
 			for f in fields:
 				if isinstance(f, models.fields.files.FileField):
