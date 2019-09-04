@@ -1532,12 +1532,15 @@ class ModelView(View):
 				if field.name in values:
 					if field.one_to_many:
 						if not isinstance(values[field.name], list) or not all(isinstance(v, int) for v in values[field.name]):
-							raise BinderFieldTypeError(self.model.__name__, field.name)
+							raise BinderFieldTypeError(model.__name__, field.name)
 						rids = values[field.name]
 					elif field.one_to_one:
-						if not isinstance(values[field.name], int):
-							raise BinderFieldTypeError(self.model.__name__, field.name)
-						rids = [values[field.name]]
+						if isinstance(values[field.name], int):
+							rids = [values[field.name]]
+						elif values[field.name] is None:
+							rids = []
+						else:
+							raise BinderFieldTypeError(model.__name__, field.name)
 
 					for rid in rids:
 						if (field.related_model, rid) in objects:
