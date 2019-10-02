@@ -119,6 +119,9 @@ class UserViewMixIn(UserBaseMixin):
 		else:
 			return super()._parse_filter(queryset, field, value, partial)
 
+	def authenticate(self, request, **kwargs):
+		return auth.authenticate(request, **kwargs)
+
 	@method_decorator(sensitive_post_parameters())
 	@list_route(name='login', unauthenticated=True)
 	@no_scoping_required()
@@ -151,7 +154,7 @@ class UserViewMixIn(UserBaseMixin):
 			username = request.POST.get(self.model.USERNAME_FIELD, '')
 			password = request.POST.get('password', '')
 
-		user = auth.authenticate(**{
+		user = self.authenticate(request, **{
 			self.model.USERNAME_FIELD: username.lower(),
 			'password': password,
 		})
