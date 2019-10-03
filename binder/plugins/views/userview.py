@@ -191,7 +191,7 @@ class UserViewMixIn(UserBaseMixin):
 		auth.logout(request)
 		return HttpResponse(status=204)
 
-	def get_users(self, username):
+	def get_users(self, request, username):
 		"""
 		Given a username, return matching user(s) who should receive a reset.
 
@@ -280,7 +280,7 @@ class UserViewMixIn(UserBaseMixin):
 
 		logger.info('password reset attempt for {}'.format(body.get(self.model.USERNAME_FIELD, '')))
 
-		for user in self.get_users(body.get(self.model.USERNAME_FIELD, '').lower()):
+		for user in self.get_users(request, body.get(self.model.USERNAME_FIELD, '').lower()):
 			token = self.token_generator.make_token(user)
 			self._send_reset_mail(request, user, token)
 
