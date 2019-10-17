@@ -1100,6 +1100,11 @@ class ModelView(View):
 		ignored_fields = []
 		validation_errors = []
 
+		if obj.pk is None:
+			self._require_model_perm('add', request, obj.pk)
+		else:
+			self._require_model_perm('change', request, obj.pk)
+
 		def store_field(obj, field, value, request, pk=pk):
 			try:
 				func = getattr(self, '_store__' + field)
@@ -1702,10 +1707,10 @@ class ModelView(View):
 
 
 	def put(self, request, pk=None):
-		self._require_model_perm('change', request, pk)
-
 		if pk is None:
 			return self.multi_put(request)
+
+		self._require_model_perm('change', request, pk)
 
 		values = jsonloads(request.body)
 

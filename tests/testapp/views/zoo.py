@@ -1,9 +1,10 @@
-from binder.views import ModelView
+from binder.permissions.views import PermissionView
+from binder.exceptions import BinderForbidden
 
 from ..models import Zoo
 
 # From the api docs
-class ZooView(ModelView):
+class ZooView(PermissionView):
 	m2m_fields = ['contacts', 'zoo_employees', 'most_popular_animals']
 	model = Zoo
 	file_fields = ['floor_plan']
@@ -14,6 +15,18 @@ class ZooView(ModelView):
 	image_format_override = {
 		'floor_plan': 'jpeg',
 	}
+
+	# Override this method so we don't have to deal with actual permissions in testing
+	def _require_model_perm(self, perm_type, request, pk=None):
+		request._has_permission_check = True
+		if request.user.is_superuser:
+			return ['all']
+		elif perm_type == 'view' and request.user.username in ('testuser', 'testuser2'):
+			return ['all']
+		else:
+			model = self.perms_via if hasattr(self, 'perms_via') else self.model
+			perm = '{}.{}_{}'.format(model._meta.app_label, perm_type, model.__name__.lower())
+			raise BinderForbidden(perm, request.user)
 
 	def get_rooms_for_user(user):
 		return [
