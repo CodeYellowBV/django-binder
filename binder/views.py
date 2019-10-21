@@ -743,7 +743,7 @@ class ModelView(View):
 
 		wheres = where_map['filters']
 
-		qs = M.objects.all()
+		qs = annotate(M.objects.all())
 		for where in wheres:
 			field, val = where.split('=')
 			qs = self._parse_filter(qs, field, val)
