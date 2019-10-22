@@ -991,10 +991,21 @@ class ModelView(View):
 					obj[w] = list(ids_dict[obj['id']])
 
 
+	def _generate_meta(self, include_meta, queryset, pk=None):
+		meta = {}
+
+		if not pk and 'total_records' in include_meta:
+			# Only 'pk' values should reduce DB server memory a (little?) bit, making
+			# things faster.  Not prefetching related models here makes it faster still.
+			# See also https://code.djangoproject.com/ticket/23771 and related tickets.
+			meta['total_records'] = queryset.prefetch_related(None).values('pk').count()
+
+		return meta
+
+
 	def get(self, request, pk=None, withs=None):
 		include_meta = request.GET.get('include_meta', 'total_records').split(',')
 
-		meta = {}
 		queryset = self.get_queryset(request)
 		if pk:
 			queryset = queryset.filter(pk=int(pk))
@@ -1022,11 +1033,7 @@ class ModelView(View):
 
 		queryset = self.order_by(queryset, request)
 
-		if not pk and 'total_records' in include_meta:
-			# Only 'pk' values should reduce DB server memory a (little?) bit, making
-			# things faster.  Not prefetching related models here makes it faster still.
-			# See also https://code.djangoproject.com/ticket/23771 and related tickets.
-			meta['total_records'] = queryset.prefetch_related(None).values('pk').count()
+		meta = self._generate_meta(include_meta, queryset, pk)
 
 		queryset = self._paginate(queryset, request)
 
