@@ -991,7 +991,7 @@ class ModelView(View):
 					obj[w] = list(ids_dict[obj['id']])
 
 
-	def _generate_meta(self, include_meta, queryset, pk=None):
+	def _generate_meta(self, include_meta, queryset, request, pk=None):
 		meta = {}
 
 		if not pk and 'total_records' in include_meta:
@@ -1033,7 +1033,7 @@ class ModelView(View):
 
 		queryset = self.order_by(queryset, request)
 
-		meta = self._generate_meta(include_meta, queryset, pk)
+		meta = self._generate_meta(include_meta, queryset, request, pk)
 
 		queryset = self._paginate(queryset, request)
 
