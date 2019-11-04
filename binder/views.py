@@ -1838,6 +1838,7 @@ class ModelView(View):
 				return
 
 		obj.deleted = not undelete
+		self.binder_clean(obj, pk=obj.pk)
 		obj.save()
 
 
