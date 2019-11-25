@@ -55,6 +55,14 @@ def ellipsize(msg, length=2048):
 	return msg
 
 
+def sign(num):
+	if num < 0:
+		return -1
+	elif num == 0:
+		return 0
+	elif num > 0:
+		return 1
+
 
 RelatedModel = namedtuple('RelatedModel', 'fieldname model reverse_fieldname')
 
@@ -1617,9 +1625,14 @@ class ModelView(View):
 					for d in dependencies.values():
 						if obj in d:
 							d.remove(obj)
+
 			if len(this_batch) == 0:
 				raise BinderRequestError('No progress in dependency resolution! Cyclic dependencies?')
-			ordered_objects += sorted(this_batch, key=lambda obj: (obj[0].__name__, obj[1]))
+
+			ordered_objects += sorted(
+				this_batch,
+				key=lambda obj: (obj[0].__name__, sign(obj[1]), abs(obj[1])),
+			)
 
 		return ordered_objects
 
