@@ -10,7 +10,7 @@ from .costume import Costume
 if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
 	from .feeding_schedule import FeedingSchedule
 from .gate import Gate
-from .nickname import Nickname
+from .nickname import Nickname, NullableNickname
 from .lion import Lion
 from .picture import Picture
 from .zoo import Zoo
