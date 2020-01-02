@@ -642,15 +642,17 @@ class ModelView(View):
 			view.router = self.router
 			qs = view._filter_relation(next, where_map.get(field, None))
 
+			vr = self.virtual_relations.get(field, None)
+
 			# Model default orders (this sometimes matters)
 			orders = []
+			field_alias = field + '___annotation' if vr else field
 			for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
 				if o.startswith('-'):
 					orders.append('-'+field+'__'+o[1:])
 				else:
 					orders.append(field+'__'+o)
 
-			vr = self.virtual_relations.get(field, None)
 			# Virtual relation
 			if vr:
 				virtual_fields.add(field)
@@ -668,7 +670,7 @@ class ModelView(View):
 				# unless you write a custom filter, too.
 				if isinstance(virtual_annotation, Q):
 					q = Q(**{field+'__in': qs}) if qs else Q()
-					annotations[field+'___annotation'] = Agg(virtual_annotation, filter=q, ordering=orders)
+					annotations[field_alias] = Agg(virtual_annotation, filter=q, ordering=orders)
 				else:
 					try:
 						func = getattr(self, virtual_annotation)
@@ -686,14 +688,16 @@ class ModelView(View):
 				q = Q(**{field+'__in': qs}) if qs is not None else Q()
 				if Agg != GroupConcat: # HACKK (GROUP_CONCAT can't filter and excludes NULL already)
 					q &= Q(**{field+'__pk__isnull': False})
-				annotations[field+'___annotation'] = Agg(field+'__pk', filter=q, ordering=orders)
+				annotations[field_alias] = Agg(field+'__pk', filter=q, ordering=orders)
 
 
 		qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**annotations)
 		for record in qs:
 			for field in with_map:
-				if field not in virtual_fields:
-					value = record[field+'___annotation']
+				field_alias = field+'___annotation' if field in virtual_fields else field
+
+				if field_alias in annotations:
+					value = record[field_alias]
 					if Agg == GroupConcat:
 						# Stupid assumption that PKs are always integers.
 						# Without this, the result types won't be right...
