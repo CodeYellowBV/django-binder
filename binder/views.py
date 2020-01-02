@@ -649,9 +649,9 @@ class ModelView(View):
 			field_alias = field + '___annotation' if vr else field
 			for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
 				if o.startswith('-'):
-					orders.append('-'+field+'__'+o[1:])
+					orders.append('-'+field_alias+'__'+o[1:])
 				else:
-					orders.append(field+'__'+o)
+					orders.append(field_alias+'__'+o)
 
 			# Virtual relation
 			if vr:
