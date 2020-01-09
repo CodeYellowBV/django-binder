@@ -641,6 +641,10 @@ class ModelView(View):
 			# {router-view-instance}
 			view.router = self.router
 			qs = view._filter_relation(next, where_map.get(field, None))
+			# Drop ordering in subquery.  Can be slightly faster; we
+			# add ordering to the array_agg call already anyway.
+			if qs:
+				qs = qs.order_by()
 
 			vr = self.virtual_relations.get(field, None)
 
