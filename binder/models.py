@@ -10,7 +10,7 @@ from django.db.models import signals, F
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
 from django.db.models.expressions import BaseExpression
-from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.dateparse import parse_date, parse_datetime, parse_time
 
 from binder.json import jsonloads
 
@@ -248,6 +248,19 @@ class DateTimeFieldFilter(FieldFilter):
 			return ~Q(**{partial + self.field.name + suffix: cleaned_value})
 		else:
 			return Q(**{partial + self.field.name + suffix: cleaned_value})
+
+
+
+class TimeFieldFilter(FieldFilter):
+	fields = [models.TimeField]
+	# Maybe allow __startswith? And __year etc?
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
+
+	def clean_value(self, qualifier, v):
+		if not re.match('^[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})$', v):
+			raise ValidationError('Invalid HH:MM:SS(.mmm) value {{{}}} for {}.'.format(v, self.field_description()))
+		else:
+			return parse_time(v)
 
 
 

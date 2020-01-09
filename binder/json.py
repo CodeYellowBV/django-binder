@@ -15,6 +15,7 @@ SERIALIZERS = {
 	set:                 list,
 	datetime.datetime:   lambda v: v.strftime('%Y-%m-%dT%H:%M:%S.%f%z'),   # .isoformat() can omit microseconds
 	datetime.date:       lambda v: v.isoformat(),
+	datetime.time:       lambda v: v.strftime('%H:%M:%S.%f%z'),
 	uuid.UUID:           str,
 	decimal.Decimal:     str,
 }

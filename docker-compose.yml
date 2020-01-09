@@ -5,6 +5,7 @@ services:
     image: postgres
   binder:
     build: .
+    command: tail -f /dev/null
     volumes:
       - .:/binder
     depends_on:
