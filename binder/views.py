@@ -64,7 +64,8 @@ def sign(num):
 		return 1
 
 
-RelatedModel = namedtuple('RelatedModel', 'fieldname model reverse_fieldname')
+RelatedModel = namedtuple('RelatedModel', ['fieldname', 'model', 'reverse_fieldname'])
+FilterDescription = namedtuple('FilterDescription', ['filter', 'need_distinct'])
 
 # Stolen and improved from https://stackoverflow.com/a/30462851
 def image_transpose_exif(im):
@@ -757,11 +758,11 @@ class ModelView(View):
 		need_distinct = False
 		for where in wheres:
 			field, val = where.split('=')
-			new_q, distinct = self._parse_filter(field, val, field_name+'__' if field_name else '')
-			need_distinct |= distinct
-			q &= new_q
+			filter_description = self._parse_filter(field, val, field_name+'__' if field_name else '')
+			need_distinct |= filter_description.need_distinct
+			q &= filter_description.filter
 
-		return q, need_distinct
+		return FilterDescription(q, need_distinct)
 
 
 	def _parse_filter(self, field, value, partial=''):
@@ -798,9 +799,9 @@ class ModelView(View):
 			view = self.router.model_view(related.model)()
 			# {router-view-instance}
 			view.router = self.router
-			new_q, distinct = view._parse_filter('.'.join(tail), value, partial + head + '__')
-			need_distinct |= distinct
-			q &= new_q
+			filter_description = view._parse_filter('.'.join(tail), value, partial + head + '__')
+			need_distinct |= filter_description.need_distinct
+			q &= filter_description.filter
 
 		# Distinct might be needed when we traverse a relation
 		# that is joined in, as it may produce duplicate records.
@@ -811,7 +812,7 @@ class ModelView(View):
 			if isinstance(related_field, models.fields.related.ReverseManyToOneDescriptor): # m2m or reverse fk
 				need_distinct = True
 
-		return q, need_distinct
+		return FilterDescription(q, need_distinct)
 
 
 
