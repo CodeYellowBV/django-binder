@@ -118,4 +118,10 @@ cmd.verbosity = 0
 connection = connections['default']
 executor = MigrationExecutor(connection)
 cmd.sync_apps(connection, executor.loader.unmigrated_apps)
+
+# Hack to make the view_country permission, which doesn't work with the MigrationCommand somehow
+from django.contrib.auth.models import Group, Permission, ContentType
+content_type = ContentType.objects.get_or_create(app_label='testapp', model='country')[0]
+Permission.objects.get_or_create(content_type=content_type, codename='view_country')
 call_command('define_groups')
+

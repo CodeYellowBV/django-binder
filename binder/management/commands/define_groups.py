@@ -11,6 +11,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         # Delete any stale groups
+
         Group.objects.exclude(name__in=settings.GROUP_PERMISSIONS).delete()
 
         for group_name in settings.GROUP_PERMISSIONS:
@@ -41,6 +42,7 @@ class Command(BaseCommand):
                             app_label=app,
                             model=model,
                         )
+
                         perm = Permission.objects.get(
                             content_type=content_type,
                             codename=other,
