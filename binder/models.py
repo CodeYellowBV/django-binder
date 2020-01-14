@@ -1,6 +1,6 @@
 import re
 import warnings
-from datetime import date, datetime
+from datetime import date, datetime, time
 from contextlib import suppress
 
 from django.db import models
@@ -10,6 +10,7 @@ from django.db.models import signals, F
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
 from django.db.models.expressions import BaseExpression
+from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime, parse_time
 
 from binder.json import jsonloads
@@ -255,12 +256,35 @@ class TimeFieldFilter(FieldFilter):
 	fields = [models.TimeField]
 	# Maybe allow __startswith? And __year etc?
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
+	time_re = re.compile(r'^(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?:\d{2})?)$')
 
 	def clean_value(self, qualifier, v):
-		if not re.match('^[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})$', v):
+		# Match value
+		match = self.time_re.match(v)
+		if not match:
 			raise ValidationError('Invalid HH:MM:SS(.mmm) value {{{}}} for {}.'.format(v, self.field_description()))
+		# Get values
+		hour, minute, second, microsecond, tzinfo = match.groups()
+		hour = int(hour)
+		minute = int(minute)
+		second = int(second)
+		microsecond = int((microsecond or '').ljust(6, '0'))
+		if tzinfo == 'Z':
+			tzinfo = timezone.utc
 		else:
-			return parse_time(v)
+			tzinfo = tzinfo.ljust(5, '0')
+			offset = int(tzinfo[1:3]) * 60 + int(tzinfo[3:5])
+			if tzinfo.startswith('-'):
+				offset = -offset
+			tzinfo = timezone.get_fixed_timezone(offset)
+		# Create time object
+		return time(
+			hour=hour,
+			minute=minute,
+			second=second,
+			microsecond=microsecond,
+			tzinfo=tzinfo,
+		)
 
 
 
