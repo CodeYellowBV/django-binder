@@ -6,6 +6,9 @@ from .animal import AnimalView
 from .caretaker import CaretakerView
 from .contact_person import ContactPersonView
 from .costume import CostumeView
+from .city import CityView
+from .country import CountryView
+
 # This has a Postgres-specific model
 if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
 	from .feeding_schedule import FeedingScheduleView

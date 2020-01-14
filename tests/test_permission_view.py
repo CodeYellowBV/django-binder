@@ -21,9 +21,9 @@ class TestWithoutPerm(TestCase):
 
 		self.zoo = Zoo(name='Artis')
 		self.zoo.save()
+
 		self.zoo_employee = ZooEmployee(zoo=self.zoo, name='Piet Heyn')
 		self.zoo_employee.save()
-
 	def test_get_resource(self):
 		res = self.client.get('/zoo_employee/{}/'.format(self.zoo_employee.id))
 		self.assertEqual(res.status_code, 403)

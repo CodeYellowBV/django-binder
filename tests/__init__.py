@@ -1,5 +1,6 @@
 from django import setup
 from django.conf import settings
+from django.core.management import call_command
 import os
 
 if (
@@ -87,7 +88,19 @@ settings.configure(**{
 			('auth.signup_user', None),
 			('auth.logout_user', None),
 			('auth.change_own_password_user', None),
+		],
+		# Basic permissions which can be used to override stuff
+		'testapp.view_country': [
+
 		]
+	},
+	'GROUP_PERMISSIONS': {
+		'admin': [
+			'testapp.view_country'
+		]
+	},
+	'GROUP_CONTAINS': {
+		'admin': []
 	}
 })
 
@@ -105,3 +118,4 @@ cmd.verbosity = 0
 connection = connections['default']
 executor = MigrationExecutor(connection)
 cmd.sync_apps(connection, executor.loader.unmigrated_apps)
+call_command('define_groups')
