@@ -637,12 +637,12 @@ class ModelView(View):
 		for field in with_map:
 			vr = self.virtual_relations.get(field, None)
 
-			next = self._follow_related(field)[0]
-			view_class = self.router.model_view(next.model)
+			next_relation = self._follow_related(field)[0]
+			view_class = self.router.model_view(next_relation.model)
 			view = view_class()
 			# {router-view-instance}
 			view.router = self.router
-			q, _ = view._filter_relation(None if vr else next.fieldname, where_map.get(field, None))
+			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None))
 
 			# Model default orders (this sometimes matters)
 			orders = []
