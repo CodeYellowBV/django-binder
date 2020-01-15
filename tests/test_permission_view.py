@@ -418,7 +418,7 @@ class TestPutRelationScoping(TestCase):
         # This is not ok
         assert res.status_code == 403
 
-        content = json.loads(res.content)
+        content = jsonloads(res.content)
         assert 'testapp.delete_city' == content['required_permission']
 
         # City 2 still exists!
@@ -478,7 +478,7 @@ class TestPutRelationScoping(TestCase):
 
         # This is not ok
         assert res.status_code == 403
-        content = json.loads(res.content)
+        content = jsonloads(res.content)
         assert 'testapp.change_city' == content['required_permission']
 
     @override_settings(BINDER_PERMISSION={
@@ -504,7 +504,7 @@ class TestPutRelationScoping(TestCase):
         # This is not ok
         assert res.status_code == 403
 
-        content = json.loads(res.content)
+        content = jsonloads(res.content)
         assert 'testapp.delete_city' == content['required_permission']
 
         # City 2 still exists!
@@ -574,7 +574,7 @@ class TestPutRelationScoping(TestCase):
         }))
 
         assert res.status_code == 403
-        content = json.loads(res.content)
+        content = jsonloads(res.content)
         assert 'testapp.delete_permanentcity' == content['required_permission']
 
     @override_settings(BINDER_PERMISSION={
@@ -619,7 +619,7 @@ class TestPutRelationScoping(TestCase):
 
         assert res.status_code == 403
 
-        content = json.loads(res.content)
+        content = jsonloads(res.content)
         assert 'testapp.change_citystate' == content['required_permission']
 
         city1.refresh_from_db()
