@@ -234,7 +234,6 @@ class TestScoping(TestCase):
             ('testapp.view_country', 'all'),
             ('testapp.change_country', 'all'),
             ('testapp.view_citystate', 'all'),
-            ('testapp.change_citystate', 'all'),
         ]
     })
     def test_related_object_nullable_on_delete_no_change_permission_not_allowed(self):
@@ -250,7 +249,7 @@ class TestScoping(TestCase):
         assert res.status_code == 403
 
         content = json.loads(res.content)
-        assert 'testapp.view_citystate' == content['required_permission']
+        assert 'testapp.change_citystate' == content['required_permission']
 
         city1.refresh_from_db()
 

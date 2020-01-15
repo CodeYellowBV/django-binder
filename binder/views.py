@@ -21,6 +21,7 @@ from django.db.models import Q, F
 from django.utils import timezone
 from django.db import transaction
 
+
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat
@@ -1235,10 +1236,17 @@ class ModelView(View):
 				method = getattr(rmobj, '_binder_unset_relation_{}'.format(obj_field.field.name), None)
 				if callable(method):
 					try:
-						method()
+						method(request)
 					except BinderValidationError as bve:
 						validation_errors.append(bve)
 				elif obj_field.field.null:
+					# A bit of a hack. We make a check, so we need to make sure that we do have the permissions
+					# for this
+					from binder.permissions.views import PermissionView
+					if isinstance(rmobj_view, PermissionView):
+						print(obj_field.field.name)
+						rmobj_view.scope_change(request, rmobj, {obj_field.field.name: None})
+
 					setattr(rmobj, obj_field.field.name, None)
 					try:
 						self.binder_clean(rmobj)
