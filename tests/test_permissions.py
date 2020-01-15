@@ -44,11 +44,10 @@ class TestScoping(TestCase):
         }))
 
         # This is not ok
-        assert res.status_code != 200
+        assert res.status_code == 403
 
         content = json.loads(res.content)
         assert 'testapp.delete_city' == content['required_permission']
-
 
         # City 2 still exists!
         city2.refresh_from_db()
@@ -90,8 +89,6 @@ class TestScoping(TestCase):
         country = Country.objects.create(name='Nederland')
         city1 = City.objects.create(country=country, name='Amsterdam')
 
-        # Now suppose Friesland is finally going to seperate
-
         res = self.client.put('/country/', data=jsondumps({
             'data': [{
                 'id': country.pk,
@@ -110,3 +107,34 @@ class TestScoping(TestCase):
         assert res.status_code == 403
         content = json.loads(res.content)
         assert 'testapp.change_city' == content['required_permission']
+
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+            ('testapp.change_country', 'all')
+        ]
+    })
+    def test_cannot_delete_on_put_without_delete_permission(self):
+        country = Country.objects.create(name='Nederland')
+        city1 = City.objects.create(country=country, name='Amsterdam')
+        city2 = City.objects.create(country=country, name='Leeuwarden')
+
+        # Now suppose Friesland is finally going to seperate
+
+        res = self.client.put('/country/{}/'.format(city1.pk), data=jsondumps({
+            'data': [{
+                'id': country.pk,
+                'name': 'Nederland',
+                'cities': [city1.pk]
+            }]
+        }))
+
+        # This is not ok
+        assert res.status_code == 403
+
+        content = json.loads(res.content)
+        print(content)
+        assert 'testapp.delete_city' == content['required_permission']
+
+        # City 2 still exists!
+        city2.refresh_from_db()
