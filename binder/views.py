@@ -1244,7 +1244,6 @@ class ModelView(View):
 					# for this
 					from binder.permissions.views import PermissionView
 					if isinstance(rmobj_view, PermissionView):
-						print(obj_field.field.name)
 						rmobj_view.scope_change(request, rmobj, {obj_field.field.name: None})
 
 					setattr(rmobj, obj_field.field.name, None)
