@@ -5,7 +5,7 @@ from django.test import TestCase, override_settings
 from django.contrib.auth.models import User, Group
 from django.test import Client
 
-from tests.testapp.models import Country, City
+from tests.testapp.models import Country, City, PermanentCity, CityState
 
 
 class TestScoping(TestCase):
@@ -75,7 +75,6 @@ class TestScoping(TestCase):
             }]
         }))
 
-
         # This is not ok
         assert res.status_code == 200
 
@@ -131,7 +130,6 @@ class TestScoping(TestCase):
             'cities': [city1.pk]
         }))
 
-
         # This is not ok
         assert res.status_code == 403
 
@@ -154,17 +152,106 @@ class TestScoping(TestCase):
         city1 = City.objects.create(country=country, name='Amsterdam')
         city2 = City.objects.create(country=country, name='Leeuwarden')
 
-        # Now suppose Friesland is finally going to seperate
-
         res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
             'id': country.pk,
             'name': 'Nederland',
             'cities': [city1.pk]
         }))
 
-        # This is not ok
         assert res.status_code == 200
 
         with self.assertRaises(City.DoesNotExist):
             city2.refresh_from_db()
 
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+            ('testapp.change_country', 'all'),
+            ('testapp.view_permanentcity', 'all'),
+            ('testapp.delete_permanentcity', 'all')
+        ]
+    })
+    def test_softdelete_on_put_with_delete_permission_softdeletable(self):
+        country = Country.objects.create(name='Nederland')
+        city1 = PermanentCity.objects.create(country=country, name='Rotterdam', deleted=False)
+
+        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+            'id': country.pk,
+            'name': 'Nederland',
+            'permanent_cities': []
+        }))
+
+        assert res.status_code == 200
+        city1.refresh_from_db()
+        assert city1.deleted
+
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+            ('testapp.change_country', 'all'),
+            ('testapp.view_permanentcity', 'all'),
+        ]
+    })
+    def test_softdelete_on_put_without_softdelete_permission_fails(self):
+        country = Country.objects.create(name='Nederland')
+        city1 = PermanentCity.objects.create(country=country, name='Rotterdam', deleted=False)
+
+        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+            'id': country.pk,
+            'name': 'Nederland',
+            'permanent_cities': []
+        }))
+
+        assert res.status_code == 403
+        content = json.loads(res.content)
+        assert 'testapp.delete_permanentcity' == content['required_permission']
+
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+            ('testapp.change_country', 'all'),
+            ('testapp.view_citystate', 'all'),
+            ('testapp.change_citystate', 'all'),
+        ]
+    })
+    def test_related_object_nullable_on_delete_is_set_to_null(self):
+        country = Country.objects.create(name='Belgium')
+        city1 = CityState.objects.create(country=country, name='Brussels')
+
+        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+            'id': country.pk,
+            'name': 'Belgium',
+            'city_states': []
+        }))
+        assert res.status_code == 200
+
+        city1.refresh_from_db()
+
+        assert city1.country is None
+
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+            ('testapp.change_country', 'all'),
+            ('testapp.view_citystate', 'all'),
+            ('testapp.change_citystate', 'all'),
+        ]
+    })
+    def test_related_object_nullable_on_delete_no_change_permission_not_allowed(self):
+        country = Country.objects.create(name='Belgium')
+        city1 = CityState.objects.create(country=country, name='Brussels')
+
+        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+            'id': country.pk,
+            'name': 'Belgium',
+            'city_states': []
+        }))
+
+        assert res.status_code == 403
+
+        content = json.loads(res.content)
+        assert 'testapp.view_citystate' == content['required_permission']
+
+        city1.refresh_from_db()
+
+        assert city1.country.pk == country.pk

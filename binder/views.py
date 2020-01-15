@@ -1231,6 +1231,7 @@ class ModelView(View):
 			old_ids = set(obj_field.values_list('id', flat=True))
 			new_ids = set(value)
 			for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
+				rmobj_view = self.router.model_view(rmobj.__class__)()
 				method = getattr(rmobj, '_binder_unset_relation_{}'.format(obj_field.field.name), None)
 				if callable(method):
 					try:
@@ -1246,7 +1247,7 @@ class ModelView(View):
 					else:
 						rmobj.save()
 				else:
-					rmobj_view = self.router.model_view(rmobj.__class__)()
+					# Actually use the view to delete this, to not duplicate the deletion logic here
 					rmobj_view.delete(request=request, pk=rmobj.pk, skip_body_check=True)
 
 
