@@ -1093,7 +1093,6 @@ class ModelView(View):
 
 
 	def binder_clean(self, obj, pk=None):
-		print(">>>>", obj)
 		try:
 			res = obj.full_clean()
 		except ValidationError as ve:
@@ -1248,7 +1247,7 @@ class ModelView(View):
 						rmobj.save()
 				else:
 					rmobj_view = self.router.model_view(rmobj.__class__)()
-					rmobj_view.delete(request=request, pk=rmobj.pk)
+					rmobj_view.delete(request=request, pk=rmobj.pk, skip_body_check=True)
 
 
 			for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
@@ -1798,20 +1797,21 @@ class ModelView(View):
 
 
 
-	def delete(self, request, pk=None, undelete=False):
+	def delete(self, request, pk=None, undelete=False, skip_body_check=False):
 		if not undelete:
 			self._require_model_perm('delete', request)
 
 		if pk is None:
 			raise BinderMethodNotAllowed()
 
-		# FIXME: ugly workaround, remove when Django bug fixed
-		# Try/except because https://code.djangoproject.com/ticket/27005
-		try:
-			if request.body not in (b'', b'{}'):
-				raise BinderRequestError('{}DELETE body must be empty or empty json object.'.format('UN' if undelete else ''))
-		except ValueError:
-			pass
+		if not skip_body_check:
+			# FIXME: ugly workaround, remove when Django bug fixed
+			# Try/except because https://code.djangoproject.com/ticket/27005
+			try:
+				if request.body not in (b'', b'{}'):
+					raise BinderRequestError('{}DELETE body must be empty or empty json object.'.format('UN' if undelete else ''))
+			except ValueError:
+				pass
 
 		try:
 			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))

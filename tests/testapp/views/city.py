@@ -1,7 +1,6 @@
-from binder.views import ModelView
-
+from binder.permissions.views import PermissionView
 from ..models import City
 
 
-class CityView(ModelView):
+class CityView(PermissionView):
     model = City

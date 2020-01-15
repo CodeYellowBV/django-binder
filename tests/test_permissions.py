@@ -25,7 +25,8 @@ class TestScoping(TestCase):
 
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
-            ('testapp.change_country', 'all')
+            ('testapp.change_country', 'all'),
+            ('testapp.view_city', 'all')
         ]
     })
     def test_cannot_delete_on_multiput_without_delete_permission(self):
@@ -55,7 +56,8 @@ class TestScoping(TestCase):
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
             ('testapp.change_country', 'all'),
-            ('testapp.delete_city', 'all')
+            ('testapp.view_city', 'all'),
+            ('testapp.delete_city', 'all'),
         ]
     })
     def test_delete_scoping_on_multiput_with_delete_permission(self):
@@ -73,7 +75,6 @@ class TestScoping(TestCase):
             }]
         }))
 
-        print(res.content)
 
         # This is not ok
         assert res.status_code == 200
@@ -113,7 +114,8 @@ class TestScoping(TestCase):
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
             ('testapp.view_country', 'all'),
-            ('testapp.change_country', 'all')
+            ('testapp.change_country', 'all'),
+            ('testapp.view_city', 'all'),
         ]
     })
     def test_cannot_delete_on_put_without_delete_permission(self):
@@ -138,3 +140,31 @@ class TestScoping(TestCase):
 
         # City 2 still exists!
         city2.refresh_from_db()
+
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+            ('testapp.change_country', 'all'),
+            ('testapp.view_city', 'all'),
+            ('testapp.delete_city', 'all')
+        ]
+    })
+    def test_can_delete_on_put_with_delete_permission(self):
+        country = Country.objects.create(name='Nederland')
+        city1 = City.objects.create(country=country, name='Amsterdam')
+        city2 = City.objects.create(country=country, name='Leeuwarden')
+
+        # Now suppose Friesland is finally going to seperate
+
+        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+            'id': country.pk,
+            'name': 'Nederland',
+            'cities': [city1.pk]
+        }))
+
+        # This is not ok
+        assert res.status_code == 200
+
+        with self.assertRaises(City.DoesNotExist):
+            city2.refresh_from_db()
+
