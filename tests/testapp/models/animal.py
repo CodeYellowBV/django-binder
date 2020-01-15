@@ -13,7 +13,7 @@ class Animal(BinderModel):
 	def __str__(self):
 		return 'animal %d: %s' % (self.pk, self.name)
 
-	def _binder_unset_relation_caretaker(self):
+	def _binder_unset_relation_caretaker(self, request):
 		raise BinderValidationError({'animal': {self.pk: {'caretaker': [{
 			'code': 'cant_unset',
 			'message': 'You can\'t unset zoo.',
