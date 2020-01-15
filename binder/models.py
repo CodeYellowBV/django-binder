@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
 from django.db.models.expressions import BaseExpression
 from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_datetime, parse_time
+from django.utils.dateparse import parse_date, parse_datetime
 
 from binder.json import jsonloads
 
