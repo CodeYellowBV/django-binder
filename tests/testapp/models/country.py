@@ -3,4 +3,4 @@ from binder.models import BinderModel
 
 
 class Country(BinderModel):
-    name = models.TextField(unique=True)
+    name = models.TextField(unique=True, max_length=100)
