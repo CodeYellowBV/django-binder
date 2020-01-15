@@ -73,6 +73,8 @@ class TestScoping(TestCase):
             }]
         }))
 
+        print(res.content)
+
         # This is not ok
         assert res.status_code == 200
 
@@ -121,19 +123,17 @@ class TestScoping(TestCase):
 
         # Now suppose Friesland is finally going to seperate
 
-        res = self.client.put('/country/{}/'.format(city1.pk), data=jsondumps({
-            'data': [{
-                'id': country.pk,
-                'name': 'Nederland',
-                'cities': [city1.pk]
-            }]
+        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+            'id': country.pk,
+            'name': 'Nederland',
+            'cities': [city1.pk]
         }))
+
 
         # This is not ok
         assert res.status_code == 403
 
         content = json.loads(res.content)
-        print(content)
         assert 'testapp.delete_city' == content['required_permission']
 
         # City 2 still exists!

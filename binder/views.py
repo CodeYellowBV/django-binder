@@ -1093,6 +1093,7 @@ class ModelView(View):
 
 
 	def binder_clean(self, obj, pk=None):
+		print(">>>>", obj)
 		try:
 			res = obj.full_clean()
 		except ValidationError as ve:
@@ -1135,12 +1136,12 @@ class ModelView(View):
 				func = self._store_field
 			return func(obj, field, value, request, pk=pk)
 
-		def store_m2m_field(obj, field, value):
+		def store_m2m_field(obj, field, value, request):
 			try:
 				func = getattr(self, '_store_m2m__' + field)
 			except AttributeError:
 				func = self._store_m2m_field
-			return func(obj, field, value)
+			return func(obj, field, value, request)
 
 		for field, value in values.items():
 			try:
@@ -1159,6 +1160,7 @@ class ModelView(View):
 			self.binder_clean(obj, pk=pk)
 		except BinderValidationError as bve:
 			validation_errors.append(bve)
+
 
 		# full_clean() doesn't complain about some not-NULL fields being None.
 		# This causes save() to explode with a django.db.IntegrityError because the
@@ -1190,7 +1192,7 @@ class ModelView(View):
 
 		for field, value in deferred_m2ms.items():
 			try:
-				store_m2m_field(obj, field, value)
+				store_m2m_field(obj, field, value, request)
 			except BinderValidationError as bve:
 				validation_errors.append(bve)
 
@@ -1212,7 +1214,7 @@ class ModelView(View):
 
 
 
-	def _store_m2m_field(self, obj, field, value):
+	def _store_m2m_field(self, obj, field, value, request):
 		validation_errors = []
 
 		# Can't use isinstance() because apparantly ManyToManyDescriptor is a subclass of
@@ -1244,17 +1246,11 @@ class ModelView(View):
 						validation_errors.append(bve)
 					else:
 						rmobj.save()
-				elif hasattr(rmobj, 'deleted'):
-					if not rmobj.deleted:
-						rmobj.deleted = True
-						try:
-							self.binder_clean(rmobj)
-						except BinderValidationError as bve:
-							validation_errors.append(bve)
-						else:
-							rmobj.save()
 				else:
-					rmobj.delete()
+					rmobj_view = self.router.model_view(rmobj.__class__)()
+					rmobj_view.delete(request=request, pk=rmobj.pk)
+
+
 			for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
 				setattr(addobj, obj_field.field.name, obj)
 				try:
