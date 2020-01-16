@@ -76,6 +76,8 @@ class UserViewMixIn(UserBaseMixin):
 	log_request_body = False
 	token_generator = default_token_generator
 
+	default_authentication_backend = None
+
 	def _require_model_perm(self, perm_type, request, pk=None):
 		"""
 		Overwrite the _require_model_perm, to make sure that you can not modify a superuser as non superuser
@@ -123,7 +125,11 @@ class UserViewMixIn(UserBaseMixin):
 		return auth.authenticate(request, **kwargs)
 
 	def auth_login(self, request, user, backend=None):
-		return auth.login(request, user, backend=None)
+		return auth.login(request, user, backend=(
+			backend or
+			getattr(user, 'backend', None) or
+			self.default_authentication_backend
+		))
 
 	@method_decorator(sensitive_post_parameters())
 	@list_route(name='login', unauthenticated=True)
