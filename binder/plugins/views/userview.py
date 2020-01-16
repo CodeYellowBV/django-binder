@@ -122,6 +122,9 @@ class UserViewMixIn(UserBaseMixin):
 	def authenticate(self, request, **kwargs):
 		return auth.authenticate(request, **kwargs)
 
+	def login(self, request, user, backend=None):
+		return auth.login(request, user, backend=None)
+
 	@method_decorator(sensitive_post_parameters())
 	@list_route(name='login', unauthenticated=True)
 	@no_scoping_required()
@@ -164,7 +167,7 @@ class UserViewMixIn(UserBaseMixin):
 			logger.info('login failed for "{}"'.format(username))
 			raise BinderNotAuthenticated()
 		else:
-			auth.login(request, user)
+			self.login(request, user)
 			logger.info('login for {}/{}'.format(user.id, user))
 			return self.respond_with_user(request, user.id)
 
@@ -399,7 +402,7 @@ class UserViewMixIn(UserBaseMixin):
 
 		user.is_active = True
 		user.save()
-		auth.login(request, user)
+		self.login(request, user)
 		return self.respond_with_user(request, user.id)
 
 	@method_decorator(sensitive_post_parameters())
@@ -459,7 +462,7 @@ class UserViewMixIn(UserBaseMixin):
 
 		user.set_password(password)
 		user.save()
-		auth.login(request, user)
+		self.login(request, user)
 		return self.respond_with_user(request, user.id)
 
 	@method_decorator(sensitive_post_parameters())
