@@ -405,7 +405,7 @@ class TestPutRelationScoping(TestCase):
         city1 = City.objects.create(country=country, name='Amsterdam')
         city2 = City.objects.create(country=country, name='Leeuwarden')
 
-        # Now suppose Friesland is finally going to seperate
+        # Now suppose Friesland is finally going to separate
 
         res = self.client.put('/country/', data=jsondumps({
             'data': [{
@@ -416,13 +416,14 @@ class TestPutRelationScoping(TestCase):
         }))
 
         # This is not ok
-        assert res.status_code == 403
+        self.assertEquals(403, res.status_code)
 
         content = jsonloads(res.content)
         assert 'testapp.delete_city' == content['required_permission']
 
         # City 2 still exists!
         city2.refresh_from_db()
+        self.assertEquals(country, city2.country) # And belongs to the nederlands
 
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
@@ -436,7 +437,7 @@ class TestPutRelationScoping(TestCase):
         city1 = City.objects.create(country=country, name='Amsterdam')
         city2 = City.objects.create(country=country, name='Leeuwarden')
 
-        # Now suppose Friesland is finally going to seperate
+        # Now suppose Friesland is finally going to separate
 
         res = self.client.put('/country/', data=jsondumps({
             'data': [{
@@ -446,12 +447,12 @@ class TestPutRelationScoping(TestCase):
             }]
         }))
 
-        # This is not ok
         assert res.status_code == 200
 
-        # City 2 must not exist. TODO: test this
+        # City 2 must not exist.
         with self.assertRaises(City.DoesNotExist):
             city2.refresh_from_db()
+        self.assertEquals(1, country.cities.count())
 
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
@@ -493,7 +494,7 @@ class TestPutRelationScoping(TestCase):
         city1 = City.objects.create(country=country, name='Amsterdam')
         city2 = City.objects.create(country=country, name='Leeuwarden')
 
-        # Now suppose Friesland is finally going to seperate
+        # Now suppose Friesland is finally going to separate
 
         res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
             'id': country.pk,
@@ -509,6 +510,7 @@ class TestPutRelationScoping(TestCase):
 
         # City 2 still exists!
         city2.refresh_from_db()
+        self.assertEquals(country, city2.country)
 
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
@@ -529,10 +531,11 @@ class TestPutRelationScoping(TestCase):
             'cities': [city1.pk]
         }))
 
-        assert res.status_code == 200
+        self.assertEquals(200, res.status_code)
 
         with self.assertRaises(City.DoesNotExist):
             city2.refresh_from_db()
+        self.assertEquals(1, country.cities.count())
 
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
@@ -552,9 +555,9 @@ class TestPutRelationScoping(TestCase):
             'permanent_cities': []
         }))
 
-        assert res.status_code == 200
+        self.assertEquals(200,  res.status_code)
         city1.refresh_from_db()
-        assert city1.deleted
+        self.assertTrue(city1.deleted)
 
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
@@ -573,9 +576,9 @@ class TestPutRelationScoping(TestCase):
             'permanent_cities': []
         }))
 
-        assert res.status_code == 403
+        self.assertEquals(res.status_code, 403)
         content = jsonloads(res.content)
-        assert 'testapp.delete_permanentcity' == content['required_permission']
+        self.assertEquals('testapp.delete_permanentcity', content['required_permission'])
 
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
@@ -594,7 +597,7 @@ class TestPutRelationScoping(TestCase):
             'name': 'Belgium',
             'city_states': []
         }))
-        assert res.status_code == 200
+        self.assertEquals(200, res.status_code)
 
         city1.refresh_from_db()
 
@@ -617,11 +620,11 @@ class TestPutRelationScoping(TestCase):
             'city_states': []
         }))
 
-        assert res.status_code == 403
+        self.assertEquals(403, res.status_code)
 
         content = jsonloads(res.content)
-        assert 'testapp.change_citystate' == content['required_permission']
+        self.assertEquals('testapp.change_citystate', content['required_permission'])
 
         city1.refresh_from_db()
 
-        assert city1.country.pk == country.pk
+        self.assertEquals(country.pk, country.pk)
