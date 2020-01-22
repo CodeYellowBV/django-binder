@@ -419,7 +419,7 @@ class TestPutRelationScoping(TestCase):
         self.assertEquals(403, res.status_code)
 
         content = jsonloads(res.content)
-        assert 'testapp.delete_city' == content['required_permission']
+        self.assertEquals('testapp.delete_city',  content['required_permission'])
 
         # City 2 still exists!
         city2.refresh_from_db()
@@ -447,7 +447,7 @@ class TestPutRelationScoping(TestCase):
             }]
         }))
 
-        assert res.status_code == 200
+        self.assertEquals(200, res.status_code)
 
         # City 2 must not exist.
         with self.assertRaises(City.DoesNotExist):
@@ -478,9 +478,9 @@ class TestPutRelationScoping(TestCase):
         }))
 
         # This is not ok
-        assert res.status_code == 403
+        self.assertEquals(403, res.status_code)
         content = jsonloads(res.content)
-        assert 'testapp.change_city' == content['required_permission']
+        self.assertEquals('testapp.change_city', content['required_permission'])
 
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
@@ -503,10 +503,10 @@ class TestPutRelationScoping(TestCase):
         }))
 
         # This is not ok
-        assert res.status_code == 403
+        self.assertEquals(res.status_code, 403)
 
         content = jsonloads(res.content)
-        assert 'testapp.delete_city' == content['required_permission']
+        self.assertEquals('testapp.delete_city', content['required_permission'])
 
         # City 2 still exists!
         city2.refresh_from_db()
@@ -601,7 +601,7 @@ class TestPutRelationScoping(TestCase):
 
         city1.refresh_from_db()
 
-        assert city1.country is None
+        self.assertIsNone(city1.country)
 
     @override_settings(BINDER_PERMISSION={
         'testapp.view_country': [
