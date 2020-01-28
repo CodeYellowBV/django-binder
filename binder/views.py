@@ -1240,22 +1240,13 @@ class ModelView(View):
 					except BinderValidationError as bve:
 						validation_errors.append(bve)
 				elif obj_field.field.null:
-					# A bit of a hack. We make a check, so we need to make sure that we do have the permissions
-					# for this
-					from binder.permissions.views import PermissionView
-					if isinstance(rmobj_view, PermissionView):
-						rmobj_view.scope_change(request, rmobj, {obj_field.field.name: None})
-
-					setattr(rmobj, obj_field.field.name, None)
 					try:
-						self.binder_clean(rmobj)
+						rmobj_view._store(rmobj, {obj_field.field.name: None}, request)
 					except BinderValidationError as bve:
 						validation_errors.append(bve)
-					else:
-						rmobj.save()
 				else:
 					# Actually use the view to delete this, to not duplicate the deletion logic here
-					rmobj_view.delete(request=request, pk=rmobj.pk, skip_body_check=True)
+					rmobj_view.delete_obj(rmobj, False, request)
 
 
 			for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
@@ -1826,14 +1817,20 @@ class ModelView(View):
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
-		self.soft_delete(obj, undelete, request)
+		self.delete_obj(obj, undelete, request)
 		logger.info('{}DELETEd {} #{}'.format('UN' if undelete else '', self._model_name(), pk))
 
 		return HttpResponse(status=204)  # No content
 
 
 
+	def delete_obj(self, obj, undelete, request):
+		return self.soft_delete(obj, undelete, request)
+
+
+
 	def soft_delete(self, obj, undelete, request):
+		# Not only for soft delets, actually handles all deletions
 		try:
 			if obj.deleted and not undelete:
 				raise BinderIsDeleted()
