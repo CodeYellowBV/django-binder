@@ -64,7 +64,8 @@ def sign(num):
 		return 1
 
 
-RelatedModel = namedtuple('RelatedModel', 'fieldname model reverse_fieldname')
+RelatedModel = namedtuple('RelatedModel', ['fieldname', 'model', 'reverse_fieldname'])
+FilterDescription = namedtuple('FilterDescription', ['filter', 'need_distinct'])
 
 # Stolen and improved from https://stackoverflow.com/a/30462851
 def image_transpose_exif(im):
@@ -635,18 +636,14 @@ class ModelView(View):
 		Agg = GroupConcat if connections[self.model.objects.db].vendor == 'mysql' else OrderableArrayAgg
 
 		for field in with_map:
-			next = self._follow_related(field)[0].model
-			view_class = self.router.model_view(next)
+			vr = self.virtual_relations.get(field, None)
+
+			next_relation = self._follow_related(field)[0]
+			view_class = self.router.model_view(next_relation.model)
 			view = view_class()
 			# {router-view-instance}
 			view.router = self.router
-			qs = view._filter_relation(next, where_map.get(field, None))
-			# Drop ordering in subquery.  Can be slightly faster; we
-			# add ordering to the array_agg call already anyway.
-			if qs:
-				qs = qs.order_by()
-
-			vr = self.virtual_relations.get(field, None)
+			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None))
 
 			# Model default orders (this sometimes matters)
 			orders = []
@@ -673,7 +670,6 @@ class ModelView(View):
 				# This does mean you can't filter on this relation
 				# unless you write a custom filter, too.
 				if isinstance(virtual_annotation, Q):
-					q = Q(**{field+'__in': qs}) if qs else Q()
 					annotations[field_alias] = Agg(virtual_annotation, filter=q, ordering=orders)
 				else:
 					try:
@@ -682,14 +678,13 @@ class ModelView(View):
 						raise BinderRequestError('Annotation for virtual relation {{{}}}.{{{}}} is {{{}}}, but no method by that name exists.'.format(
 							self.model.__name__, field, virtual_annotation
 						))
-					rel_ids_by_field_by_id[field] = func(request, pks, Q(pk__in=qs) if qs else Q())
+					rel_ids_by_field_by_id[field] = func(request, pks, q)
 			# Actual relation
 			else:
 				if (getattr(self.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor or
 					not any(f.name == field for f in (list(self.model._meta.many_to_many) + list(self._get_reverse_relations())))):
 					singular_fields.add(field)
 
-				q = Q(**{field+'__in': qs}) if qs is not None else Q()
 				if Agg != GroupConcat: # HACKK (GROUP_CONCAT can't filter and excludes NULL already)
 					q &= Q(**{field+'__pk__isnull': False})
 				annotations[field_alias] = Agg(field+'__pk', filter=q, ordering=orders)
@@ -751,24 +746,28 @@ class ModelView(View):
 	# should be scoped on, but also a set of wheres where model M
 	# should further be scoped on.
 	#
-	# Returns a queryset for this field we should filter on further.
-	def _filter_relation(self, M, where_map):
+	# Returns a Q object for this field we should filter on further.
+	def _filter_relation(self, field_name, where_map):
 		# If there are no filters, do nothing
 		if where_map is None:
-			return None
+			return Q(), False
 
 		wheres = where_map['filters']
 
-		qs = annotate(M.objects.all())
+		q = Q()
+		need_distinct = False
 		for where in wheres:
 			field, val = where.split('=')
-			qs = self._parse_filter(qs, field, val)
+			filter_description = self._parse_filter(field, val, field_name+'__' if field_name else '')
+			need_distinct |= filter_description.need_distinct
+			q &= filter_description.filter
 
-		return qs
+		return FilterDescription(q, need_distinct)
 
 
-	def _parse_filter(self, queryset, field, value, partial=''):
+	def _parse_filter(self, field, value, partial=''):
 		head, *tail = field.split('.')
+		need_distinct = False
 
 		if not tail:
 			invert = False
@@ -783,7 +782,9 @@ class ModelView(View):
 			except ValueError:
 				qualifier = None
 
-			queryset = self._filter_field(queryset, head, qualifier, value, invert, partial)
+			q = self._filter_field(head, qualifier, value, invert, partial)
+		else:
+			q = Q()
 
 		try:
 			related = self._follow_related(head)[0]
@@ -798,27 +799,30 @@ class ModelView(View):
 			view = self.router.model_view(related.model)()
 			# {router-view-instance}
 			view.router = self.router
-			queryset = view._parse_filter(queryset, '.'.join(tail), value, partial + head + '__')
-			# Distinct might be needed when we traverse a relation
-			# that is joined in, as it may produce duplicate records.
-			# Always doing the distinct works, but has performance
-			# implications, hence we avoid it if possible.
+			filter_description = view._parse_filter('.'.join(tail), value, partial + head + '__')
+			need_distinct |= filter_description.need_distinct
+			q &= filter_description.filter
 
+		# Distinct might be needed when we traverse a relation
+		# that is joined in, as it may produce duplicate records.
+		# Always doing the distinct works, but has performance
+		# implications, hence we avoid it if possible.
 		if related is not None:
 			related_field = getattr(self.model, related.fieldname)
 			if isinstance(related_field, models.fields.related.ReverseManyToOneDescriptor): # m2m or reverse fk
-				queryset = queryset.distinct()
-		return queryset
+				need_distinct = True
+
+		return FilterDescription(q, need_distinct)
 
 
 
-	def _filter_field(self, queryset, field_name, qualifier, value, invert, partial=''):
+	def _filter_field(self, field_name, qualifier, value, invert, partial=''):
 		if field_name in self.annotations:
 			if partial:
-				return queryset.filter(**{partial + 'in': self._filter_field(
-					annotate(self.model.objects.all()),
-					field_name, qualifier, value, invert,
-				)})
+				# NOTE: This creates a subquery; try to avoid this!
+				qs = annotate(self.model.objects.all())
+				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert))
+				return Q(**{partial + 'in': qs})
 			field = self.annotations[field_name]['field']
 		else:
 			try:
@@ -833,7 +837,7 @@ class ModelView(View):
 			if filter_class:
 				filter = filter_class(field)
 				try:
-					return queryset.filter(filter.get_q(qualifier, value, invert, partial))
+					return filter.get_q(qualifier, value, invert, partial)
 				except ValidationError as e:
 					# TODO: Maybe convert to a BinderValidationError later?
 					raise BinderRequestError(e.message)
@@ -1041,7 +1045,10 @@ class ModelView(View):
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
 		for field, values in filters.items():
 			for v in values:
-				queryset = self._parse_filter(queryset, field, v)
+				q, distinct = self._parse_filter(field, v)
+				queryset = queryset.filter(q)
+				if distinct:
+					queryset = queryset.distinct()
 
 		#### search
 		if 'search' in request.GET:

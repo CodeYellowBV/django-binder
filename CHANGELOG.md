@@ -1,3 +1,18 @@
+## HEAD
+
+### Breaking changes
+
+The `_filter_field` method now returns a `Q()` object, not a queryset.
+Similarly, the `_filter_relation` method no longer accepts a queryset
+and now returns a new namedtuple called `FilterDescription`, which
+contains a `Q()` object property called `filter` and a boolean called
+`need_distinct` which indicated if the master query should be made
+distinct.
+
+Using `Q()` objects instead of querysets allows making queries in
+`with_ids` without requiring a subquery on filtered relations, which
+can be a big performance win on large tables.
+
 ## Version 1.4.0
 
 ### Features
