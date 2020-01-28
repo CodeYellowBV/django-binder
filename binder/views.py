@@ -21,6 +21,7 @@ from django.db.models import Q, F
 from django.utils import timezone
 from django.db import transaction
 
+
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat
@@ -1142,12 +1143,12 @@ class ModelView(View):
 				func = self._store_field
 			return func(obj, field, value, request, pk=pk)
 
-		def store_m2m_field(obj, field, value):
+		def store_m2m_field(obj, field, value, request):
 			try:
 				func = getattr(self, '_store_m2m__' + field)
 			except AttributeError:
 				func = self._store_m2m_field
-			return func(obj, field, value)
+			return func(obj, field, value, request)
 
 		for field, value in values.items():
 			try:
@@ -1166,6 +1167,7 @@ class ModelView(View):
 			self.binder_clean(obj, pk=pk)
 		except BinderValidationError as bve:
 			validation_errors.append(bve)
+
 
 		# full_clean() doesn't complain about some not-NULL fields being None.
 		# This causes save() to explode with a django.db.IntegrityError because the
@@ -1197,7 +1199,7 @@ class ModelView(View):
 
 		for field, value in deferred_m2ms.items():
 			try:
-				store_m2m_field(obj, field, value)
+				store_m2m_field(obj, field, value, request)
 			except BinderValidationError as bve:
 				validation_errors.append(bve)
 
@@ -1219,7 +1221,7 @@ class ModelView(View):
 
 
 
-	def _store_m2m_field(self, obj, field, value):
+	def _store_m2m_field(self, obj, field, value, request):
 		validation_errors = []
 
 		# Can't use isinstance() because apparantly ManyToManyDescriptor is a subclass of
@@ -1237,31 +1239,23 @@ class ModelView(View):
 			old_ids = set(obj_field.values_list('id', flat=True))
 			new_ids = set(value)
 			for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
+				rmobj_view = self.router.model_view(rmobj.__class__)()
 				method = getattr(rmobj, '_binder_unset_relation_{}'.format(obj_field.field.name), None)
 				if callable(method):
 					try:
-						method()
+						method(request)
 					except BinderValidationError as bve:
 						validation_errors.append(bve)
 				elif obj_field.field.null:
-					setattr(rmobj, obj_field.field.name, None)
 					try:
-						self.binder_clean(rmobj)
+						rmobj_view._store(rmobj, {obj_field.field.name: None}, request)
 					except BinderValidationError as bve:
 						validation_errors.append(bve)
-					else:
-						rmobj.save()
-				elif hasattr(rmobj, 'deleted'):
-					if not rmobj.deleted:
-						rmobj.deleted = True
-						try:
-							self.binder_clean(rmobj)
-						except BinderValidationError as bve:
-							validation_errors.append(bve)
-						else:
-							rmobj.save()
 				else:
-					rmobj.delete()
+					# Actually use the view to delete this, to not duplicate the deletion logic here
+					rmobj_view.delete_obj(rmobj, False, request)
+
+
 			for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
 				setattr(addobj, obj_field.field.name, obj)
 				try:
@@ -1809,34 +1803,41 @@ class ModelView(View):
 
 
 
-	def delete(self, request, pk=None, undelete=False):
+	def delete(self, request, pk=None, undelete=False, skip_body_check=False):
 		if not undelete:
 			self._require_model_perm('delete', request)
 
 		if pk is None:
 			raise BinderMethodNotAllowed()
 
-		# FIXME: ugly workaround, remove when Django bug fixed
-		# Try/except because https://code.djangoproject.com/ticket/27005
-		try:
-			if request.body not in (b'', b'{}'):
-				raise BinderRequestError('{}DELETE body must be empty or empty json object.'.format('UN' if undelete else ''))
-		except ValueError:
-			pass
+		if not skip_body_check:
+			# FIXME: ugly workaround, remove when Django bug fixed
+			# Try/except because https://code.djangoproject.com/ticket/27005
+			try:
+				if request.body not in (b'', b'{}'):
+					raise BinderRequestError('{}DELETE body must be empty or empty json object.'.format('UN' if undelete else ''))
+			except ValueError:
+				pass
 
 		try:
 			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 
-		self.soft_delete(obj, undelete, request)
+		self.delete_obj(obj, undelete, request)
 		logger.info('{}DELETEd {} #{}'.format('UN' if undelete else '', self._model_name(), pk))
 
 		return HttpResponse(status=204)  # No content
 
 
 
+	def delete_obj(self, obj, undelete, request):
+		return self.soft_delete(obj, undelete, request)
+
+
+
 	def soft_delete(self, obj, undelete, request):
+		# Not only for soft delets, actually handles all deletions
 		try:
 			if obj.deleted and not undelete:
 				raise BinderIsDeleted()

@@ -534,31 +534,6 @@ class UserViewMixIn(UserBaseMixin):
 
 		return self.respond_with_user(request, user.id)
 
-	@list_route(name='email_exists', unauthenticated=True, methods=['GET'])
-	@no_scoping_required()
-	def email_exists(self, request):
-		"""
-		Adds an endpoint to check if an email exists or not
-
-		Request:
-
-		POST user/email_exists/
-		{
-			"email": "str@str.com"
-		}
-
-		Return:
-		200 if it exists, of 404 if it does not exist.
-
-		"""
-		self._require_model_perm('email_exists', request)
-
-		email = request.GET.get('email')
-		if self.model.objects.filter(email=email.lower()).exists():
-			return JsonResponse({})
-		else:
-			raise BinderNotFound()
-
 	@abstractmethod
 	def _after_soft_delete(self, request, user, undelete):
 		"""

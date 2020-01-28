@@ -15,3 +15,5 @@ from .lion import Lion
 from .picture import Picture
 from .zoo import Zoo
 from .zoo_employee import ZooEmployee
+from .city import City, CityState, PermanentCity
+from .country import Country
