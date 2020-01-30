@@ -105,7 +105,7 @@ class UserViewMixIn(UserBaseMixin):
 		except BinderForbidden:  # convert to read-only error, so the field is ignored
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
 
-	def _parse_filter(self, queryset, field, value, partial=''):
+	def _parse_filter(self,  field, value, partial=''):
 		"""
 		Add the has_permission as a filter
 		"""
@@ -116,10 +116,10 @@ class UserViewMixIn(UserBaseMixin):
 				Q(is_superuser=True)
 			)
 			if not partial:
-				return users
-			return queryset.filter(Q(**{partial + 'in': set(users.values_list('id', flat=True))}))
+				partial = 'pk__'
+			return Q(**{partial + 'in': set(users.values_list('id', flat=True))}), False
 		else:
-			return super()._parse_filter(queryset, field, value, partial)
+			return super()._parse_filter(field, value, partial)
 
 	def authenticate(self, request, **kwargs):
 		return auth.authenticate(request, **kwargs)
