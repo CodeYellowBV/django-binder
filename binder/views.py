@@ -1305,6 +1305,7 @@ class ModelView(View):
 		if field in [
 			'id', 'pk', 'deleted', '_meta',
 			*self.unwritable_fields,
+			*self.shown_properties,
 			*self.file_fields,
 			*self.annotations,
 		]:
