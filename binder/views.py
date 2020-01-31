@@ -1302,7 +1302,12 @@ class ModelView(View):
 	# Otherwise, return False.
 	def _store_field(self, obj, field, value, request, pk=None):
 		# Unwritable fields
-		if field in self.unwritable_fields + ['id', 'pk', 'deleted', '_meta'] + self.file_fields:
+		if field in [
+			'id', 'pk', 'deleted', '_meta',
+			*self.unwritable_fields,
+			*self.file_fields,
+			*self.annotations,
+		]:
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
 
 		# Regular fields and FKs
