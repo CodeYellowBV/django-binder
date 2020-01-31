@@ -369,7 +369,7 @@ class UserViewMixIn(UserBaseMixin):
 
 		Request:
 
-		POST user/{id}/activate/
+		PUT user/{id}/activate/
 		{
 			"activation_code": string
 		}
@@ -400,7 +400,7 @@ class UserViewMixIn(UserBaseMixin):
 			user = self.model._default_manager.get(pk=pk)
 		except (TypeError, ValueError, OverflowError, self.model.DoesNotExist):
 			user = None
-
+		print(body.get('activation_code'))
 		if user is None or not self.token_generator.check_token(user, body.get('activation_code')):
 			raise BinderNotFound()
 
