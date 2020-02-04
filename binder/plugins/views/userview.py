@@ -108,6 +108,7 @@ class UserViewMixIn(UserBaseMixin):
 	def _parse_filter(self,  field, value, partial=''):
 		"""
 		Add the has_permission as a filter
+		Partial here is a partial lookup, aka icontains__, in__, startwith__ see doc api for further explanation
 		"""
 		if field == 'has_permission':
 			users = self.model.objects.filter(

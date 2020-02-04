@@ -1,17 +1,11 @@
-from datetime import datetime, timedelta, date
+import json
 from unittest.mock import patch
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 from django.contrib.auth.tokens import default_token_generator
 from django.test import TestCase, Client, override_settings
-from binder.plugins.token_auth.models import Token
 
-import json
-
-from django.contrib.auth.tokens import default_token_generator
-from django.utils.http import base36_to_int, int_to_base36
 from binder.json import JsonResponse, jsonloads
-from tests.testapp.models import ContactPerson, Zoo, Animal
 
 
 @patch(
@@ -61,7 +55,7 @@ class UserLogic(TestCase):
 		self.client = Client()
 
 		data = {
-			"activation_code": (str(self.token))
+			'activation_code': (str(self.token))
 		}
 
 		r = self.client.put('/user/7/activate/', data=json.dumps(data),
@@ -76,30 +70,54 @@ class UserFilterParseTest(TestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.user = User.objects.create_user(username='foo', password='bar', is_active=True, is_superuser=True)
+		self.user = User.objects.create_user(username='foo', password='bar', is_active=True, is_superuser=False)
+		self.user2 = User.objects.create_user(username='bar', password='foo', is_active=True, is_superuser=True)
+		self.user3 = User.objects.create_user(username='test', password='bar', is_active=True, is_superuser=True)
+		group = Group.objects.get()
+		self.user.groups.add(group)
 		self.user.save()
-		self.token = default_token_generator.make_token(self.user)
+		self.user2.save()
+		self.user3.save()
 		self.client = Client()
 		r = self.client.login(username='foo', password='bar')
 		self.assertTrue(r)
-		z = Zoo(id=1, name='zoo')
-		z2 = Zoo(id=2, name='zoo2')
-		z.save()
-		z2.save()
-		Animal(id=1, name='animal', zoo_id=1).save()
-		Animal(id=2, name='animal2', zoo_id=1).save()
-		Animal(id=3, name='animal2', zoo_id=2).save()
 
-	def test_parse_filter(self):
-		response = self.client.get('/animal/?with=zoo&limit=25&order_by=-name&.name=animal2&.zoo.name=zoo')
-		self.assertEqual(200, response.status_code)
-		result = jsonloads(response.content)
-		expected_result = [{'name': 'animal2', 'zoo': 1, 'zoo_of_birth': None, 'caretaker': None, 'deleted': False,
-							'id': 2, 'costume': None}]
-		self.assertEqual(expected_result, result['data'])
+	@override_settings(BINDER_PERMISSION={
+		# The only high level permission available in test is testapp.view_country (see general __init__)
+		# in here you have to define any low level permissions you wish to use on models
+		'testapp.view_country': [
+			('auth.view_user', 'all'),
+			('testapp.view_animal', 'all')
+		],
+	})
+	def test_parse_filter_userview_with_only_has_permission(self):
+		result = self.client.get('/user/?.has_permission=foo.bar')
+		self.assertEqual(200, result.status_code)
+		result_json = json.loads(result.content)
+		self.assertEqual(result_json['data'][0]['username'], 'bar')
 
-	def test_parse_filter_should_be_empty(self):
-		response = self.client.get('/animal/?with=zoo&limit=25&order_by=-name&.name=non_existent_animal&.zoo.name=zoo')
-		self.assertEqual(200, response.status_code)
-		result = jsonloads(response.content)
-		self.assertEqual([], result['data'])
+
+	@override_settings(BINDER_PERMISSION={
+		# The only high level permission available in test is testapp.view_country (see general __init__)
+		# in here you have to define any low level permissions you wish to use on models
+		'testapp.view_country': [
+			('auth.view_user', 'all'),
+			('testapp.view_animal', 'all')
+		],
+	})
+	def test_parse_filter_userview_with_has_permission_and_partial(self):
+		result = self.client.get('/user/?.has_permission=foo.bar&.username:icontains=tes')
+		self.assertEqual(200, result.status_code)
+		result_json = json.loads(result.content)
+		self.assertEqual(result_json['data'][0]['username'], 'test')
+
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('auth.view_user', 'all')
+		],
+	})
+	def test_parse_filter_userview_without_has_permission(self):
+		result = self.client.get('/user/?.username=test')
+		self.assertEqual(200, result.status_code)
+		result_json = json.loads(result.content)
+		self.assertEqual(result_json['data'][0]['username'], 'test')
