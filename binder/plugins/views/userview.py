@@ -116,10 +116,11 @@ class UserViewMixIn(UserBaseMixin):
 				Q(user_permissions__codename=value) |
 				Q(is_superuser=True)
 			)
+			# if there is not a partial search (icontains, startswith, in) we just look for the private key
 			if not partial:
 				partial = 'pk__'
 			# Second false means the userview is not distinct, this means that while some information may be sent twice
-			# (because two users have a relation to the same thing) we never m 	iss information.
+			# (because two users have a relation to the same thing) we never miss information.
 			return Q(**{partial + 'in': set(users.values_list('id', flat=True))}), False
 		else:
 			return super()._parse_filter(field, value, partial)
