@@ -93,7 +93,7 @@ class UserFilterParseTest(TestCase):
 	def test_parse_filter_userview_with_only_has_permission(self):
 		result = self.client.get('/user/?.has_permission=foo.bar')
 		self.assertEqual(200, result.status_code)
-		result_json = json.loads(result.content)
+		result_json = json.loads(result.content.decode('utf-8'))
 		self.assertEqual(result_json['data'][0]['username'], 'bar')
 
 
@@ -108,7 +108,7 @@ class UserFilterParseTest(TestCase):
 	def test_parse_filter_userview_with_has_permission_and_partial(self):
 		result = self.client.get('/user/?.has_permission=foo.bar&.username:icontains=tes')
 		self.assertEqual(200, result.status_code)
-		result_json = json.loads(result.content)
+		result_json = json.loads(result.content.decode('utf-8'))
 		self.assertEqual(result_json['data'][0]['username'], 'test')
 
 	@override_settings(BINDER_PERMISSION={
@@ -119,5 +119,5 @@ class UserFilterParseTest(TestCase):
 	def test_parse_filter_userview_without_has_permission(self):
 		result = self.client.get('/user/?.username=test')
 		self.assertEqual(200, result.status_code)
-		result_json = json.loads(result.content)
+		result_json = json.loads(result.content.decode('utf-8'))
 		self.assertEqual(result_json['data'][0]['username'], 'test')
