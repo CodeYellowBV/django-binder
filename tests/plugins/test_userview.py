@@ -37,7 +37,7 @@ class UserLogic(TestCase):
 		super().setUp()
 		self.user = User.objects.create_user(username='foo', password='bar', is_active=True, is_superuser=True)
 		self.user.save()
-		self.user2 = User.objects.create_user(id=7, username='test', password='user', is_active=False)
+		self.user2 = User.objects.create_user(id=7, username='test', password='user')
 		self.user2.save()
 		self.token = default_token_generator.make_token(self.user2)
 
@@ -51,19 +51,35 @@ class UserLogic(TestCase):
 		r = self.client.login(username='foo', password='wrong_pass')
 		self.assertFalse(r)
 
-	def test_user_activation(self):
+	def test_user_activation_correct(self):
 		self.client = Client()
 
 		data = {
 			'activation_code': (str(self.token))
 		}
 
-		r = self.client.put('/user/7/activate/', data=json.dumps(data),
+		r = self.client.put('/user/' + str(self.user2.id) + '/activate/', data=json.dumps(data),
 							content_type='application/json')
-		result = jsonloads(r.content)
-		print(result)
 
 		self.assertEqual(200, r.status_code)
+		self.assertTrue(self.user2.is_active)
+
+	def test_user_activation_incorrect(self):
+		# Reset setup for new test
+		self.user2.is_active = False
+		self.user2.save()
+
+		self.client = Client()
+
+		data = {
+			'activation_code': "OH NO WRONG TOKEN SENT TO BACKEND"
+		}
+
+		r = self.client.put('/user/' + str(self.user2.id) + '/activate/', data=json.dumps(data),
+							content_type='application/json')
+
+		self.assertEqual(404, r.status_code)
+		self.assertFalse(self.user2.is_active)
 
 
 class UserFilterParseTest(TestCase):
@@ -87,33 +103,51 @@ class UserFilterParseTest(TestCase):
 		# in here you have to define any low level permissions you wish to use on models
 		'testapp.view_country': [
 			('auth.view_user', 'all'),
+			('testapp.view_zoo', 'all'),
 			('testapp.view_animal', 'all')
 		],
 	})
-	def test_parse_filter_userview_with_only_has_permission(self):
-		result = self.client.get('/user/?.has_permission=foo.bar')
+	def test_parse_filter_userview_with_incorrect_permission_is_ignored(self):
+		result = self.client.get('/user/?has_permission=incorrect.perm')
 		self.assertEqual(200, result.status_code)
 		result_json = json.loads(result.content.decode('utf-8'))
-		self.assertEqual(result_json['data'][0]['username'], 'bar')
-
+		self.assertEqual(result_json['data'][0]['username'], 'foo')
 
 	@override_settings(BINDER_PERMISSION={
 		# The only high level permission available in test is testapp.view_country (see general __init__)
 		# in here you have to define any low level permissions you wish to use on models
 		'testapp.view_country': [
 			('auth.view_user', 'all'),
+			('testapp.view_zoo', 'all'),
+			('testapp.view_animal', 'all')
+		],
+	})
+	def test_parse_filter_userview_with_only_correct_has_permission(self):
+		result = self.client.get('/user/?has_permission=testapp.view_animal')
+		self.assertEqual(200, result.status_code)
+		result_json = json.loads(result.content.decode('utf-8'))
+		self.assertEqual(result_json['data'][0]['username'], 'foo')
+
+	@override_settings(BINDER_PERMISSION={
+		# The only high level permission available in test is testapp.view_country (see general __init__)
+		# in here you have to define any low level permissions you wish to use on models
+		'testapp.view_country': [
+			('auth.view_user', 'all'),
+			('testapp.view_zoo', 'all'),
 			('testapp.view_animal', 'all')
 		],
 	})
 	def test_parse_filter_userview_with_has_permission_and_partial(self):
-		result = self.client.get('/user/?.has_permission=foo.bar&.username:icontains=tes')
+		result = self.client.get('/user/?has_permission=testapp.view_zoo&.username:icontains=tes')
 		self.assertEqual(200, result.status_code)
 		result_json = json.loads(result.content.decode('utf-8'))
 		self.assertEqual(result_json['data'][0]['username'], 'test')
 
 	@override_settings(BINDER_PERMISSION={
 		'testapp.view_country': [
-			('auth.view_user', 'all')
+			('auth.view_user', 'all'),
+			('testapp.view_zoo', 'all'),
+			('testapp.view_animal', 'all')
 		],
 	})
 	def test_parse_filter_userview_without_has_permission(self):
