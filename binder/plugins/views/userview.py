@@ -105,26 +105,6 @@ class UserViewMixIn(UserBaseMixin):
 		except BinderForbidden:  # convert to read-only error, so the field is ignored
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
 
-	def _parse_filter(self,  field, value, partial=''):
-		"""
-		Add the has_permission as a filter
-		Partial here is a partial lookup, aka icontains__, in__, startwith__ see doc api for further explanation
-		"""
-		if field == 'has_permission':
-			users = self.model.objects.filter(
-				Q(groups__permissions__codename=value) |
-				Q(user_permissions__codename=value) |
-				Q(is_superuser=True)
-			)
-			# if there is not a partial search (icontains, startswith, in) we just look for the private key
-			if not partial:
-				partial = 'pk__'
-			# Second false means the userview is not distinct, this means that while some information may be sent twice
-			# (because two users have a relation to the same thing) we never miss information.
-			return Q(**{partial + 'in': set(users.values_list('id', flat=True))}), False
-		else:
-			return super()._parse_filter(field, value, partial)
-
 	def authenticate(self, request, **kwargs):
 		return auth.authenticate(request, **kwargs)
 
