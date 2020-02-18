@@ -1669,8 +1669,6 @@ class ModelView(View):
 					values[field.name] = [multiput_get_id(i) for i in values[field.name] if multiput_get_id(i) >= 0]
 
 			view = self.get_model_view(model)
-			# {router-view-instance}
-			view.router = self.router
 			try:
 				view._store(obj, values, request, pk=oid)
 			except BinderValidationError as e:
