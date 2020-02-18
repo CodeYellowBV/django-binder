@@ -614,11 +614,7 @@ class ModelView(View):
 				raise BinderRequestError('Unknown field {{{}}}.{{{}}}.'.format(self.model.__name__, fieldname))
 
 
-		# {router-view-instance}
-		# TODO: This should be refactored so that router
-		# returns an instance which has the router set on it.
-		view = self.router.model_view(related_model)()
-		view.router = self.router
+		view = self.get_model_view(related_model)
 		return (RelatedModel(fieldname, related_model, related_field),) + view._follow_related(fieldspec)
 
 
@@ -640,10 +636,7 @@ class ModelView(View):
 			vr = self.virtual_relations.get(field, None)
 
 			next_relation = self._follow_related(field)[0]
-			view_class = self.router.model_view(next_relation.model)
-			view = view_class()
-			# {router-view-instance}
-			view.router = self.router
+			view = self.get_model_view(next_relation.model)
 			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None))
 
 			# Model default orders (this sometimes matters)
@@ -723,12 +716,9 @@ class ModelView(View):
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model
 
-			view_class = self.router.model_view(next)
-			view = view_class()
-			# {router-view-instance}
-			view.router = self.router
+			view = self.get_model_view(next)
 
-			result[field] = (view_class, rel_ids_by_field_by_id[field], field in singular_fields)
+			result[field] = (type(view), rel_ids_by_field_by_id[field], field in singular_fields)
 
 			# And recur for subrelations
 			if sub_fields:
@@ -797,9 +787,7 @@ class ModelView(View):
 			if related is None:
 				raise related_err
 
-			view = self.router.model_view(related.model)()
-			# {router-view-instance}
-			view.router = self.router
+			view = self.get_model_view(related.model)
 			filter_description = view._parse_filter('.'.join(tail), value, partial + head + '__')
 			need_distinct |= filter_description.need_distinct
 			q &= filter_description.filter
@@ -854,9 +842,7 @@ class ModelView(View):
 
 		if tail:
 			next = self._follow_related(head)[0].model
-			view = self.router.model_view(next)()
-			# {router-view-instance}
-			view.router = self.router
+			view = self.get_model_view(next)
 			return view._parse_order_by(queryset, '.'.join(tail), partial + head + '__')
 
 		if head.endswith('__nulls_last'):
@@ -1104,7 +1090,7 @@ class ModelView(View):
 		try:
 			res = obj.full_clean()
 		except ValidationError as ve:
-			model_name = self.router.model_view(obj.__class__)()._model_name()
+			model_name = self.get_model_view(obj.__class__)._model_name()
 
 			raise BinderValidationError({
 				model_name: {
@@ -1239,7 +1225,7 @@ class ModelView(View):
 			old_ids = set(obj_field.values_list('id', flat=True))
 			new_ids = set(value)
 			for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
-				rmobj_view = self.router.model_view(rmobj.__class__)()
+				rmobj_view = self.get_model_view(rmobj.__class__)
 				method = getattr(rmobj, '_binder_unset_relation_{}'.format(obj_field.field.name), None)
 				if callable(method):
 					try:
@@ -1319,7 +1305,7 @@ class ModelView(View):
 						try:
 							value = int(value)
 						except ValueError:
-							model_name = self.router.model_view(obj.__class__)()._model_name()
+							model_name = self.get_model_view(obj.__class__)._model_name()
 							raise BinderValidationError({
 								model_name: {
 									obj.pk if pk is None else pk: {
@@ -1337,7 +1323,7 @@ class ModelView(View):
 					if f.max_length is not None:
 						if isinstance(value, str) and len(value) > f.max_length:
 							setattr(obj, f.attname, value[:f.max_length])
-							model_name = self.router.model_view(obj.__class__)()._model_name()
+							model_name = self.get_model_view(obj.__class__)._model_name()
 							raise BinderValidationError({
 								model_name: {
 									obj.pk if pk is None else pk: {
@@ -1358,7 +1344,7 @@ class ModelView(View):
 					except TypeError:
 						raise BinderFieldTypeError(self.model.__name__, field)
 					except ValidationError as ve:
-						model_name = self.router.model_view(obj.__class__)()._model_name()
+						model_name = self.get_model_view(obj.__class__)._model_name()
 						raise BinderValidationError({
 							model_name: {
 								obj.pk if pk is None else pk: {
@@ -1391,7 +1377,7 @@ class ModelView(View):
 				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
 				if ids:
 					field_name = obj._meta.get_field(field).remote_field.model.__name__
-					model_name = self.router.model_view(obj.__class__)()._model_name()
+					model_name = self.get_model_view(obj.__class__)._model_name()
 					raise BinderValidationError({
 						model_name: {
 							obj.pk: {
@@ -1682,7 +1668,7 @@ class ModelView(View):
 				if field.name in values:
 					values[field.name] = [multiput_get_id(i) for i in values[field.name] if multiput_get_id(i) >= 0]
 
-			view = self.router.model_view(model)()
+			view = self.get_model_view(model)
 			# {router-view-instance}
 			view.router = self.router
 			try:
@@ -1729,7 +1715,7 @@ class ModelView(View):
 
 		output = defaultdict(list)
 		for (model, oid), nid in new_id_map.items():
-			output[self.router.model_view(model)()._model_name()].append((oid, nid))
+			output[self.get_model_view(model)._model_name()].append((oid, nid))
 
 		return JsonResponse({'idmap': output})
 
@@ -1852,7 +1838,7 @@ class ModelView(View):
 				except models.ProtectedError as e:
 					protected_objects = defaultdict(list)
 					for prot in e.protected_objects:
-						protected_objects[self.router.model_view(prot.__class__)()._model_name()] += [prot.id]
+						protected_objects[self.get_model_view(prot.__class__)._model_name()] += [prot.id]
 					raise BinderValidationError({
 						self._model_name(): {
 							obj.pk: {
@@ -2018,7 +2004,7 @@ class ModelView(View):
 				return JsonResponse( {"data": {file_field_name: path}} )
 
 			except ValidationError as ve:
-				model_name = self.router.model_view(obj.__class__)()._model_name()
+				model_name = self.get_model_view(obj.__class__)._model_name()
 
 				raise BinderValidationError({
 					model_name: {
