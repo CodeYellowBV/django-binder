@@ -27,13 +27,21 @@ class RoomController(object):
 
 		return rooms
 
-def trigger(data, rooms):
-	url = getattr(settings, 'HIGH_TEMPLAR_URL', 'http://localhost:8002')
 
-	try:
-		requests.post('{}/trigger/'.format(url), data=jsondumps({
-			'data': data,
-			'rooms': rooms,
-		}))
-	except RequestException:
-		pass
+def trigger(data, rooms):
+	import pika
+	from pika import BlockingConnection
+	from django.conf import settings
+	import json
+
+	connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
+												   settings.HIGH_TEMPLAR['rabbitmq']['password'])
+	connection_parameters = pika.ConnectionParameters(settings.HIGH_TEMPLAR['rabbitmq']['host'],
+													  credentials=connection_credentials)
+	connection = BlockingConnection(parameters=connection_parameters)
+	channel = connection.channel()
+
+	channel.basic_publish('hightemplar', routing_key='*', body=jsondumps({
+		'data': data,
+		'rooms': rooms,
+	}))
