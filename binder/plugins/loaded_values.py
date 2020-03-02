@@ -31,7 +31,7 @@ class LoadedValuesMixin:
 
             old_value = self.get_old_value(field)
 
-            if current_value is not old_value:
+            if current_value != old_value:
                 return True
 
         return False
