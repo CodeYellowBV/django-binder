@@ -6,6 +6,7 @@ from .testapp.urls import room_controller
 from .testapp.models import Animal, Costume
 import requests
 import json
+from django.test import override_settings
 
 
 class MockUser:
@@ -46,6 +47,7 @@ class WebsocketTest(TestCase):
 		self.assertCountEqual(allowed_rooms, rooms)
 
 	@mock.patch('requests.post', side_effect=mock_post_high_templar)
+	@override_settings(HIGH_TEMPLAR_URL="http://localhost:8002")
 	def test_post_save_trigger(self, mock):
 		doggo = Animal(name='Woofer')
 		doggo.full_clean()
