@@ -6,7 +6,6 @@ from django.contrib import auth
 from django.contrib.auth import update_session_auth_hash, password_validation
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
-from django.db.models import Q
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_post_parameters
@@ -104,22 +103,6 @@ class UserViewMixIn(UserBaseMixin):
 			return self._store_field(obj, field, value, request, pk=pk)
 		except BinderForbidden:  # convert to read-only error, so the field is ignored
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
-
-	def _parse_filter(self, queryset, field, value, partial=''):
-		"""
-		Add the has_permission as a filter
-		"""
-		if field == 'has_permission':
-			users = self.model.objects.filter(
-				Q(groups__permissions__codename=value) |
-				Q(user_permissions__codename=value) |
-				Q(is_superuser=True)
-			)
-			if not partial:
-				return users
-			return queryset.filter(Q(**{partial + 'in': set(users.values_list('id', flat=True))}))
-		else:
-			return super()._parse_filter(queryset, field, value, partial)
 
 	def authenticate(self, request, **kwargs):
 		return auth.authenticate(request, **kwargs)
@@ -369,7 +352,7 @@ class UserViewMixIn(UserBaseMixin):
 
 		Request:
 
-		POST user/{id}/activate/
+		PUT user/{id}/activate/
 		{
 			"activation_code": string
 		}
@@ -400,7 +383,6 @@ class UserViewMixIn(UserBaseMixin):
 			user = self.model._default_manager.get(pk=pk)
 		except (TypeError, ValueError, OverflowError, self.model.DoesNotExist):
 			user = None
-
 		if user is None or not self.token_generator.check_token(user, body.get('activation_code')):
 			raise BinderNotFound()
 

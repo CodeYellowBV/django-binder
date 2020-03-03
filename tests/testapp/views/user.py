@@ -8,7 +8,7 @@ from binder.plugins.views import UserViewMixIn
 from binder.router import list_route
 
 
-class UserView(PermissionView, UserViewMixIn):
+class UserView(UserViewMixIn, PermissionView):
 	model = User
 
 	hidden_fields = ['password', 'is_staff', 'date_joined']
