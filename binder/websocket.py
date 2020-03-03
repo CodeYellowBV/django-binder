@@ -34,7 +34,6 @@ def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
         import pika
         from pika import BlockingConnection
-        import json
 
         connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
                                                        settings.HIGH_TEMPLAR['rabbitmq']['password'])
