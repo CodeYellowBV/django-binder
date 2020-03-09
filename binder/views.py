@@ -183,10 +183,10 @@ class ModelView(View):
 
 	# A dict that looks like:
 	#  name: {
-	#    'model': model class,
-	#    'annotation': Q obj or method name,
-	#    'related_field': fieldname (str) or None if there is no such field,
-	#    'singular': boolean, (assumed False if missing)
+	#'model': model class,
+	#'annotation': Q obj or method name,
+	#'related_field': fieldname (str) or None if there is no such field,
+	#'singular': boolean, (assumed False if missing)
 	#  }
 	virtual_relations = {}
 
@@ -1297,7 +1297,25 @@ class ModelView(View):
 				if isinstance(f, models.ForeignKey):
 					if not (value is None or isinstance(value, int)):
 						raise BinderFieldTypeError(self.model.__name__, field)
-					setattr(obj, f.attname, value)
+
+					# Previously, this value was updated using the following code:
+					# - setattr(obj, f.attname, value)
+					# The problem is that this updates the obj id, but not the related object itself
+					# This is not a problem if the object is not evaluated yet before (Since it will be gotten from
+					# the db afterwards). But it is a problem if the object is evaluated, since it then has the old
+					# value cached.
+					if value is None:
+						# Special case if the value is none, then we can set the field name to none as well.
+						# Updating f.name, will also update the underlaying pk
+						setattr(obj, f.name, None)
+					else:
+						# Otherwise, update the relation
+						try:
+							setattr(obj, f.name, f.remote_field.model.objects.get(pk=value))
+						except f.remote_field.model.DoesNotExist:
+							# Hack, set the id directly. This does the actual check, and throws the BinderError in
+							# the same way the old case has.
+							setattr(obj, f.attname, value)
 				elif isinstance(f, models.IntegerField):
 					if value is None or value == '':
 						value = None
