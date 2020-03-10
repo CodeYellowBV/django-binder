@@ -5,7 +5,7 @@ from .testapp.views import AnimalView
 from .testapp.models import Animal, Caretaker
 from django.test import TestCase
 
-class TestWeirdBug(TestCase):
+class TestSetNullableRelations(TestCase):
 
     def test_standard_filling_in_relation_to_existing_model(self):
         animal = Animal.objects.create(name='foo')
@@ -21,7 +21,7 @@ class TestWeirdBug(TestCase):
             user = FakeUser()
 
         router = Router()
-        router.register(ModelView)
+        router.register(AnimalView)
 
         animal_view.router = router
 
@@ -44,7 +44,7 @@ class TestWeirdBug(TestCase):
             user = FakeUser()
 
         router = Router()
-        router.register(ModelView)
+        router.register(AnimalView)
 
         animal_view.router = router
 
@@ -67,7 +67,7 @@ class TestWeirdBug(TestCase):
             user = FakeUser()
 
         router = Router()
-        router.register(ModelView)
+        router.register(AnimalView)
 
         animal_view.router = router
 

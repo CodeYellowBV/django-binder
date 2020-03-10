@@ -82,35 +82,39 @@ class Router(object):
 
 
 
-	def register(self, superclass):
-		for view in superclass.__subclasses__():
-			if view.register_for_model and view.model is not None:
-				if view.model in self.model_views:
-					raise ValueError('Model-View mapping conflict for {}: {} vs {}'.format(view.model, view, self.model_views[view.model]))
-				self.model_views[view.model] = view
-				self.name_models[view._model_name()] = view.model
+	def register(self, view):
+		# Recurse subclasses of this subclass, so we register all descendants.
+		# self.register(superclass)
 
-			if view.route is not None:
-				if isinstance(view.route, Route):
-					route = view.route
-				elif isinstance(view.route, str):
-					route = Route(view.route)
-				elif view.route is True:
-					if view.model is None:
-						route = None
-					else:
-						route = Route(view._model_name())
+		if view.register_for_model and view.model is not None:
+			if view.model in self.model_views:
+				raise ValueError('Model-View mapping conflict for {}: {} vs {}'.format(view.model, view,
+																					   self.model_views[view.model]))
+			self.model_views[view.model] = view
+			self.name_models[view._model_name()] = view.model
+
+		if view.route is not None:
+			if isinstance(view.route, Route):
+				route = view.route
+			elif isinstance(view.route, str):
+				route = Route(view.route)
+			elif view.route is True:
+				if view.model is None:
+					route = None
 				else:
-					raise TypeError('{}.route'.format(view))
+					route = Route(view._model_name())
+			else:
+				raise TypeError('{}.route'.format(view))
 
-				if route:
-					for r, v in self.route_views.items():
-						if r.route == route.route:
-							raise ValueError('Routing conflict for "{}": {} vs {}'.format(route.route, view, v))
-					self.route_views[route] = view
+			if route:
+				for r, v in self.route_views.items():
+					if r.route == route.route:
+						raise ValueError('Routing conflict for "{}": {} vs {}'.format(route.route, view, v))
+				self.route_views[route] = view
 
+		for subview in view.__subclasses__():
 			# Recurse subclasses of this subclass, so we register all descendants.
-			self.register(view)
+			self.register(subview)
 		return self
 
 
