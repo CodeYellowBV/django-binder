@@ -89,7 +89,7 @@ class Router(object):
 		if view.register_for_model and view.model is not None:
 			if view.model in self.model_views:
 				raise ValueError('Model-View mapping conflict for {}: {} vs {}'.format(view.model, view,
-																					   self.model_views[view.model]))
+																						self.model_views[view.model]))
 			self.model_views[view.model] = view
 			self.name_models[view._model_name()] = view.model
 
