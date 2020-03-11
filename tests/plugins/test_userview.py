@@ -6,7 +6,7 @@ from django.contrib.auth.models import User, Group
 from django.contrib.auth.tokens import default_token_generator
 from django.test import TestCase, Client, override_settings
 
-from binder.json import JsonResponse, jsonloads
+from binder.json import JsonResponse
 
 
 @patch(
