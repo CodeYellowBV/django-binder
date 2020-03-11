@@ -4,7 +4,7 @@ from binder.exceptions import BinderValidationError
 from binder.plugins.loaded_values import LoadedValuesMixin
 
 # From the api docs: an animal with a name.
-class Animal(BinderModel, LoadedValuesMixin):
+class Animal(LoadedValuesMixin, BinderModel):
 	name = models.TextField(max_length=64)
 	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 	zoo_of_birth = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='+', blank=True, null=True) # might've been born outside captivity

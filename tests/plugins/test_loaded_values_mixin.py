@@ -31,7 +31,7 @@ class LoadedValuesMixinTest(TestCase):
 		self.assertEqual(caretaker.id, scooby.get_old_value('caretaker'))
 
 		self.assertEqual({
-			'id': None,
+			'id': scooby.id,
 			'name': 'Scooby Doo',
 			'zoo': gaia.id,
 			'zoo_of_birth': artis.id,
@@ -70,7 +70,7 @@ class LoadedValuesMixinTest(TestCase):
 		self.assertTrue(scooby.field_changed('name', 'zoo', 'zoo_of_birth'))
 
 		self.assertEqual({
-			'id': None,
+			'id': scooby.id, # If mixin is loaded in correct order, id should be set
 			'name': 'Scooby Doo',
 			'zoo': gaia.id,
 			'zoo_of_birth': artis.id,
