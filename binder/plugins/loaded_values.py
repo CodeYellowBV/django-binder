@@ -39,6 +39,9 @@ class LoadedValuesMixin:
     def get_old_value(self, field):
         return self.__loaded_values.get(field)
 
+    def get_old_values(self):
+        return self.__loaded_values.copy()
+
     def save(self, *args, **kwargs):
         res = super().save(*args, **kwargs)
         self.__loaded_values = self.binder_concrete_fields_as_dict()

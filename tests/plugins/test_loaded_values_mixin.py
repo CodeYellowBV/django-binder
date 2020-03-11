@@ -10,23 +10,35 @@ class LoadedValuesMixinTest(TestCase):
 		caretaker = Caretaker(name='Henk')
 		caretaker.save()
 
-		scooby = Animal(name='Scooby Doo', zoo_of_birth=artis, zoo=gaia)
+		scooby = Animal(name='Scooby Doo', zoo_of_birth=artis, zoo=gaia, caretaker=caretaker)
 
 		self.assertEqual('Scooby Doo', scooby.get_old_value('name'))
 		self.assertEqual(gaia.id, scooby.get_old_value('zoo'))
 		self.assertEqual(artis.id, scooby.get_old_value('zoo_of_birth'))
+		self.assertEqual(caretaker.id, scooby.get_old_value('caretaker'))
 
 		self.assertTrue(scooby.field_changed('zoo'))
 		self.assertTrue(scooby.field_changed('zoo_of_birth'))
 		self.assertTrue(scooby.field_changed('name'))
-		self.assertTrue(scooby.field_changed('name', 'zoo', 'zoo_of_birth'))
+		self.assertTrue(scooby.field_changed('caretaker'))
+		self.assertTrue(scooby.field_changed('name', 'zoo', 'zoo_of_birth', 'caretaker'))
 
 		scooby.save()
 
 		self.assertEqual('Scooby Doo', scooby.get_old_value('name'))
 		self.assertEqual(gaia.id, scooby.get_old_value('zoo'))
 		self.assertEqual(artis.id, scooby.get_old_value('zoo_of_birth'))
-		
+		self.assertEqual(caretaker.id, scooby.get_old_value('caretaker'))
+
+		self.assertEqual({
+			'id': None,
+			'name': 'Scooby Doo',
+			'zoo': gaia.id,
+			'zoo_of_birth': artis.id,
+			'caretaker': caretaker.id,
+			'deleted': False,
+		}, scooby.get_old_values())
+
 		self.assertFalse(scooby.field_changed('zoo'))
 		self.assertFalse(scooby.field_changed('zoo_of_birth'))
 		self.assertFalse(scooby.field_changed('name'))
@@ -57,6 +69,15 @@ class LoadedValuesMixinTest(TestCase):
 		self.assertTrue(scooby.field_changed('name'))
 		self.assertTrue(scooby.field_changed('name', 'zoo', 'zoo_of_birth'))
 
+		self.assertEqual({
+			'id': None,
+			'name': 'Scooby Doo',
+			'zoo': gaia.id,
+			'zoo_of_birth': artis.id,
+			'caretaker': None,
+			'deleted': False,
+		}, scooby.get_old_values())
+
 
 	def test_old_values_return_current_value_after_fresh_fetch_from_db(self):
 		artis = Zoo(name='Artis')
@@ -81,6 +102,15 @@ class LoadedValuesMixinTest(TestCase):
 		self.assertFalse(scooby.field_changed('zoo_of_birth'))
 		self.assertFalse(scooby.field_changed('name'))
 		self.assertFalse(scooby.field_changed('name', 'zoo', 'zoo_of_birth'))
+
+		self.assertEqual({
+			'id': scooby.id,
+			'name': 'Scooby Doo',
+			'zoo': gaia.id,
+			'zoo_of_birth': artis.id,
+			'caretaker': None,
+			'deleted': False,
+		}, scooby.get_old_values())
 
 		# He goes back to the old zoo
 		scooby.zoo=artis
