@@ -8,8 +8,8 @@ class LoadedValuesMixin:
     @classmethod
     def from_db(cls, db, field_names, values):
         instance = super().from_db(db, field_names, values)
-		# This set may be incomplete if we're using .only(...); see
-		# also the comment in get_old_value().
+        # This set may be incomplete if we're using .only(...); see
+        # also the comment in get_old_value().
         instance.__loaded_values = instance.binder_concrete_fields_as_dict(skip_deferred_fields=True)
         return instance
 
@@ -44,12 +44,12 @@ class LoadedValuesMixin:
         try:
             return self.__loaded_values[field]
         except KeyError:
-			# KeyError may occur when the field was not included in
-			# the set fetched from the db (e.g., due to .only(...))
-			# Instead, we rely on lazy-loading to fetch it for us
-			# here.  Unfortunately, this may result in hard to debug
-			# performance issues.  But at least we get somewhat
-			# consistent behaviour.
+            # KeyError may occur when the field was not included in
+            # the set fetched from the db (e.g., due to .only(...))
+            # Instead, we rely on lazy-loading to fetch it for us
+            # here.  Unfortunately, this may result in hard to debug
+            # performance issues.  But at least we get somewhat
+            # consistent behaviour.
             value = getattr(self, field)
             if isinstance(value, Model):
                 value = value.pk
@@ -62,8 +62,8 @@ class LoadedValuesMixin:
 
     def get_old_values(self):
         old_values = self.__loaded_values.copy()
-		# Same as in get_old_value: if we've used only(), we fetch the
-		# missing fields here for consistency.
+        # Same as in get_old_value: if we've used only(), we fetch the
+        # missing fields here for consistency.
         for f in self._meta.get_fields():
             if f.concrete and f.name not in old_values:
                 old_values[f.name] = getattr(self, f.attname)
