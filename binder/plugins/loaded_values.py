@@ -65,7 +65,7 @@ class LoadedValuesMixin:
         # Same as in get_old_value: if we've used only(), we fetch the
         # missing fields here for consistency.
         for f in self._meta.get_fields():
-            if f.concrete and f.name not in old_values:
+            if f.concrete and f.name not in old_values and not f.many_to_many:
                 old_values[f.name] = getattr(self, f.attname)
         return old_values
 
