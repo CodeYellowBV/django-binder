@@ -389,10 +389,14 @@ class BinderModelBase(models.base.ModelBase):
 
 
 class BinderModel(models.Model, metaclass=BinderModelBase):
-	def binder_concrete_fields_as_dict(self):
+	def binder_concrete_fields_as_dict(self, skip_deferred_fields=False):
 		fields = {}
+		deferred_fields = self.get_deferred_fields()
+
 		for field in [f for f in self._meta.get_fields() if f.concrete and not f.many_to_many]:
-			if isinstance(field, models.ForeignKey):
+			if skip_deferred_fields and field.attname in deferred_fields:
+				continue
+			elif isinstance(field, models.ForeignKey):
 				fields[field.name] = getattr(self, field.name + '_id')
 			elif isinstance(field, models.FileField):
 				fields[field.name] = str(getattr(self, field.name))
@@ -467,7 +471,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 
 
 def history_obj_post_init(sender, instance, **kwargs):
-	instance._history = instance.binder_concrete_fields_as_dict()
+	instance._history = instance.binder_concrete_fields_as_dict(skip_deferred_fields=True)
 
 	if not instance.pk:
 		instance._history = {k: history.NewInstanceField for k in instance._history}
@@ -476,10 +480,15 @@ def history_obj_post_init(sender, instance, **kwargs):
 
 def history_obj_post_save(sender, instance, **kwargs):
 	for field_name, new_value in instance.binder_concrete_fields_as_dict().items():
-		old_value = instance._history[field_name]
-		if old_value != new_value:
-			history.change(sender, instance.pk, field_name, old_value, new_value)
-			instance._history[field_name] = new_value
+		try:
+			old_value = instance._history[field_name]
+			if old_value != new_value:
+				history.change(sender, instance.pk, field_name, old_value, new_value)
+				instance._history[field_name] = new_value
+		except KeyError:
+			# Unfetched field (using only(...)), we don't know if it's
+			# been changed...
+			pass
 
 
 

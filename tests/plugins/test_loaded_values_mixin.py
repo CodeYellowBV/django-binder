@@ -124,3 +124,36 @@ class LoadedValuesMixinTest(TestCase):
 		self.assertFalse(scooby.field_changed('zoo_of_birth'))
 		self.assertTrue(scooby.field_changed('name'))
 		self.assertTrue(scooby.field_changed('name', 'zoo', 'zoo_of_birth'))
+
+
+	def test_recursion_depth_issue_with_loaded_values_and_only(self):
+		artis = Zoo(name='Artis')
+		artis.save()
+		gaia = Zoo(name='Gaia Zoo')
+		gaia.save()
+		caretaker = Caretaker(name='Henk')
+		caretaker.save()
+
+		scooby = Animal(name='Scooby Doo', zoo_of_birth=artis, zoo=gaia)
+		scooby.save()
+
+		# This would cause a maximum recursion depth exceeded error
+		scooby = Animal.objects.only('name').get(id=scooby.id)
+
+		self.assertEqual({
+			'id': scooby.id,
+			'name': 'Scooby Doo',
+			'zoo': gaia.id,
+			'zoo_of_birth': artis.id,
+			'caretaker': None,
+			'deleted': False,
+		}, scooby.get_old_values())
+
+		self.assertEqual('Scooby Doo', scooby.get_old_value('name'))
+		self.assertEqual(gaia.id, scooby.get_old_value('zoo'))
+		self.assertEqual(artis.id, scooby.get_old_value('zoo_of_birth'))
+
+		self.assertFalse(scooby.field_changed('zoo'))
+		self.assertFalse(scooby.field_changed('zoo_of_birth'))
+		self.assertFalse(scooby.field_changed('name'))
+		self.assertFalse(scooby.field_changed('name', 'zoo', 'zoo_of_birth'))

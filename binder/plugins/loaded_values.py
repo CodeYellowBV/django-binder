@@ -3,18 +3,21 @@ from django.db.models.fields.files import FieldFile
 
 
 class LoadedValuesMixin:
-
     __loaded_values = {}
 
     @classmethod
     def from_db(cls, db, field_names, values):
         instance = super().from_db(db, field_names, values)
-        instance.__loaded_values = instance.binder_concrete_fields_as_dict()
+		# This set may be incomplete if we're using .only(...); see
+		# also the comment in get_old_value().
+        instance.__loaded_values = instance.binder_concrete_fields_as_dict(skip_deferred_fields=True)
         return instance
+
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__loaded_values = self.binder_concrete_fields_as_dict()
+        self.__loaded_values = self.binder_concrete_fields_as_dict(skip_deferred_fields=True)
+
 
     def field_changed(self, *fields):
         if self.pk is None:
@@ -36,11 +39,36 @@ class LoadedValuesMixin:
 
         return False
 
+
     def get_old_value(self, field):
-        return self.__loaded_values.get(field)
+        try:
+            return self.__loaded_values[field]
+        except KeyError:
+			# KeyError may occur when the field was not included in
+			# the set fetched from the db (e.g., due to .only(...))
+			# Instead, we rely on lazy-loading to fetch it for us
+			# here.  Unfortunately, this may result in hard to debug
+			# performance issues.  But at least we get somewhat
+			# consistent behaviour.
+            value = getattr(self, field)
+            if isinstance(value, Model):
+                value = value.pk
+            elif isinstance(value, FieldFile):
+                value = value.name
+                if value is None:
+                    value = ''
+            return value
+
 
     def get_old_values(self):
-        return self.__loaded_values.copy()
+        old_values = self.__loaded_values.copy()
+		# Same as in get_old_value: if we've used only(), we fetch the
+		# missing fields here for consistency.
+        for f in self._meta.get_fields():
+            if f.concrete and f.name not in old_values:
+                old_values[f.name] = getattr(self, f.attname)
+        return old_values
+
 
     def save(self, *args, **kwargs):
         res = super().save(*args, **kwargs)
