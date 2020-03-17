@@ -32,7 +32,6 @@ class MultiPutTest(TestCase):
 			}]
 		}
 		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
-
 		self.assertEqual(response.status_code, 200)
 
 		returned_data = jsonloads(response.content)
@@ -479,3 +478,91 @@ class MultiPutTest(TestCase):
 
 		stimpy = Animal.objects.get(pk=animal_id)
 		self.assertEqual(stimpy.nickname.id, nickname_id)
+
+
+class MultiPutDeletionsTest(TestCase):
+
+	def setUp(self):
+		super().setUp()
+		u = User(username='testuser', is_active=True, is_superuser=True)
+		u.set_password('test')
+		u.save()
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
+
+	def test_deletions(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		model_data = {
+			'deletions': [zoo.id],
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		with self.assertRaises(Zoo.DoesNotExist):
+			zoo.refresh_from_db()
+
+	def test_deletions_not_a_list(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		model_data = {
+			'deletions': {'foo': 'bar'},
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 418)
+
+	def test_deletions_pk_not_an_int(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		model_data = {
+			'deletions': ['foo'],
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 418)
+
+	def test_with_deletions(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		model_data = {
+			'with_deletions': {'zoo': [zoo.id]},
+		}
+		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		with self.assertRaises(Zoo.DoesNotExist):
+			zoo.refresh_from_db()
+
+	def test_with_deletions_not_a_model(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		model_data = {
+			'with_deletions': {'please_never_use_this_model_name': [1]},
+		}
+		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 418)
+
+	def test_with_deletions_not_a_list(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		model_data = {
+			'with_deletions': {'zoo': {'foo': 'bar'}},
+		}
+		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 418)
+
+	def test_with_deletions_pk_not_an_int(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		model_data = {
+			'with_deletions': {'zoo': ['foo']},
+		}
+		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 418)

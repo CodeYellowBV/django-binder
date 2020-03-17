@@ -1464,19 +1464,33 @@ class ModelView(View):
 	def _multi_put_parse_request(self, request):
 		body = jsonloads(request.body)
 
-		if not 'data' in body:
-			raise BinderRequestError('missing data')
-
-		if not isinstance(body['data'], list):
-			raise BinderRequestError('data should be a list')
-
-		if 'with' in body and not isinstance(body['with'], dict):
+		data = body.get('with', {})
+		if not isinstance(data, dict):
 			raise BinderRequestError('with should be a dict')
 
-		data = body.get('with', {})
-		data[self._model_name()] = body['data']
+		deletions = body.get('with_deletions', {})
+		if not isinstance(deletions, dict):
+			raise BinderRequestError('with_deletions should be a dict')
 
-		return data
+		modelname = self._model_name()
+
+		try:
+			data[modelname] = body['data']
+		except KeyError:
+			pass
+		else:
+			if not isinstance(data[modelname], list):
+				raise BinderRequestError('data should be a list')
+
+		try:
+			deletions[modelname] = body['deletions']
+		except KeyError:
+			pass
+		else:
+			if not isinstance(deletions[modelname], list):
+				raise BinderRequestError('deletions should be a list')
+
+		return data, deletions
 
 
 
@@ -1485,7 +1499,7 @@ class ModelView(View):
 		objects = {}
 		for modelname, objs in data.items():
 			if not isinstance(objs, list):
-				raise BinderRequestError('with.{} value should be a list')
+				raise BinderRequestError('with.{} value should be a list'.format(modelname))
 
 			try:
 				model = self.router.name_models[modelname]
@@ -1713,6 +1727,54 @@ class ModelView(View):
 				new_id_map[source] = new_id_map[target]
 
 
+	def _multi_put_deletions(self, deletions, new_id_map, request):
+		for modelname, pks in deletions.items():
+			if not isinstance(pks, list):
+				raise BinderRequestError(
+					'with_deletions.{} value should be a list'
+					.format(modelname)
+				)
+
+			try:
+				model = self.router.name_models[modelname]
+			except KeyError:
+				raise BinderRequestError(
+					'with_deletions.{} is not a valid model name'
+					.format(modelname)
+				)
+
+			model_view = self.get_model_view(model)
+
+			for i, pk in enumerate(pks):
+				if not isinstance(pk, int):
+					raise BinderRequestError(
+						'with_deletions.{}[{}] should be a numeric id'
+						.format(modelname, i)
+					)
+
+				if pk < 0:
+					try:
+						pk = new_id_map.pop((model, pk))
+					except KeyError:
+						raise BinderRequestError(
+							'with_deletions.{}[{}] refers to unspecified '
+							'{}[{}]'
+							.format(modelname, i, modelname, pk)
+						)
+
+				try:
+					obj = model.objects.select_for_update().get(pk=pk)
+				except ObjectDoesNotExist:
+					raise BinderNotFound('{}[{}]'.format(modelname, pk))
+
+				if hasattr(obj, 'deleted') and obj.deleted:
+					raise BinderIsDeleted()
+
+				model_view.delete_obj(obj, False, request)
+
+		return new_id_map
+
+
 	def multi_put(self, request):
 		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
 
@@ -1720,7 +1782,7 @@ class ModelView(View):
 		# the new data (for perf reasons).
 		request._is_multi_put = True
 
-		data = self._multi_put_parse_request(request)
+		data, deletions = self._multi_put_parse_request(request)
 		objects = self._multi_put_collect_objects(data)
 		objects, overrides = self._multi_put_override_superclass(objects)
 		objects = self._multi_put_convert_backref_to_forwardref(objects)
@@ -1728,6 +1790,7 @@ class ModelView(View):
 		ordered_objects = self._multi_put_order_dependencies(dependencies)
 		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request)
 		self._multi_put_id_map_add_overrides(new_id_map, overrides)
+		new_id_map = self._multi_put_deletions(deletions, new_id_map, request)
 
 		output = defaultdict(list)
 		for (model, oid), nid in new_id_map.items():

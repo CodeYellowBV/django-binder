@@ -628,3 +628,67 @@ class TestPutRelationScoping(TestCase):
         city1.refresh_from_db()
 
         self.assertEquals(country.pk, country.pk)
+
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+            ('testapp.delete_country', 'all'),
+        ],
+    })
+    def test_multiput_deletions(self):
+        country = Country.objects.create(name='Netherlands')
+        res = self.client.put('/country/'.format(country.pk), data=jsondumps({
+            'deletions': [country.pk],
+        }))
+
+        self.assertEquals(200, res.status_code)
+
+        with self.assertRaises(Country.DoesNotExist):
+            country.refresh_from_db()
+
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+        ],
+    })
+    def test_multiput_deletions_no_perm(self):
+        country = Country.objects.create(name='Netherlands')
+        res = self.client.put('/country/'.format(country.pk), data=jsondumps({
+            'deletions': [country.pk],
+        }))
+
+        self.assertEquals(403, res.status_code)
+
+        country.refresh_from_db()
+
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+            ('testapp.delete_country', 'all'),
+        ],
+    })
+    def test_multiput_with_deletions(self):
+        country = Country.objects.create(name='Netherlands')
+        res = self.client.put('/city/'.format(country.pk), data=jsondumps({
+            'with_deletions': {'country': [country.pk]},
+        }))
+
+        self.assertEquals(200, res.status_code)
+
+        with self.assertRaises(Country.DoesNotExist):
+            country.refresh_from_db()
+
+    @override_settings(BINDER_PERMISSION={
+        'testapp.view_country': [
+            ('testapp.view_country', 'all'),
+        ],
+    })
+    def test_multiput_with_deletions_no_perm(self):
+        country = Country.objects.create(name='Netherlands')
+        res = self.client.put('/city/'.format(country.pk), data=jsondumps({
+            'with_deletions': {'country': [country.pk]},
+        }))
+
+        self.assertEquals(403, res.status_code)
+
+        country.refresh_from_db()
