@@ -1224,7 +1224,14 @@ class ModelView(View):
 			obj_field = getattr(obj, field)
 			old_ids = set(obj_field.values_list('id', flat=True))
 			new_ids = set(value)
-			for rmobj in obj_field.model.objects.filter(id__in=old_ids - new_ids):
+
+			rmobjs = obj_field.model.objects.filter(id__in=old_ids - new_ids)
+			# Skip already softdeleted objects for models which
+			# support softdeletion (this could be a lot of records)
+			if any([f.name == 'deleted' for f in obj_field.model._meta.fields]):
+				rmobjs = rmobjs.exclude(deleted=True)
+
+			for rmobj in rmobjs:
 				rmobj_view = self.get_model_view(rmobj.__class__)
 				method = getattr(rmobj, '_binder_unset_relation_{}'.format(obj_field.field.name), None)
 				if callable(method):
