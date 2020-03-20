@@ -1,6 +1,9 @@
 from django.test import TestCase
+
+from binder.exceptions import BinderNotFound
+from binder.json import jsondumps
 from binder.models import BinderModel
-from binder.router import Router, Route
+from binder.router import Router, Route, detail_route
 from binder.views import ModelView
 
 from django.urls.base import is_valid_path, clear_url_caches
@@ -9,6 +12,9 @@ from django.conf.urls import url, include
 from . import urls_module
 
 # Two unique local models, to use for view registration
+from .testapp.models import Country
+
+
 class FooModel(BinderModel):
 	class Meta(BinderModel.Meta):
 		app_label = 'test'
@@ -121,3 +127,40 @@ class RouterTest(TestCase):
 
 		self.assertTrue(is_valid_path('/bar/', urls_module))
 		self.assertFalse(is_valid_path('/bar/1/', urls_module))
+
+
+class TestFetchObj(TestCase):
+
+		
+	def test_get_obj_turns_pk_in_object(self):
+		that = self
+
+		country = Country.objects.create(name='foo')
+
+		class RequestMock:
+			method='GET'
+
+		class Foo(ModelView):
+			model = Country
+
+			@detail_route('foo', methods=['GET'], fetch_obj=True, unauthenticated=True)
+			def foo(self, request, obj):
+				that.assertTrue(isinstance(obj, Country))
+				that.assertEqual(country.pk, obj.pk)
+				return jsondumps({})
+
+		Foo().foo(RequestMock(), country.pk)
+
+	def test_get_obj_raises_binder_not_exists_error(self):
+		class RequestMock:
+			method='GET'
+
+		class Foo(ModelView):
+			model = Country
+
+			@detail_route('foo', methods=['GET'], fetch_obj=True, unauthenticated=True)
+			def foo(self, request, obj):
+				return jsondumps({})
+
+		with self.assertRaises(BinderNotFound):
+			Foo().foo(RequestMock(), 5)

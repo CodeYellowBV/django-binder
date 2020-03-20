@@ -5,15 +5,26 @@ from django.apps import apps
 from django.urls import reverse
 
 from binder.views import ModelView
-from .exceptions import BinderRequestError, BinderCSRFFailure, BinderMethodNotAllowed
+from .exceptions import BinderRequestError, BinderCSRFFailure, BinderMethodNotAllowed, BinderNotFound
 
 
-
-def _route_decorator(is_detail, name=None, methods=None, extra_route='', unauthenticated=False):
+def _route_decorator(is_detail, name=None, methods=None, extra_route='', unauthenticated=False, *, fetch_obj=False):
 	def decorator(func):
 		def wrapper(self, request=None, *args, **kwargs):
 			if methods is not None and request.method not in methods:
 				raise BinderMethodNotAllowed(methods)
+
+			if fetch_obj:
+				if len(args) == 0:
+					raise Exception('Can not fetch_obj if there is no pk!')
+
+				args = list(args)
+				pk = args[0]
+				try:
+					args[0] = self.get_queryset(request).get(pk=pk)
+				except self.model.DoesNotExist:
+					raise BinderNotFound()
+
 			return func(self, request, *args, **kwargs)
 		if is_detail:
 			wrapper.detail_route = True
@@ -25,6 +36,7 @@ def _route_decorator(is_detail, name=None, methods=None, extra_route='', unauthe
 		wrapper.unauthenticated = unauthenticated
 		return wrapper
 	return decorator
+
 
 def list_route(*args, **kwargs):
 	return _route_decorator(False, *args, **kwargs)
