@@ -28,6 +28,27 @@ from .orderable_agg import OrderableArrayAgg, GroupConcat
 from .models import FieldFilter, BinderModel
 from .json import JsonResponse, jsonloads
 
+def get_obj(view):
+	"""
+	Turns a primary key in an object
+	
+	Example, in combination with detail route
+	
+	@detail_route('finalize', methods=['POST'])
+	@get_obj
+	def finalize(self, request, obj):
+		pass
+	
+	:param view: 
+	:return: 
+	""""
+	def decorated_view(self, request, pk, **kwargs):
+		try:
+			obj = self.get_queryset(request).get(pk=pk)
+		except self.model.DoesNotExist:
+			raise BinderNotFound()
+		return view(self, request, obj, **kwargs)
+	return decorated_view
 
 # Haha kill me now
 def multiput_get_id(bla):
