@@ -151,6 +151,25 @@ class TestFetchObj(TestCase):
 
 		Foo().foo(RequestMock(), country.pk)
 
+	def test_get_obj_turns_kwarg_pk_in_object(self):
+		that = self
+
+		country = Country.objects.create(name='foo')
+
+		class RequestMock:
+			method = 'GET'
+
+		class Foo(ModelView):
+			model = Country
+
+			@detail_route('foo', methods=['GET'], fetch_obj=True, unauthenticated=True)
+			def foo(self, request, obj):
+				that.assertTrue(isinstance(obj, Country))
+				that.assertEqual(country.pk, obj.pk)
+				return jsondumps({})
+
+		Foo().foo(RequestMock(), pk=country.pk)
+
 	def test_get_obj_raises_binder_not_exists_error(self):
 		class RequestMock:
 			method='GET'

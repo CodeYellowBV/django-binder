@@ -15,15 +15,24 @@ def _route_decorator(is_detail, name=None, methods=None, extra_route='', unauthe
 				raise BinderMethodNotAllowed(methods)
 
 			if fetch_obj:
-				if len(args) == 0:
-					raise Exception('Can not fetch_obj if there is no pk!')
+				if 'pk' in kwargs:
+					pk = kwargs['pk']
+					del kwargs['pk']
 
-				args = list(args)
-				pk = args[0]
-				try:
-					args[0] = self.get_queryset(request).get(pk=pk)
-				except self.model.DoesNotExist:
-					raise BinderNotFound()
+					try:
+						kwargs['obj'] = self.get_queryset(request).get(pk=pk)
+					except self.model.DoesNotExist:
+						raise BinderNotFound()
+				else:
+					if len(args) == 0:
+						raise Exception('Can not fetch_obj if there is no pk!')
+
+					args = list(args)
+					pk = args[0]
+					try:
+						args[0] = self.get_queryset(request).get(pk=pk)
+					except self.model.DoesNotExist:
+						raise BinderNotFound()
 
 			return func(self, request, *args, **kwargs)
 		if is_detail:
