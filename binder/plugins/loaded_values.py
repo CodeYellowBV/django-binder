@@ -1,6 +1,6 @@
 from django.db.models import Model
 from django.db.models.fields.files import FieldFile
-
+from django.core.exceptions import ObjectDoesNotExist
 
 class LoadedValuesMixin:
     __loaded_values = {}
@@ -24,7 +24,11 @@ class LoadedValuesMixin:
             return True
 
         for field in fields:
-            current_value = getattr(self, field)
+            try:
+                current_value = getattr(self, field)
+            except ObjectDoesNotExist:
+                current_value = None
+
             if isinstance(current_value, Model):
                 current_value = current_value.pk
             elif isinstance(current_value, FieldFile):

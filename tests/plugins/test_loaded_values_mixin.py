@@ -1,5 +1,5 @@
 from django.test import TestCase
-from ..testapp.models import Animal, Zoo, Caretaker
+from ..testapp.models import Animal, Zoo, Caretaker, ZooEmployee
 
 class LoadedValuesMixinTest(TestCase):
 	def test_old_values_after_initialization_are_identical_to_current_but_unchanged(self):
@@ -157,3 +157,60 @@ class LoadedValuesMixinTest(TestCase):
 		self.assertFalse(scooby.field_changed('zoo_of_birth'))
 		self.assertFalse(scooby.field_changed('name'))
 		self.assertFalse(scooby.field_changed('name', 'zoo', 'zoo_of_birth'))
+
+
+	def test_non_nullable_field_does_not_error_out_when_accessing(self):
+		zoo_employee = ZooEmployee(name='Henk')
+
+		self.assertEqual({
+			'id': None,
+			'name': 'Henk',
+			'zoo': None,
+			'deleted': False,
+		}, zoo_employee.get_old_values())
+
+		self.assertIsNone(zoo_employee.get_old_value('zoo'))
+
+		self.assertTrue(zoo_employee.field_changed('id'))
+		self.assertTrue(zoo_employee.field_changed('zoo'))
+		self.assertTrue(zoo_employee.field_changed('name'))
+		self.assertTrue(zoo_employee.field_changed('deleted'))
+
+		artis = Zoo(name='Artis')
+		artis.save()
+		zoo_employee.zoo = artis
+
+		zoo_employee.save()
+
+
+		self.assertEqual({
+			'id': zoo_employee.id,
+			'name': 'Henk',
+			'zoo': artis.id,
+			'deleted': False,
+		}, zoo_employee.get_old_values())
+
+		self.assertEqual(artis.id, zoo_employee.get_old_value('zoo'))
+
+		self.assertFalse(zoo_employee.field_changed('id'))
+		self.assertFalse(zoo_employee.field_changed('zoo'))
+		self.assertFalse(zoo_employee.field_changed('name'))
+		self.assertFalse(zoo_employee.field_changed('deleted'))
+
+
+		zoo_employee.zoo = None
+		zoo_employee.clean()
+
+		self.assertEqual({
+			'id': zoo_employee.id,
+			'name': 'Henk',
+			'zoo': artis.id,
+			'deleted': False,
+		}, zoo_employee.get_old_values())
+
+		self.assertEqual(artis.id, zoo_employee.get_old_value('zoo'))
+
+		self.assertFalse(zoo_employee.field_changed('id'))
+		self.assertTrue(zoo_employee.field_changed('zoo'))
+		self.assertFalse(zoo_employee.field_changed('name'))
+		self.assertFalse(zoo_employee.field_changed('deleted'))
