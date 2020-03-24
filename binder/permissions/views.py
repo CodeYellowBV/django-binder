@@ -80,6 +80,11 @@ class PermissionView(ModelView):
 		if perm_type not in ['view', 'add', 'change', 'delete'] and len(scopes) > 0:
 			raise Exception('Scoping for permission {} can not be done. Scoping is only possible for view, add, '
 							'change and delete'.format(perm_type))
+
+		# We asume the all scope is biggest scope out there. If you have this scope, we do not return the other scopes
+		# As to make the query much better
+		if 'all' in scopes:
+			return ['all']
 		return list(set(scopes)) # Remove duplicates to avoid unnecessary OR queries (which can be SLOOOOW)
 
 
