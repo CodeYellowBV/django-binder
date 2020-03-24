@@ -29,6 +29,7 @@ from .models import FieldFilter, BinderModel
 from .json import JsonResponse, jsonloads
 
 
+
 # Haha kill me now
 def multiput_get_id(bla):
 	return bla['id'] if isinstance(bla, dict) else bla
