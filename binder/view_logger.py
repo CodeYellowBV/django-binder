@@ -1,8 +1,11 @@
 import time
 import django
+
+from django.db import transaction
 from django.http.request import RawPostDataException
 
 from binder.views import ellipsize
+from binder.exceptions import BinderException
 
 
 def view_logger(logger, log_request_body=True):
@@ -38,7 +41,11 @@ def view_logger(logger, log_request_body=True):
 
 			logger.debug('body (content-type={}){}'.format(request.META.get('CONTENT_TYPE'), body))
 
-			response = view(request, *args, **kwargs)
+			try:
+				with transaction.atomic():
+					response = view(request, *args, **kwargs)
+			except BinderException as binder_exception:
+				response = binder_exception.response(request)
 
 			logger.info('request response; status={} time={}ms bytes={} queries={}'.format(
 				response.status_code,
