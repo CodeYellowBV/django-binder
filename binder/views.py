@@ -1997,8 +1997,8 @@ class ModelView(View):
 				if isinstance(field, models.fields.files.ImageField):
 					try:
 						img = Image.open(file)
-					except Exception as e:
-						raise BinderImageError(str(e))
+					except Exception:
+						raise BinderImageError('Could not parse the file as an image.')
 
 					format = img.format.lower()
 					if not format in ('png', 'gif', 'jpeg'):
