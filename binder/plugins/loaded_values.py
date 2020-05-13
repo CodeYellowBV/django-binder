@@ -1,3 +1,4 @@
+from binder.models import BinderModel
 from django.db.models import Model
 from django.db.models.fields.files import FieldFile
 from django.core.exceptions import ObjectDoesNotExist
@@ -10,13 +11,15 @@ class LoadedValuesMixin:
         instance = super().from_db(db, field_names, values)
         # This set may be incomplete if we're using .only(...); see
         # also the comment in get_old_value().
-        instance.__loaded_values = instance.binder_concrete_fields_as_dict(skip_deferred_fields=True)
+        if isinstance(instance, BinderModel): # In migrations, this won't work...
+            instance.__loaded_values = instance.binder_concrete_fields_as_dict(skip_deferred_fields=True)
         return instance
 
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__loaded_values = self.binder_concrete_fields_as_dict(skip_deferred_fields=True)
+        if isinstance(self, BinderModel): # In migrations, this won't work...
+            self.__loaded_values = self.binder_concrete_fields_as_dict(skip_deferred_fields=True)
 
 
     def field_changed(self, *fields):
@@ -76,5 +79,6 @@ class LoadedValuesMixin:
 
     def save(self, *args, **kwargs):
         res = super().save(*args, **kwargs)
-        self.__loaded_values = self.binder_concrete_fields_as_dict()
+        if isinstance(self, BinderModel): # In migrations, this won't work...
+            self.__loaded_values = self.binder_concrete_fields_as_dict()
         return res
