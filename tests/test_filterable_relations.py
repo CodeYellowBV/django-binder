@@ -358,7 +358,7 @@ class WithFilterTest(TestCase):
 		res = jsonloads(res.content)
 
 		assert_json(res, {
-			'message': 'Relation of {where=contacts(name:startswith=he)} is missing from withs.',
+			'message': 'Relation of {where=contacts(name:startswith=he)} is missing from withs {withs=[]}.',
 			EXTRA(): None,
 		})
 
