@@ -434,7 +434,7 @@ class ModelView(View):
 			target_rel, query = wh.split('(')
 
 			if target_rel not in withs:
-				raise BinderRequestError('Relation of {{where={}}} is missing from withs.'.format(wh, withs))
+				raise BinderRequestError('Relation of {{where={}}} is missing from withs {{withs={}}}.'.format(wh, withs))
 
 			# Also strip the trailing ) from the query
 			query = query[:-1]

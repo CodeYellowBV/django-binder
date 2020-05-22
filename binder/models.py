@@ -181,7 +181,7 @@ class FloatFieldFilter(FieldFilter):
 		try:
 			return float(v)
 		except ValueError:
-			raise ValidationError('Invalid value {{{}}} for {} {{{}}}.{{{}}}.'.format(v, self.field_description()))
+			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
 
 

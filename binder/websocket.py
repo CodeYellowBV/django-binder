@@ -24,8 +24,8 @@ class RoomController(object):
     def list_rooms_for_user(self, user):
         rooms = []
 
-        for l in self.room_listings:
-            rooms += l(user)
+        for listing in self.room_listings:
+            rooms += listing(user)
 
         return rooms
 
