@@ -138,8 +138,15 @@ class ModelView(View):
 	#  - reverse relations  (FIXME ehh is this still true?)
 	#  - file fields (as specified in file_fields)
 	#
-	# NOTE: custom _store__foo() methods will still be called for unwritable fieds.
+	# NOTE: custom _store__foo() methods will still be called for unwritable fields.
 	unwritable_fields = []
+
+	# Fields that can be written on creation of new records (POST) but won't be
+	# written by default on updates of existing records (PUT/POST).
+	# Writing them for updates is not an error; their values are silently ignored.
+	#
+	# NOTE: custom _store__foo() methods will still be called for unupdatable fields.
+	unupdatable_fields = []
 
 	# Fields to use for ?search=foo. Empty tuple for disabled search.
 	# NOTE: only string fields and 'id' are supported.
@@ -1297,6 +1304,9 @@ class ModelView(View):
 	def _store_field(self, obj, field, value, request, pk=None):
 		# Unwritable fields
 		if field in self.unwritable_fields + ['id', 'pk', 'deleted', '_meta'] + self.file_fields:
+			raise BinderReadOnlyFieldError(self.model.__name__, field)
+
+		if obj.id is not None and field in self.unupdatable_fields:
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
 
 		# Regular fields and FKs

@@ -4,6 +4,7 @@ from binder.models import BinderModel
 
 class Caretaker(BinderModel):
 	name = models.TextField()
+	first_seen = models.DateTimeField(null=True, blank=True)
 	last_seen = models.DateTimeField(null=True, blank=True)
 
 	# We have the ssn for each caretaker. We have to make sure that nobody can access this ssn in anyway, since

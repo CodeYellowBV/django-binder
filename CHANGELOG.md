@@ -13,6 +13,11 @@ Using `Q()` objects instead of querysets allows making queries in
 `with_ids` without requiring a subquery on filtered relations, which
 can be a big performance win on large tables.
 
+### Features
+- Added a new `unupdatable_fields` property to views which lists
+  fields which can be written on creation of an object only and are
+  ignored on updates.
+
 ## Version 1.4.0
 
 ### Features
