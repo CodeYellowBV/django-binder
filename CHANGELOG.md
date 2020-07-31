@@ -16,7 +16,7 @@ can be a big performance win on large tables.
 ### Features
 - Added a new `unupdatable_fields` property to views which lists
   fields which can be written on creation of an object only and are
-  ignored on updates.
+  ignored on updates (#135).
 
 ## Version 1.4.0
 
