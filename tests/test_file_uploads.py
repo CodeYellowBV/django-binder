@@ -157,7 +157,6 @@ class FileUploadTest(TestCase):
 
 		with temp_imagefile(600, 600, 'png') as uploaded_file:
 			response = self.client.post('/zoo/%s/floor_plan/' % emmen.id, data={'file': uploaded_file})
-		print(response.content.decode())
 		self.assertEqual(response.status_code, 200)
 
 		emmen.refresh_from_db()

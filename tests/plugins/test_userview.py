@@ -99,7 +99,6 @@ class UserFilterParseTest(TestCase):
 														   is_superuser=False)
 		self.user3 = User.objects.create_user(username='test', password='bar', is_active=True, is_superuser=False)
 		group = Group.objects.get()
-		print(group.permissions.get().codename)
 		# add users 2 and 3 to the group, giving them the high level testapp.view_country permission
 		self.user2.groups.add(group)
 		self.user3.groups.add(group)
@@ -142,10 +141,8 @@ class UserFilterParseTest(TestCase):
 		# this should result in both the superuser and the two users that belong to this permission group, the third
 		# that does not should not be returned
 		result = self.client.get('/user/?.has_permission=testapp.view_country')
-		print(self.user2.groups.get().permissions)
 		self.assertEqual(200, result.status_code)
 		result_json = json.loads(result.content.decode('utf-8'))
-		print(result_json)
 		# bar is the first user that belongs to the group that has this permission
 		self.assertEqual(self.super_user.username, result_json['data'][0]['username'])
 
@@ -165,7 +162,6 @@ class UserFilterParseTest(TestCase):
 		result = self.client.get('/user/?.has_permission=testapp.view_country&.username:icontains=tes')
 		self.assertEqual(200, result.status_code)
 		result_json = json.loads(result.content.decode('utf-8'))
-		print(result_json)
 		# there is also a user teszts which would appear if we did not filter on permission group (test is member of group)
 		# teszts is not, so that is why this test makes sense
 		self.assertEqual(self.user3.username, result_json['data'][0]['username'])

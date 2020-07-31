@@ -24,8 +24,6 @@ if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
 
 		def test_time_filter_exact_match(self):
 			response = self.client.get('/zoo/', data={'.opening_time': '09:00:00Z'})
-
-			print(response.content)
 			self.assertEqual(response.status_code, 200)
 
 			result = jsonloads(response.content)
