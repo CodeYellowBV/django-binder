@@ -1215,6 +1215,8 @@ class ModelView(View):
 
 
 
+	# NOTE: This is misnamed because it also stores the reverse side
+	# of OneToOne fields.
 	def _store_m2m_field(self, obj, field, value, request):
 		validation_errors = []
 
@@ -1266,14 +1268,26 @@ class ModelView(View):
 				else:
 					addobj.save()
 		elif getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor:
-			remote_obj = obj._meta.get_field(field).related_model.objects.get(pk=value[0])
-			setattr(obj, field, remote_obj)
-			try:
-				self.binder_clean(remote_obj)
-			except BinderValidationError as bve:
-				validation_errors.append(bve)
+			#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
+			if any(v for v in value if v is not None and v < 0):
+				return
+
+			field_descriptor = getattr(obj._meta.model, field)
+			if value[0] is None:
+				try:
+					getattr(obj, field).delete()
+				except ObjectDoesNotExist:
+					pass
 			else:
-				remote_obj.save()
+				remote_obj = field_descriptor.related.remote_field.model.objects.get(pk=value[0])
+				setattr(remote_obj, field_descriptor.related.remote_field.name, obj)
+				try:
+					self.binder_clean(remote_obj)
+				except BinderValidationError as bve:
+					validation_errors.append(bve)
+				else:
+					remote_obj.save()
+					remote_obj.refresh_from_db()
 		elif any(f.name == field for f in self._get_reverse_relations()):
 			#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
 			if any(v for v in value if v < 0):
@@ -1393,14 +1407,16 @@ class ModelView(View):
 					setattr(obj, f.attname, value)
 				return False
 
-		# m2ms
+		# m2ms/reverse relations
 		for f in list(self.model._meta.many_to_many) + list(self._get_reverse_relations()):
 			if f.name == field:
+				# Force it to be seen as a deferred field
 				if isinstance(obj._meta.get_field(field), models.OneToOneRel):
-					check_values = [value]
-				else:
-					check_values = value
-				if not (isinstance(check_values, list) and all(isinstance(v, int) for v in check_values)):
+					if value is not None and not isinstance(value, int):
+						raise BinderFieldTypeError(self.model.__name__, field)
+
+					value = [value]
+				elif not (isinstance(value, list) and all(isinstance(v, int) for v in value)):
 					raise BinderFieldTypeError(self.model.__name__, field)
 				# FIXME
 				# Check if the ids being saved as m2m actually exist. This kinda sucks, it would be much
@@ -1409,7 +1425,7 @@ class ModelView(View):
 				# So yeah, we kludge around here. :(
 				#ids = set(value)
 				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
-				ids = set(v for v in check_values if v > 0)
+				ids = set(v for v in value if v is not None and v > 0)
 				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
 				if ids:
 					field_name = obj._meta.get_field(field).remote_field.model.__name__
