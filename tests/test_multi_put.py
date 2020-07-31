@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
-from .testapp.models import Animal, Zoo, ZooEmployee, ContactPerson
+from .testapp.models import Animal, Zoo, ZooEmployee, ContactPerson, Nickname, NullableNickname
 from .compare import assert_json, MAYBE, ANY
 
 
@@ -74,6 +74,70 @@ class MultiPutTest(TestCase):
 		self.assertEqual(scooby.name, 'Scooby Doo')
 		scrappy = Animal.objects.get(pk=idmap[-1])
 		self.assertEqual(scrappy.name, 'Scrappy Doo')
+
+
+	def test_put_moving_existing_item_between_two_models_using_back_ref(self):
+		animal_monkey = Animal(name='Monkey')
+		animal_monkey.save()
+
+		animal_lion = Animal(name='Lion')
+		animal_lion.save()
+
+		nickname = Nickname(nickname='Simba', animal=animal_lion)
+		nickname.save()
+
+		# Monkey steals nickname.
+		nickname_data = {
+			'data': [{
+				'id': nickname.id,
+			}],
+			'with': {
+				'animal': [
+					{ 'id': animal_lion.id, 'nickname': None },
+					{ 'id': animal_monkey.id, 'nickname': nickname.id },
+				]
+			}
+		}
+		response = self.client.put('/nickname/', data=json.dumps(nickname_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		nickname.refresh_from_db()
+		self.assertEqual(nickname.animal.id, animal_monkey.id)
+
+		animal_monkey.refresh_from_db()
+		self.assertEqual(animal_monkey.nickname, nickname)
+
+
+
+	def test_put_moving_existing_item_between_two_models(self):
+		animal_lion = Animal(name='Lion')
+		animal_lion.save()
+
+		animal_warthog = Animal(name='Warthog')
+		animal_warthog.save()
+
+		nickname_simba = NullableNickname(nickname='Simba', animal=animal_warthog)
+		nickname_simba.save()
+
+		nickname_pumba = NullableNickname(nickname='Pumba', animal=None)
+		nickname_pumba.save()
+
+		animal_data = {
+			'data': [{
+				'id': animal_lion.id,
+			}],
+			'with': {
+				'nullable_nickname': [
+					{ 'id': nickname_simba.id, 'animal': None },
+					{ 'id': nickname_pumba.id, 'animal': animal_lion.id },
+				]
+			}
+		}
+		response = self.client.put('/animal/', data=json.dumps(animal_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		animal_lion.refresh_from_db()
+		self.assertEqual(animal_lion.optional_nickname.id, nickname_pumba.id)
 
 
 	def test_put_relations_from_referencing_side(self):
