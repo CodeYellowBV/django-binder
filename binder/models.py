@@ -304,7 +304,7 @@ class BooleanFieldFilter(FieldFilter):
 
 class TextFieldFilter(FieldFilter):
 	fields = [models.CharField, models.TextField]
-	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact']
+	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'isnull']
 
 	# Always valid(?)
 	def clean_value(self, qualifier, v):

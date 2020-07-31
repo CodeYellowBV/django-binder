@@ -14,6 +14,7 @@ Using `Q()` objects instead of querysets allows making queries in
 can be a big performance win on large tables.
 
 ### Features
+- TextFields can now be filtered with the `isnull` qualifier (#134).
 - Added a new `unupdatable_fields` property to views which lists
   fields which can be written on creation of an object only and are
   ignored on updates (#135).

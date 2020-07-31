@@ -223,6 +223,69 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual('Woody Woodpecker', result['data'][1]['name'])
 
 
+	# This wasn't possible before on textfields, see #134
+	def test_get_collection_filtering_on_nullable_fields(self):
+		scrooge = Animal(name='Scrooge McDuck')
+		scrooge.full_clean()
+		scrooge.save()
+
+		frock = Costume(description="Gentleman's frock coat", animal=scrooge)
+		frock.full_clean()
+		frock.save()
+
+		donald = Animal(name='Donald Duck')
+		donald.full_clean()
+		donald.save()
+
+		sailor = Costume(description=None, animal=donald)
+		sailor.full_clean()
+		sailor.save()
+
+		# This animal goes naked
+		pluto = Animal(name='Pluto')
+		pluto.full_clean()
+		pluto.save()
+
+		response = self.client.get('/costume/', data={'.description:isnull': ''})
+
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+		# This is a bit weird; the object has no id field but Binder responds with one
+		self.assertEqual(donald.id, result['data'][0]['id'])
+
+
+		# The inverse
+		response = self.client.get('/costume/', data={'.description:not:isnull': '', 'order_by': 'description'})
+
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+		self.assertEqual("Gentleman's frock coat", result['data'][0]['description'])
+
+
+		# Filtering on a missing relation
+		response = self.client.get('/animal/', data={'.costume:isnull': ''})
+
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+		self.assertEqual('Pluto', result['data'][0]['name'])
+
+
+		# The inverse
+		response = self.client.get('/animal/', data={'.costume:not:isnull': '', 'order_by': 'name'})
+
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
+		self.assertEqual('Donald Duck', result['data'][0]['name'])
+		self.assertEqual('Scrooge McDuck', result['data'][1]['name'])
+
 
 	def test_get_collection_with_foreignkey(self):
 		gaia = Zoo(name='GaiaZOO')
