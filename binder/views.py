@@ -1306,7 +1306,7 @@ class ModelView(View):
 		if field in self.unwritable_fields + ['id', 'pk', 'deleted', '_meta'] + self.file_fields:
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
 
-		if obj.id is not None and field in self.unupdatable_fields:
+		if obj.pk is not None and field in self.unupdatable_fields:
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
 
 		# Regular fields and FKs
