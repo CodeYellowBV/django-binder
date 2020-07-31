@@ -148,7 +148,7 @@ class HistoryTest(TestCase):
 
 		# Aww yeah
 		self.assertEqual(1, Changeset.objects.count())
-		self.assertEqual(4, Change.objects.count())
+		self.assertEqual(5, Change.objects.count())
 
 
 
@@ -189,7 +189,7 @@ class HistoryTest(TestCase):
 
 		# Aww yeah
 		self.assertEqual(1, Changeset.objects.count())
-		self.assertEqual(4, Change.objects.count())
+		self.assertEqual(5, Change.objects.count())
 
 
 
