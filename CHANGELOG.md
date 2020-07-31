@@ -17,6 +17,8 @@ can be a big performance win on large tables.
 - Added a new `unupdatable_fields` property to views which lists
   fields which can be written on creation of an object only and are
   ignored on updates (#135).
+- It is now possible to POST or PUT an id for the "remote" end of a
+  OneToOneField (#117).
 
 ## Version 1.4.0
 
