@@ -198,6 +198,10 @@ class ModelView(View):
 	#  }
 	virtual_relations = {}
 
+	@property
+	def AggStrategy(self):
+		return GroupConcat if connections[self.model.objects.db].vendor == 'mysql' else OrderableArrayAgg
+
 
 	@property
 	def annotations(self):
@@ -638,7 +642,7 @@ class ModelView(View):
 		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(list))
 		virtual_fields = set()
 
-		Agg = GroupConcat if connections[self.model.objects.db].vendor == 'mysql' else OrderableArrayAgg
+		Agg = self.AggStrategy
 
 		for field in with_map:
 			vr = self.virtual_relations.get(field, None)
