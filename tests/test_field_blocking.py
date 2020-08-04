@@ -32,7 +32,7 @@ class TestFieldBlocking(TestCase):
 		self.assertIsNone(caretaker.last_seen)
 		self.assertEqual('Fabby', caretaker.name)
 
-		res = self.client.put(f'/caretaker/{caretaker.id}/', data=jsondumps({'name': 'Mr Fabby', 'last_seen': '2020-01-01T00:00:00Z'}), content_type='application/json')
+		res = self.client.put('/caretaker/%s/' % caretaker.id, data=jsondumps({'name': 'Mr Fabby', 'last_seen': '2020-01-01T00:00:00Z'}), content_type='application/json')
 		self.assertEqual(res.status_code, 200)
 
 		data = jsonloads(res.content)
@@ -48,7 +48,7 @@ class TestFieldBlocking(TestCase):
 		caretaker.last_seen = dt
 		caretaker.save()
 
-		res = self.client.put(f'/caretaker/{caretaker.id}/', data=jsondumps({'name': 'Mrs Fabby', 'last_seen': '2020-01-01T00:00:00Z'}), content_type='application/json')
+		res = self.client.put('/caretaker/%s/' % caretaker.id, data=jsondumps({'name': 'Mrs Fabby', 'last_seen': '2020-01-01T00:00:00Z'}), content_type='application/json')
 		self.assertEqual(res.status_code, 200)
 
 		data = jsonloads(res.content)
@@ -61,7 +61,7 @@ class TestFieldBlocking(TestCase):
 
 
 		# A put without the field means it's not in ignored_fields
-		res = self.client.put(f'/caretaker/{caretaker.id}/', data=jsondumps({'name': 'just Fabby'}), content_type='application/json')
+		res = self.client.put('/caretaker/%s/' % caretaker.id, data=jsondumps({'name': 'just Fabby'}), content_type='application/json')
 		self.assertEqual(res.status_code, 200)
 
 		data = jsonloads(res.content)
@@ -86,7 +86,7 @@ class TestFieldBlocking(TestCase):
 		self.assertEqual(dt, caretaker.first_seen)
 		self.assertEqual('Fabby', caretaker.name)
 
-		res = self.client.put(f'/caretaker/{caretaker.id}/', data=jsondumps({'name': 'Mr Fabby', 'first_seen': '2020-02-01T00:00:00Z'}), content_type='application/json')
+		res = self.client.put('/caretaker/%s/' % caretaker.id, data=jsondumps({'name': 'Mr Fabby', 'first_seen': '2020-02-01T00:00:00Z'}), content_type='application/json')
 		self.assertEqual(res.status_code, 200)
 
 		data = jsonloads(res.content)
@@ -99,7 +99,7 @@ class TestFieldBlocking(TestCase):
 
 
 		# A put without the field means it's not in ignored_fields
-		res = self.client.put(f'/caretaker/{caretaker.id}/', data=jsondumps({'name': 'Mrs Fabby'}), content_type='application/json')
+		res = self.client.put('/caretaker/%s/' % caretaker.id, data=jsondumps({'name': 'Mrs Fabby'}), content_type='application/json')
 		self.assertEqual(res.status_code, 200)
 
 		data = jsonloads(res.content)
