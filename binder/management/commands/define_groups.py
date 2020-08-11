@@ -24,7 +24,7 @@ class Command(BaseCommand):
                 group_name = groups_to_expand.pop()
                 if group_name not in groups:
                     groups.add(group_name)
-                    groups_to_expand.extend(settings.GROUP_CONTAINS[group_name])
+                    groups_to_expand.extend(settings.GROUP_CONTAINS.get('group_name', []))
 
             # Collect all permissions for these groups
             perms = set()
