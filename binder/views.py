@@ -1083,7 +1083,31 @@ class ModelView(View):
 
 		response_data = {'data': data, 'with': extras, 'with_mapping': extras_mapping, 'with_related_name_mapping': extras_reverse_mapping, 'meta': meta, 'debug': debug}
 
+		self._sanity_check_meta_results(request, response_data)
+
 		return JsonResponse(response_data)
+
+
+	# Hack to auto-detect and inform people when they are accidentally
+	# misusing Q() objects which produce multiple records due to
+	# joining in the permission view.  This could be fixed by always
+	# adding a distinct() call like Binder did originally, but that
+	# is hell from a performance standpoint.  The point of Q object
+	# support was to improve performance, so I think it is better to
+	# simply detect the situation and let people fix their scopes by
+	# returning querysets in such situations, instead.
+	def _sanity_check_meta_results(self, request, response_data):
+		meta = response_data['meta']
+		data = response_data['data']
+
+		try:
+			limit = int(request.GET.get('limit', 0))
+		except ValueError:
+			limit = self.limit_default
+		offset = int(request.GET.get('offset') or 0)
+
+		if 'total_records' in meta and meta['total_records'] > len(data) and len(data) < limit and (offset + limit) < meta['total_records']:
+			logger.error('Detected anomalous total record count versus data response length.  Please check if there are any scopes returning Q() objects which follow one-to-many links!')
 
 
 

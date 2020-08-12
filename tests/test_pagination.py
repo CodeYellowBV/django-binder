@@ -1,3 +1,4 @@
+import logging
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
@@ -40,6 +41,11 @@ class TestPagination(TestCase):
 		self.client = Client()
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
+
+		u = User(username='testuser2', is_active=True, is_superuser=False)
+		u.set_password('test')
+		u.save()
+
 
 		self.gaia = Zoo(name='GaiaZOO') # 3
 		self.gaia.save()
@@ -347,3 +353,90 @@ class TestPagination(TestCase):
 		self.assertEqual(1, data['meta']['total_records'])
 		self.assertEqual(1, len(data['data']))
 		self.assertEqual(self.caretaker1.id, data['data'][0]['id'])
+
+
+	# This is a bit of a hack to ensure that people aren't using Q()
+	# objects in scopes where they are unsuitable, causing performance
+	# issues and other vague problems as well (e.g., T27089).
+	# Same happens in searches, by the way (e.g., #111, T21246).
+	def test_pagination_logs_error_when_less_than_full_page_results_with_zero_offset_due_to_bad_scoping(self):
+		r = self.client.login(username='testuser2', password='test')
+		self.assertTrue(r)
+
+		with self.assertLogs(level=logging.ERROR):
+			response = self.client.get('/zoo/', data={'limit': 2, 'offset': 0, 'order_by': 'name'})
+
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+
+		# This is all wrong, which is why we need the error.  It would
+		# be better if we could avoid this situation altogether!
+		# It *is* possible to add a distinct() call, but that will
+		# again kill performance, while the entire purpose of the Q()
+		# filter support was to make performance reasonable again.
+		#
+		# NOTE: Somehow, if the model has annotations, this situation
+		# does not occur (depending on the type of annotation?!).
+		# Very odd, and it seems to imply Django maybe considers this
+		# situation a bug?
+		self.assertEqual(5, data['meta']['total_records'])
+		self.assertEqual(1, len(data['data']))
+		self.assertEqual(self.artis.id, data['data'][0]['id'])
+
+		# Interestingly enough, we can't detect it on page 2 because the
+		# first zoo has 2 animals, so on page 2 we get both the first
+		# zoo (Artis) and the second zoo (Gaia)
+
+		# Too bad there is no "assertDoesNotLog" in Python core.  We
+		# hack around this deficiency here.
+		#with self.assertDoesNotLog(level=logging.ERROR):
+		with self.assertRaises(AssertionError):
+			with self.assertLogs(level=logging.ERROR):
+				response = self.client.get('/zoo/', data={'limit': 2, 'offset': 1, 'order_by': 'name'})
+
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+
+		# This is still quite wrong, though.
+		self.assertEqual(5, data['meta']['total_records'])
+		self.assertEqual(2, len(data['data']))
+		self.assertEqual(self.artis.id, data['data'][0]['id'])
+		self.assertEqual(self.gaia.id, data['data'][1]['id'])
+
+
+		# This one does trigger an error because we get one zoo, even
+		# though there are still two zoos left according to the counter.
+		with self.assertLogs(level=logging.ERROR):
+			response = self.client.get('/zoo/', data={'limit': 2, 'offset': 2, 'order_by': 'name'})
+
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+
+		# This is still quite wrong, though.
+		self.assertEqual(5, data['meta']['total_records'])
+		self.assertEqual(1, len(data['data']))
+		self.assertEqual(self.gaia.id, data['data'][0]['id'])
+
+		with self.assertRaises(AssertionError):
+			with self.assertLogs(level=logging.ERROR):
+				response = self.client.get('/zoo/', data={'limit': 2, 'offset': 3, 'order_by': 'name'})
+
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+
+		self.assertEqual(5, data['meta']['total_records'])
+		self.assertEqual(2, len(data['data']))
+		self.assertEqual(self.gaia.id, data['data'][0]['id'])
+		self.assertEqual(self.wildlands.id, data['data'][1]['id'])
+
+		# Having less results on the last page is not an error
+		with self.assertRaises(AssertionError):
+			with self.assertLogs(level=logging.ERROR):
+				response = self.client.get('/zoo/', data={'limit': 2, 'offset': 4, 'order_by': 'name'})
+
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+
+		self.assertEqual(5, data['meta']['total_records'])
+		self.assertEqual(1, len(data['data']))
+		self.assertEqual(self.wildlands.id, data['data'][0]['id'])

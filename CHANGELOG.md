@@ -20,6 +20,11 @@ can be a big performance win on large tables.
   ignored on updates (#135).
 - It is now possible to POST or PUT an id for the "remote" end of a
   OneToOneField (#117).
+- An error will be logged when `Q()` objects are used in scopes when
+  this is unsuitable (i.e., in a one to many relationship) as this
+  will result in multiple objects being returned due to missing
+  `distinct()` call.  The distinct call is not added because this
+  would decrease performance.
 
 ## Version 1.4.0
 

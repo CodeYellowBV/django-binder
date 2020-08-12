@@ -1,7 +1,8 @@
 from binder.permissions.views import PermissionView
 from binder.exceptions import BinderForbidden
+from django.db.models import Q
 
-from ..models import Zoo
+from ..models import Zoo, Animal
 
 # From the api docs
 class ZooView(PermissionView):
@@ -21,8 +22,10 @@ class ZooView(PermissionView):
 		request._has_permission_check = True
 		if request.user.is_superuser:
 			return ['all']
-		elif perm_type == 'view' and request.user.username in ('testuser', 'testuser2'):
+		elif perm_type == 'view' and request.user.username == 'testuser':
 			return ['all']
+		elif perm_type == 'view' and request.user.username == 'testuser2':
+			return ['bad_q_filter']
 		else:
 			model = self.perms_via if hasattr(self, 'perms_via') else self.model
 			perm = '{}.{}_{}'.format(model._meta.app_label, perm_type, model.__name__.lower())
@@ -34,3 +37,9 @@ class ZooView(PermissionView):
 				'zoo': 'all',
 			},
 		]
+
+
+	def _scope_view_bad_q_filter(self, request):
+		return Q(animals__id__in=Animal.objects.all())
+		# Correct version of filter:
+		# return Zoo.objects.filter(animals__id__in=Animal.objects.all())
