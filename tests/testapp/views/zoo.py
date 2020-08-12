@@ -22,9 +22,9 @@ class ZooView(PermissionView):
 		request._has_permission_check = True
 		if request.user.is_superuser:
 			return ['all']
-		elif perm_type == 'view' and request.user.username == 'testuser':
+		elif perm_type == 'view' and request.user.username in ('testuser', 'testuser2'):
 			return ['all']
-		elif perm_type == 'view' and request.user.username == 'testuser2':
+		elif perm_type == 'view' and request.user.username == 'testuser_for_bad_q_filter':
 			return ['bad_q_filter']
 		else:
 			model = self.perms_via if hasattr(self, 'perms_via') else self.model

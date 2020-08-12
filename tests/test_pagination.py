@@ -42,11 +42,6 @@ class TestPagination(TestCase):
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
 
-		u = User(username='testuser2', is_active=True, is_superuser=False)
-		u.set_password('test')
-		u.save()
-
-
 		self.gaia = Zoo(name='GaiaZOO') # 3
 		self.gaia.save()
 
@@ -360,7 +355,11 @@ class TestPagination(TestCase):
 	# issues and other vague problems as well (e.g., T27089).
 	# Same happens in searches, by the way (e.g., #111, T21246).
 	def test_pagination_logs_error_when_less_than_full_page_results_with_zero_offset_due_to_bad_scoping(self):
-		r = self.client.login(username='testuser2', password='test')
+		u = User(username='testuser_for_bad_q_filter', is_active=True, is_superuser=False)
+		u.set_password('test')
+		u.save()
+
+		r = self.client.login(username='testuser_for_bad_q_filter', password='test')
 		self.assertTrue(r)
 
 		with self.assertLogs(level=logging.ERROR):
