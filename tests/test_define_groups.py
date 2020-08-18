@@ -51,9 +51,6 @@ class TestDefineGroups(TestCase):
 		],
 	)
 	def test_basic_groups(self):
-		for ct in ContentType.objects.all():
-			print('CONTENT TYPE', ct.app_label, ct.model)
-
 		PERMS = {
 			'caretaker': [
 				'testapp.view_animal',
