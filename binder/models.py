@@ -1,12 +1,16 @@
 import re
 import warnings
+import hashlib
+import mimetypes
 from datetime import date, datetime, time
 from contextlib import suppress
 
 from django.db import models
 from django.db.models.fields.reverse_related import ForeignObjectRel
+from django.db.models.fields.files import FieldFile, FileDescriptor, FileField
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
 from django.db.models import signals, F
+from django.core.files.base import File
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
 from django.db.models.expressions import BaseExpression
@@ -530,3 +534,185 @@ def install_history_signal_handlers(model):
 
 	for sub in model.__subclasses__():
 		install_history_signal_handlers(sub)
+
+
+def serialize_tuple(values):
+	return ','.join(re.sub(r'([,\\])', r'\\\1', value) for value in values)
+
+
+def parse_tuple(content):
+	values = []
+
+	chars = iter(content)
+	value = ''
+	for char in content:
+		if char == ',':
+			values.append(value)
+			value = ''
+			continue
+		if char == '\\':
+			char = next(chars)
+		value += char
+	values.append(value)
+
+	return values
+
+
+class BinderFieldFile(FieldFile):
+	"""
+	An extended FieldFile that also stores the content hash and content type
+	"""
+
+	def __init__(self, instance, field, name, content_hash, content_type):
+		super().__init__(instance, field, name)
+		self._content_hash = content_hash
+		self._content_type = content_type
+
+	@property
+	def content_hash(self):
+		if self.name is None:
+			self._content_hash = None
+		elif self._content_hash is None:
+			hasher = hashlib.sha1()
+			with self.open('rb') as fh:
+				while True:
+					chunk = fh.read(4096)
+					if not chunk:
+						break
+					hasher.update(chunk)
+			self._content_hash = hasher.hexdigest()
+		return self._content_hash
+
+	@property
+	def content_type(self):
+		if self.name is None:
+			self._content_type is None
+		elif self._content_type is None:
+			self._content_type, _ = mimetypes.guess_type(self.path)
+		return self._content_type
+
+	# So here we have a bunch of methods that might alter the data or name of
+	# the associated file, in this case we just set the content type and hash
+	# to None so that they will get calculated when accessed
+	def open(self, mode='rb'):
+		# These chars allow for modification on the file, in this case we
+		# assume the content hash is not valid anymore
+		if any(char in mode for char in 'wxa+'):
+			self._content_hash = None
+		return super().open(mode)
+
+	def save(self, *args, **kwargs):
+		# So in this case both the name and the content can change so we
+		# reset everything
+		self._content_hash = None
+		self._content_type = None
+		return super().save(*args, **kwargs)
+
+
+class BinderFileDescriptor:
+	# This class is largely copy pasted from django since it is sadly not very
+	# extensible
+
+	def __init__(self, field):
+		self.field = field
+
+	def __get__(self, instance, cls=None):
+		if instance is None:
+			return self
+
+		# This is slightly complicated, so worth an explanation.
+		# instance.file`needs to ultimately return some instance of `File`,
+		# probably a subclass. Additionally, this returned object needs to have
+		# the FieldFile API so that users can easily do things like
+		# instance.file.path and have that delegated to the file storage engine.
+		# Easy enough if we're strict about assignment in __set__, but if you
+		# peek below you can see that we're not. So depending on the current
+		# value of the field we have to dynamically construct some sort of
+		# "thing" to return.
+
+		# The instance dict contains whatever was originally assigned
+		# in __set__.
+		if self.field.name in instance.__dict__:
+			file = instance.__dict__[self.field.name]
+		else:
+			instance.refresh_from_db(fields=[self.field.name])
+			file = getattr(instance, self.field.name)
+
+		# If this value is a string (instance.file = "path/to/file") or None
+		# then we simply wrap it with the appropriate attribute class according
+		# to the file field. [This is FieldFile for FileFields and
+		# ImageFieldFile for ImageFields; it's also conceivable that user
+		# subclasses might also want to subclass the attribute class]. This
+		# object understands how to convert a path to a file, and also how to
+		# handle None.
+		if isinstance(file, str) or file is None:
+			if file is not None:
+				file, content_hash, content_type = parse_tuple(file)
+			else:
+				content_hash = None
+				content_type = None
+			attr = self.field.attr_class(
+				instance, self.field, file, content_hash, content_type,
+			)
+			instance.__dict__[self.field.attname] = attr
+
+		# Other types of files may be assigned as well, but they need to have
+		# the FieldFile interface added to them. Thus, we wrap any other type of
+		# File inside a FieldFile (well, the field's attr_class, which is
+		# usually FieldFile).
+		elif isinstance(file, File) and not isinstance(file, BinderFieldFile):
+			# If we do not provide a content type/hash it will be calculated
+			file_copy = self.field.attr_class(
+				instance, self.field, file.name, None, None,
+			)
+			file_copy.file = file
+			file_copy._committed = False
+			instance.__dict__[self.field.attname] = file_copy
+
+		# Finally, because of the (some would say boneheaded) way pickle works,
+		# the underlying FieldFile might not actually itself have an associated
+		# file. So we need to reset the details of the FieldFile in those cases.
+		elif isinstance(file, BinderFieldFile) and not hasattr(file, 'field'):
+			file.instance = instance
+			file.field = self.field
+			file.storage = self.field.storage
+
+		# Make sure that the instance is correct.
+		elif isinstance(file, BinderFieldFile) and instance is not file.instance:
+			file.instance = instance
+
+		# That was fun, wasn't it?
+		return instance.__dict__[self.field.attname]
+
+	def __set__(self, instance, value):
+		instance.__dict__[self.field.name] = value
+
+
+class BinderFileField(FileField):
+
+	attr_class = BinderFieldFile
+	descriptor_class = BinderFileDescriptor
+
+	def __init__(self, *args, **kwargs):
+		# Since we also need to store a content type and a hash in the field
+		# we up the default max_length from 100 to 200
+		kwargs.setdefault('max_length', 200)
+		return super().__init__(*args, **kwargs)
+
+	def get_prep_value(self, value):
+		if value is None:
+			return None
+
+		return serialize_tuple((
+			value.name,
+			value.content_hash,
+			value.content_type,
+		))
+
+	def deconstruct(self):
+		name, path, args, kwargs = super().deconstruct()
+		# Standard file field omits max length when it is 100 so we readd that
+		# as the default and then omit if it is 200, which is our default
+		if kwargs.setdefault('max_length', 100) == 200:
+			del kwargs['max_length']
+		return name, path, args, kwargs

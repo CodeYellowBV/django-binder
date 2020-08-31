@@ -25,7 +25,7 @@ from django.db import transaction
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat
-from .models import FieldFilter, BinderModel
+from .models import FieldFilter, BinderModel, BinderFileField
 from .json import JsonResponse, jsonloads
 
 
@@ -366,6 +366,11 @@ class ModelView(View):
 					if file:
 						# {router-view-instance}
 						data[f.name] = self.router.model_route(self.model, obj.id, f)
+						if isinstance(f, BinderFileField):
+							data[f.name] += (
+								f'?h={file.content_hash}'
+								f'&content_type={file.content_type}'
+							)
 					else:
 						data[f.name] = None
 				else:
