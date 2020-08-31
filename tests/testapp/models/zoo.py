@@ -3,7 +3,7 @@ import datetime
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.signals import post_delete
-from binder.models import BinderModel, BinderFileField
+from binder.models import BinderModel, BinderImageField
 
 def delete_files(sender, instance=None, **kwargs):
 	for field in sender._meta.fields:
@@ -23,7 +23,7 @@ class Zoo(BinderModel):
 	contacts = models.ManyToManyField('ContactPerson', blank=True, related_name='zoos')
 	most_popular_animals = models.ManyToManyField('Animal', blank=True, related_name='+')
 	opening_time = models.TimeField(default=datetime.time(9, 0, 0))
-	picture = BinderFileField(blank=True, null=True)
+	picture = BinderImageField(blank=True, null=True)
 
 	def __str__(self):
 		return 'zoo %d: %s' % (self.pk, self.name)
