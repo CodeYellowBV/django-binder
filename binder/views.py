@@ -1736,14 +1736,35 @@ class ModelView(View):
 	def _multi_put_save_objects(self, ordered_objects, objects, request):
 		new_id_map = {}
 		validation_errors = []
+
+		# Gather non-negative oids per model (unordered)
+		model_oids = defaultdict(set)
+		for model, oid in ordered_objects:
+			if oid >= 0:
+				model_oids[model].add(oid)
+
+		# Do one big query to get and lock all the objects of each
+		# type.  This saves us from querying each individual object in
+		# the loop below (with one DB round trip per item).
+		locked_objects = {}
+		for model, oids in model_oids.items():
+			# NOTE: Shouldn't we call get_queryset on the
+			# corresponding view here?  That would make it
+			# more consistent with non-multi-PUT and POST,
+			# also requiring view permissions.
+			qs = model.objects.filter(pk__in=oids).select_for_update()
+			for obj in qs:
+				locked_objects[(model, obj.pk)] = obj
+
+
 		for model, oid in ordered_objects:
 			values = objects[(model, oid)]
 			logger.info('Saving {} {}'.format(model.__name__, oid))
 
 			if oid >= 0:
 				try:
-					obj = model.objects.select_for_update().get(pk=oid)
-				except ObjectDoesNotExist:
+					obj = locked_objects[(model, oid)]
+				except KeyError:
 					raise BinderNotFound('{}[{}]'.format(model.__name__, oid))
 				if hasattr(obj, 'deleted') and obj.deleted:
 					raise BinderIsDeleted()
