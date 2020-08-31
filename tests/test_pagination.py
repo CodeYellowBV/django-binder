@@ -46,15 +46,12 @@ class TestPagination(TestCase):
 		self.gaia.save()
 
 		self.wildlands = Zoo(name='Wildlands Adventure Zoo Emmen') # 4
-		self.wildlands.full_clean()
 		self.wildlands.save()
 
 		self.artis = Zoo(name='Artis') # 1
-		self.artis.full_clean()
 		self.artis.save()
 
 		self.harderwijk = Zoo(name='Dolfinarium Harderwijk') # 2
-		self.harderwijk.full_clean()
 		self.harderwijk.save()
 
 		self.donald = Animal(name='Donald Duck', zoo=self.wildlands) # 1

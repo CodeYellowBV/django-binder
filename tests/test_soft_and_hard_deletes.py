@@ -18,11 +18,9 @@ class DeleteTest(TestCase):
 
 	def test_non_soft_deletable_model_is_hard_deleted_on_delete_verb(self):
 		donald = Animal(name='Donald Duck')
-		donald.full_clean()
 		donald.save()
 
 		sailor = Costume(description='Weird sailor costume', animal=donald)
-		sailor.full_clean()
 		sailor.save()
 
 		response = self.client.delete('/costume/%d/' % sailor.pk)
@@ -34,7 +32,6 @@ class DeleteTest(TestCase):
 
 	def test_soft_deletable_model_is_softdeleted_on_delete_verb(self):
 		donald = Animal(name='Donald Duck')
-		donald.full_clean()
 		donald.save()
 
 		self.assertFalse(donald.deleted)
@@ -49,7 +46,6 @@ class DeleteTest(TestCase):
 
 	def test_soft_deletable_model_is_undeleted_on_post(self):
 		donald = Animal(name='Donald Duck', deleted=True)
-		donald.full_clean()
 		donald.save()
 
 		self.assertTrue(donald.deleted)
@@ -68,11 +64,9 @@ class DeleteTest(TestCase):
 
 	def test_hard_deletable_model_raises_validation_error_on_cascaded_delete_failure(self):
 		walt = Caretaker(name='Walt Disney')
-		walt.full_clean()
 		walt.save()
 
 		donald = Animal(name='Donald Duck', caretaker=walt)
-		donald.full_clean()
 		donald.save()
 
 		# Body must be empty, otherwise we get another error
