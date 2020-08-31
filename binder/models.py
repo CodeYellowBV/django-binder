@@ -20,25 +20,6 @@ from binder.exceptions import BinderRequestError
 from . import history
 
 
-def fix_output_field(expr, model):
-	if isinstance(expr, F):
-		path = expr.name.split('__')
-		for key in path[:-1]:
-			field = model._meta.get_field(key)
-			model = (
-				field.related_model
-				if isinstance(field, ForeignObjectRel) else
-				field.remote_field.model
-			)
-		expr._output_field_or_none = model._meta.get_field(path[-1])
-	elif isinstance(expr, BaseExpression):
-		try:
-			expr.field
-		except AttributeError:
-			for subexpr in expr.get_source_expressions():
-				fix_output_field(subexpr, model)
-
-
 class CaseInsensitiveCharField(CITextField):
 	def __init__(self, *args, **kwargs):
 		warnings.warn(DeprecationWarning('CaseInsensitiveCharField is deprecated, use django.contrib.postgres.fields.CITextField instead'))
@@ -530,3 +511,12 @@ def install_history_signal_handlers(model):
 
 	for sub in model.__subclasses__():
 		install_history_signal_handlers(sub)
+
+
+class ContextAnnotation:
+
+	def __init__(self, func):
+		self._func = func
+
+	def get(self, request):
+		return self._func(request)

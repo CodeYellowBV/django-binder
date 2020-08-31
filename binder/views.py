@@ -20,12 +20,14 @@ from django.db import models, connections
 from django.db.models import Q, F
 from django.utils import timezone
 from django.db import transaction
+from django.db.models.expressions import BaseExpression
+from django.db.models.fields.reverse_related import ForeignObjectRel
 
 
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat
-from .models import FieldFilter, BinderModel
+from .models import FieldFilter, BinderModel, ContextAnnotation
 from .json import JsonResponse, jsonloads
 
 
@@ -35,10 +37,61 @@ def multiput_get_id(bla):
 	return bla['id'] if isinstance(bla, dict) else bla
 
 
-def annotate(qs):
-	if issubclass(qs.model, BinderModel):
-		for name, annotation in qs.model.annotations().items():
-			qs = qs.annotate(**{name: annotation['expr']})
+def fix_output_field(expr, model):
+	if isinstance(expr, F):
+		path = expr.name.split('__')
+		for key in path[:-1]:
+			field = model._meta.get_field(key)
+			model = (
+				field.related_model
+				if isinstance(field, ForeignObjectRel) else
+				field.remote_field.model
+			)
+		expr._output_field_or_none = model._meta.get_field(path[-1])
+	elif isinstance(expr, BaseExpression):
+		try:
+			expr.field
+		except AttributeError:
+			for subexpr in expr.get_source_expressions():
+				fix_output_field(subexpr, model)
+
+
+def get_annotations(model, request):
+	annotations = {}
+
+	if issubclass(model, BinderModel) and hasattr(model, 'Annotations'):
+		for attr in dir(model.Annotations):
+			# Skip internal python keys
+			if attr.startswith('__') and attr.endswith('__'):
+				continue
+			# Get expr
+			expr = getattr(model.Annotations, attr)
+			if isinstance(expr, ContextAnnotation):
+				expr = expr.get(request)
+			fix_output_field(expr, model)
+			if callable(expr) and not isinstance(expr, F) and not isinstance(expr, BaseExpression):
+				expr = expr()
+			# Get field
+			if isinstance(expr, F):
+				field = expr._output_field_or_none
+			elif isinstance(expr, BaseExpression):
+				field = expr.field.clone()
+				field.name = attr
+				field.model = model
+			else:
+				raise ValueError(
+					'{}.Annotations.{} is not a valid django query expression'
+					.format(model.__name__, attr)
+				)
+			# Add annotation
+			annotations[attr] = {'expr': expr, 'field': field}
+
+	return annotations
+
+
+def annotate(qs, request):
+	for name, annotation in get_annotations(qs.model, request).items():
+		qs = qs.annotate(**{name: annotation['expr']})
 	return qs
 
 
@@ -203,9 +256,8 @@ class ModelView(View):
 		return GroupConcat if connections[self.model.objects.db].vendor == 'mysql' else OrderableArrayAgg
 
 
-	@property
-	def annotations(self):
-		return self.model.annotations() if issubclass(self.model, BinderModel) else {}
+	def annotations(self, request):
+		return get_annotations(self.model, request)
 
 
 	#### XXX WARNING XXX
@@ -344,7 +396,7 @@ class ModelView(View):
 		else:
 			fields = [f for f in self.model._meta.fields if f.name in self.shown_fields]
 
-		annotations = set(self.annotations)
+		annotations = set(self.annotations(request))
 		if self.shown_annotations is None:
 			annotations -= set(self.hidden_annotations)
 		else:
@@ -421,7 +473,10 @@ class ModelView(View):
 	# It goes through get_queryset(), so permission scoping applies.
 	# Raises model.DoesNotExist if the pk isn't found or not accessible to the user.
 	def _get_obj(self, pk, request):
-		results = self._get_objs(annotate(self.get_queryset(request).filter(pk=pk)), request=request)
+		results = self._get_objs(
+			annotate(self.get_queryset(request).filter(pk=pk), request),
+			request=request,
+		)
 		if results:
 			return results[0]
 		else:
@@ -576,7 +631,7 @@ class ModelView(View):
 			# {router-view-instance}
 			view.router = self.router
 			objs = view._get_objs(
-				annotate(view.get_queryset(request).filter(pk__in=with_pks)),
+				annotate(view.get_queryset(request).filter(pk__in=with_pks), request),
 				request=request,
 			)
 			for obj in objs:
@@ -649,7 +704,7 @@ class ModelView(View):
 
 			next_relation = self._follow_related(field)[0]
 			view = self.get_model_view(next_relation.model)
-			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None))
+			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None), request)
 
 			# Model default orders (this sometimes matters)
 			orders = []
@@ -750,7 +805,7 @@ class ModelView(View):
 	# should further be scoped on.
 	#
 	# Returns a Q object for this field we should filter on further.
-	def _filter_relation(self, field_name, where_map):
+	def _filter_relation(self, field_name, where_map, request):
 		# If there are no filters, do nothing
 		if where_map is None:
 			return Q(), False
@@ -761,14 +816,14 @@ class ModelView(View):
 		need_distinct = False
 		for where in wheres:
 			field, val = where.split('=')
-			filter_description = self._parse_filter(field, val, field_name+'__' if field_name else '')
+			filter_description = self._parse_filter(field, val, request, field_name+'__' if field_name else '')
 			need_distinct |= filter_description.need_distinct
 			q &= filter_description.filter
 
 		return FilterDescription(q, need_distinct)
 
 
-	def _parse_filter(self, field, value, partial=''):
+	def _parse_filter(self, field, value, request, partial=''):
 		head, *tail = field.split('.')
 		need_distinct = False
 
@@ -785,7 +840,7 @@ class ModelView(View):
 			except ValueError:
 				qualifier = None
 
-			q = self._filter_field(head, qualifier, value, invert, partial)
+			q = self._filter_field(head, qualifier, value, invert, request, partial)
 		else:
 			q = Q()
 
@@ -800,7 +855,7 @@ class ModelView(View):
 				raise related_err
 
 			view = self.get_model_view(related.model)
-			filter_description = view._parse_filter('.'.join(tail), value, partial + head + '__')
+			filter_description = view._parse_filter('.'.join(tail), value, request, partial + head + '__')
 			need_distinct |= filter_description.need_distinct
 			q &= filter_description.filter
 
@@ -817,14 +872,15 @@ class ModelView(View):
 
 
 
-	def _filter_field(self, field_name, qualifier, value, invert, partial=''):
-		if field_name in self.annotations:
+	def _filter_field(self, field_name, qualifier, value, invert, request, partial=''):
+		annotations = self.annotations(request)
+		if field_name in annotations:
 			if partial:
 				# NOTE: This creates a subquery; try to avoid this!
-				qs = annotate(self.model.objects.all())
-				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert))
+				qs = annotate(self.model.objects.all(), request)
+				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request))
 				return Q(**{partial + 'in': qs})
-			field = self.annotations[field_name]['field']
+			field = annotations[field_name]['field']
 		else:
 			try:
 				if field_name in self.hidden_fields:
@@ -849,13 +905,13 @@ class ModelView(View):
 
 
 
-	def _parse_order_by(self, queryset, field, partial=''):
+	def _parse_order_by(self, queryset, field, request, partial=''):
 		head, *tail = field.split('.')
 
 		if tail:
 			next = self._follow_related(head)[0].model
 			view = self.get_model_view(next)
-			return view._parse_order_by(queryset, '.'.join(tail), partial + head + '__')
+			return view._parse_order_by(queryset, '.'.join(tail), request, partial + head + '__')
 
 		if head.endswith('__nulls_last'):
 			head = head[:-12]
@@ -872,7 +928,7 @@ class ModelView(View):
 			if head == 'id':
 				pk = self.model._meta.pk
 				head = pk.get_attname() if pk.one_to_one or pk.many_to_one else pk.name
-			elif head not in self.annotations:
+			elif head not in self.annotations(request):
 				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head, nulls_last)
@@ -964,9 +1020,9 @@ class ModelView(View):
 		if order_bys:
 			for o in order_bys:
 				if o.startswith('-'):
-					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], partial='-')
+					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], request, partial='-')
 				else:
-					queryset, order, nulls_last = self._parse_order_by(queryset, o)
+					queryset, order, nulls_last = self._parse_order_by(queryset, o, request)
 
 				if nulls_last is not None:
 					if order.startswith('-'):
@@ -1038,13 +1094,13 @@ class ModelView(View):
 		queryset = self.filter_deleted(queryset, pk, request.GET.get('deleted'), request)
 
 		#### annotations
-		queryset = annotate(queryset)
+		queryset = annotate(queryset, request)
 
 		#### filters
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
 		for field, values in filters.items():
 			for v in values:
-				q, distinct = self._parse_filter(field, v)
+				q, distinct = self._parse_filter(field, v, request)
 				queryset = queryset.filter(q)
 				if distinct:
 					queryset = queryset.distinct()
@@ -1235,7 +1291,7 @@ class ModelView(View):
 
 		# Permission checks are done at this point, so we can avoid get_queryset()
 		data = self._get_objs(
-			annotate(self.model.objects.filter(pk=obj.pk)),
+			annotate(self.model.objects.filter(pk=obj.pk), request),
 			request=request,
 		)[0]
 		data['_meta'] = {'ignored_fields': ignored_fields}
@@ -1350,7 +1406,7 @@ class ModelView(View):
 			*self.unwritable_fields,
 			*self.shown_properties,
 			*self.file_fields,
-			*self.annotations,
+			*self.annotations(request),
 		]:
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
 
@@ -1901,7 +1957,7 @@ class ModelView(View):
 			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
 			# Permission checks are done at this point, so we can avoid get_queryset()
 			old = self._get_objs(
-				annotate(self.model.objects.filter(pk=int(pk))),
+				annotate(self.model.objects.filter(pk=int(pk)), request),
 				request,
 			)[0]
 		except ObjectDoesNotExist:
