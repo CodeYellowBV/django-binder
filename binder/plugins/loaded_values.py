@@ -27,14 +27,14 @@ class LoadedValuesMixin:
             return True
 
         for field in fields:
+            field_def = self._meta.get_field(field)
+
             try:
-                current_value = getattr(self, field)
+                current_value = getattr(self, field_def.attname)
             except ObjectDoesNotExist:
                 current_value = None
 
-            if isinstance(current_value, Model):
-                current_value = current_value.pk
-            elif isinstance(current_value, FieldFile):
+            if isinstance(current_value, FieldFile):
                 current_value = current_value.name
                 if current_value is None:
                     current_value = ''
