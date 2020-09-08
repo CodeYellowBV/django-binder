@@ -329,7 +329,7 @@ class ArrayFieldFilter(FieldFilter):
 			return []
 		else:
 			values = v.split(',')
-			return map(lambda v: filter.clean_value(qualifier, v), values)
+			return list(map(lambda v: filter.clean_value(qualifier, v), values))
 
 
 class JSONFieldFilter(FieldFilter):
