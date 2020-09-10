@@ -56,7 +56,7 @@ def fix_output_field(expr, model):
 				fix_output_field(subexpr, model)
 
 
-def get_annotations(model, request):
+def get_annotations(model, request=None):
 	annotations = {}
 
 	if issubclass(model, BinderModel) and hasattr(model, 'Annotations'):
@@ -89,7 +89,7 @@ def get_annotations(model, request):
 	return annotations
 
 
-def annotate(qs, request):
+def annotate(qs, request=None):
 	for name, annotation in get_annotations(qs.model, request).items():
 		qs = qs.annotate(**{name: annotation['expr']})
 	return qs
