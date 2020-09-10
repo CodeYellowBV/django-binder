@@ -139,3 +139,23 @@ class AnnotationTestCase(TestCase):
 
 		pks = {a['id'] for a in data['data']}
 		self.assertEqual(pks, animal_pks)
+
+	def test_context_annotation(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+		harambe = Animal(zoo=zoo, name='Harambe')
+		harambe.save()
+		bokito = Animal(zoo=zoo, name='Bokito')
+		bokito.save()
+
+		res = self.client.get(f'/animal/{self.animal.pk}/')
+		self.assertEqual(res.status_code, 200)
+		data = jsonloads(res.content)
+		self.assertEqual(data['data']['name'], 'Harambe')
+		self.assertEqual(data['data']['prefixed_name'], 'Sir Harambe')
+
+		res = self.client.get(f'/animal/{self.animal.pk}/?animal_name_prefix=Lady')
+		self.assertEqual(res.status_code, 200)
+		data = jsonloads(res.content)
+		self.assertEqual(data['data']['name'], 'Harambe')
+		self.assertEqual(data['data']['prefixed_name'], 'Lady Harambe')

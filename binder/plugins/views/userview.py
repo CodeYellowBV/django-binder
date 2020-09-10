@@ -29,7 +29,7 @@ class UserBaseMixin:
 	def respond_with_user(self, request, user_id):
 		return JsonResponse(
 			self._get_objs(
-				annotate(self.get_queryset(request).filter(pk=user_id)),
+				annotate(self.get_queryset(request).filter(pk=user_id), request),
 				request=request,
 			)[0]
 		)

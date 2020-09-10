@@ -19,6 +19,7 @@ class TestSetNullableRelations(TestCase):
 
         class FakeRequest:
             user = FakeUser()
+            GET = {}
 
         router = Router()
         router.register(AnimalView)
@@ -42,6 +43,7 @@ class TestSetNullableRelations(TestCase):
 
         class FakeRequest:
             user = FakeUser()
+            GET = {}
 
         router = Router()
         router.register(AnimalView)
@@ -65,6 +67,7 @@ class TestSetNullableRelations(TestCase):
 
         class FakeRequest:
             user = FakeUser()
+            GET = {}
 
         router = Router()
         router.register(AnimalView)
