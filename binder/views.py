@@ -741,7 +741,12 @@ class ModelView(View):
 					annotation = get_default_annotations(model)
 				elif (
 					hasattr(model, 'Annotations') and
-					hasattr(model.Annotations, annotation)
+					hasattr(model.Annotations, annotation) and
+					# Do not allow python internals
+					not (
+						annotation.startswith('__') and
+						annotation.endswith('__')
+					)
 				):
 					annotation = {annotation}
 				else:
