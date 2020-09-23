@@ -27,7 +27,7 @@ from django.db.models.fields.reverse_related import ForeignObjectRel
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat
-from .models import FieldFilter, BinderModel, ContextAnnotation
+from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation
 from .json import JsonResponse, jsonloads
 
 
@@ -66,7 +66,7 @@ def get_annotations(model, request=None):
 				continue
 			# Get expr
 			expr = getattr(model.Annotations, attr)
-			if isinstance(expr, ContextAnnotation):
+			if isinstance(expr, (ContextAnnotation, OptionalAnnotation)):
 				expr = expr.get(request)
 			fix_output_field(expr, model)
 			if callable(expr) and not isinstance(expr, F) and not isinstance(expr, BaseExpression):
