@@ -8,7 +8,7 @@ You can specify annotations by adding a class called `Annotations` to your
 will evaluate using `expr`.
 
 Example:
-```
+```python
 class Product(BinderModel):
 
 	price = models.DecimalField()
@@ -27,7 +27,7 @@ Note that annotations can also be used outside of a request context, in this
 case you will receive `None` as request object.
 
 Example:
-```
+```python
 class Task(BinderModel):
 
 	assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, models.PROTECT)
