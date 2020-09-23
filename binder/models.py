@@ -2,7 +2,6 @@ import re
 import warnings
 from datetime import date, datetime, time
 from contextlib import suppress
-from abc import ABC, abstractmethod
 
 from django.db import models
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
