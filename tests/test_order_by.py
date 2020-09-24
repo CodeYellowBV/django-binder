@@ -1,5 +1,6 @@
 import unittest
 
+from django.db.models.functions import Abs, Upper
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
@@ -12,16 +13,16 @@ import os
 
 
 class CustomOrdering:
-	def __init__(self, cls, order):
+	def __init__(self, cls, *order):
 		self.cls = cls
 		self.order = order
 
 	def __enter__(self):
-		self.old = self.cls._meta.ordering[0]
-		self.cls._meta.ordering[0] = self.order
+		self.old = self.cls._meta.ordering
+		self.cls._meta.ordering = self.order
 
 	def __exit__(self, *args, **kwargs):
-		self.cls._meta.ordering[0] = self.old
+		self.cls._meta.ordering = self.old
 
 
 
@@ -146,6 +147,15 @@ class TestOrderBy(TestCase):
 		self.assertEqual(data, [self.a4.pk, self.a1.pk, self.a3.pk, self.a2.pk])
 
 
+	def test_order_expression_customdefault(self):
+		with CustomOrdering(Costume, Abs('animal_id').desc()):
+			response = self.client.get('/costume/?order_by=-description')
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		data = [x['id'] for x in returned_data['data']]
+		self.assertEqual(data, [self.a4.pk, self.a1.pk, self.a3.pk, self.a2.pk])
+
 
 	# Order by -description, custom model default on related model (-animal.name)
 	# This would break due to Django vs Binder related object syntax mismatch and
@@ -209,6 +219,22 @@ class TestOrderBy(TestCase):
 			returned_data = jsonloads(response.content)
 
 		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
+
+
+		# This is a silly temporary test to ensure we don't crash on
+		# complex OrderBy expression.  We currently just skip these
+		# ordering components, with a warning.
+		#
+		# Looks like checking for logging is unreliable when the level
+		# is not high enough?!
+		#with self.assertLogs('warning'):
+		with CustomOrdering(Animal, 'name', Upper('name').asc()):
+			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
+
 
 		with CustomOrdering(Animal, '-name'):
 			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))

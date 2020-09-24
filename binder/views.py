@@ -710,10 +710,13 @@ class ModelView(View):
 			orders = []
 			field_alias = field + '___annotation' if vr else field
 			for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
-				if o.startswith('-'):
-					orders.append('-'+field_alias+'__'+o[1:])
+				if not isinstance(o, str):
+					logger.warning('Not ordering on WITH for field %s, ordering part %s because it is not a plain string.', field, o)
 				else:
-					orders.append(field_alias+'__'+o)
+					if o.startswith('-'):
+						orders.append('-'+field_alias+'__'+o[1:])
+					else:
+						orders.append(field_alias+'__'+o)
 
 			# Virtual relation
 			if vr:
