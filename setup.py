@@ -42,9 +42,12 @@ setup(
 		'django-request-id >= 1.0.0',
 		'requests >= 2.13.0',
 	],
-	tests_require=[(
-		'mysqlclient >= 1.3.12'
-		if os.environ.get('BINDER_TEST_MYSQL', '0') == '1' else
-		'psycopg2 >= 2.7'
-	)],
+	tests_require=[
+		'django-hijack >= 2.1.10',
+		(
+			'mysqlclient >= 1.3.12'
+			if os.environ.get('BINDER_TEST_MYSQL', '0') == '1' else
+			'psycopg2 >= 2.7'
+		),
+	],
 )
