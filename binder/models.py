@@ -590,7 +590,7 @@ class BinderFieldFile(FieldFile):
 	@property
 	def content_type(self):
 		if self.name is None:
-			self._content_type is None
+			self._content_type = None
 		elif self._content_type is None:
 			self._content_type, _ = mimetypes.guess_type(self.path)
 		return self._content_type
