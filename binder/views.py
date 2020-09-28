@@ -7,7 +7,6 @@ import hashlib
 import datetime
 import mimetypes
 import functools
-from importlib import import_module
 from collections import defaultdict, namedtuple
 from PIL import Image
 from inspect import getmro
@@ -19,9 +18,10 @@ from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidd
 from django.http.request import RawPostDataException
 from django.db import models, connections
 from django.db.models import Q, F
+from django.db.models.lookups import Transform
 from django.utils import timezone
 from django.db import transaction
-from django.db.models.expressions import BaseExpression
+from django.db.models.expressions import BaseExpression, Value, CombinedExpression, OrderBy, ExpressionWrapper
 from django.db.models.fields.reverse_related import ForeignObjectRel
 
 
@@ -156,7 +156,7 @@ def getsubclasses(cls):
 # Prefix a deconstructible expression by adding a prefix to all
 # fields.  If the expression is a string, just prefix it.  If the
 # expression starts with -, the - is kept at the start for order by
-# expressions.  Assumes all arguments to the function are db fields.
+# expressions.
 def prefix_db_expression(value, prefix):
 	if isinstance(value, str):
 		if value.startswith('-'):
@@ -164,13 +164,23 @@ def prefix_db_expression(value, prefix):
 		else:
 			return prefix + '__' + value
 
-	path, args, kwargs = value.deconstruct()
-	args = [prefix_db_expression(arg, prefix) for arg in args]
+	elif not hasattr(value, 'resolve_expression') or isinstance(value, Value):
+		return value
 
-	module_name, _, name = path.rpartition('.')
-	module = import_module(module_name)
-	klass = getattr(module, name)
-	return klass(*args, **kwargs)
+	# Generic case: use deconstruct() to parse and prefix all args
+	elif isinstance(value, (F, Transform, OrderBy, ExpressionWrapper)):
+		path, args, kwargs = value.deconstruct()
+		args = [prefix_db_expression(arg, prefix) for arg in args]
+		klass = value.__class__
+		return klass(*args, **kwargs)
+
+	elif isinstance(value, CombinedExpression):
+		lhs = prefix_db_expression(value.lhs, prefix)
+		rhs = prefix_db_expression(value.rhs, prefix)
+		return CombinedExpression(lhs, value.connector, rhs, output_field=value._output_field_or_none)
+
+	else:
+		raise ValueError('Unknown expression type, cannot apply db prefix: %s', value)
 
 
 class ModelView(View):

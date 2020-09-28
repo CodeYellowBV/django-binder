@@ -1,7 +1,8 @@
 import unittest
 
-from django.db.models.functions import Abs, Upper, Reverse
+from django.db.models.functions import Abs, Upper, Reverse, Length
 from django.db.models import F
+from django.db.models.expressions import OrderBy
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
@@ -230,8 +231,8 @@ class TestOrderBy(TestCase):
 
 		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
 
-		# Complex order by with desc on an F field
-		with CustomOrdering(Animal, Upper(F('name')).desc(), '-id'):
+		# Complex order by with desc on an F field with an operation on it
+		with CustomOrdering(Animal, OrderBy(Length(F('name')), descending=True), '-name'):
 			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
 			self.assertEqual(response.status_code, 200)
 			returned_data = jsonloads(response.content)
