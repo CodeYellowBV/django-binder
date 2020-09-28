@@ -7,6 +7,7 @@ import hashlib
 import datetime
 import mimetypes
 import functools
+from importlib import import_module
 from collections import defaultdict, namedtuple
 from PIL import Image
 from inspect import getmro
@@ -150,6 +151,26 @@ def getsubclasses(cls):
 	for subcls in cls.__subclasses__():
 		yield subcls
 		yield from getsubclasses(subcls)
+
+
+# Prefix a deconstructible expression by adding a prefix to all
+# fields.  If the expression is a string, just prefix it.  If the
+# expression starts with -, the - is kept at the start for order by
+# expressions.  Assumes all arguments to the function are db fields.
+def prefix_db_expression(value, prefix):
+	if isinstance(value, str):
+		if value.startswith('-'):
+			return '-%s__%s' % (prefix, value[1:])
+		else:
+			return prefix + '__' + value
+
+	path, args, kwargs = value.deconstruct()
+	args = [prefix_db_expression(arg, prefix) for arg in args]
+
+	module_name, _, name = path.rpartition('.')
+	module = import_module(module_name)
+	klass = getattr(module, name)
+	return klass(*args, **kwargs)
 
 
 class ModelView(View):
@@ -710,13 +731,7 @@ class ModelView(View):
 			orders = []
 			field_alias = field + '___annotation' if vr else field
 			for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
-				if not isinstance(o, str):
-					logger.warning('Not ordering on WITH for field %s, ordering part %s because it is not a plain string.', field, o)
-				else:
-					if o.startswith('-'):
-						orders.append('-'+field_alias+'__'+o[1:])
-					else:
-						orders.append(field_alias+'__'+o)
+				orders.append(prefix_db_expression(o, field_alias))
 
 			# Virtual relation
 			if vr:
