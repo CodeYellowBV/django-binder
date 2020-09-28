@@ -42,5 +42,5 @@ class BinderFileFieldTest(TestCase):
 		data = jsonloads(response.content)
 		self.assertEqual(
 			data['data']['picture'],
-			f'/zoo/{zoo.pk}/picture/?h={HASH}&content_type=image/jpeg',
+			f'/zoo/{zoo.pk}/picture/pic.jpg?h={HASH}&content_type=image/jpeg',
 		)

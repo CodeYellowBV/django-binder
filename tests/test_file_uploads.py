@@ -57,7 +57,7 @@ class FileUploadTest(TestCase):
 		result = jsonloads(response.content)
 		self.assertEqual(emmen.id, result['data']['id'])
 		self.assertEqual(emmen.name, result['data']['name'], 'Wildlands Adventure Zoo Emmen')
-		self.assertEqual('/zoo/%d/floor_plan/' % emmen.id, result['data']['floor_plan'])
+		self.assertEqual('/zoo/%d/floor_plan/plan.jpg' % emmen.id, result['data']['floor_plan'])
 
 
 	# This is a basic regression test for a bug due to the router
@@ -84,7 +84,7 @@ class FileUploadTest(TestCase):
 		zoo = result['with']['zoo'][0]
 		self.assertEqual(emmen.id, zoo['id'])
 		self.assertEqual(emmen.name, zoo['name'], 'Wildlands Adventure Zoo Emmen')
-		self.assertEqual('/zoo/%d/floor_plan/' % emmen.id, zoo['floor_plan'])
+		self.assertEqual('/zoo/%d/floor_plan/plan.jpg' % emmen.id, zoo['floor_plan'])
 
 
 	# Same as above, but in multi-put's code path
