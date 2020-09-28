@@ -75,7 +75,7 @@ class MasqueradeMixin(UserBaseMixin):
 		try:
 			release_hijack(request)
 		except PermissionDenied:  # Means we are not hijacked
-			auth.logout(request)
+			super()._logout(request)
 
 
 
