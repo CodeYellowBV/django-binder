@@ -5,7 +5,7 @@ from abc import ABCMeta, abstractmethod
 from django.contrib import auth
 from django.contrib.auth import update_session_auth_hash, password_validation
 from django.contrib.auth.tokens import default_token_generator
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.debug import sensitive_post_parameters
@@ -68,6 +68,15 @@ class MasqueradeMixin(UserBaseMixin):
 
 		release_hijack(request)  # Ignore returned redirect response object
 		return self.respond_with_user(request, request.user.id)
+
+	def _logout(self, request):
+		from hijack.helpers import release_hijack
+		# Release masquerade on logout if masquerading
+		try:
+			release_hijack(request)
+		except PermissionDenied:  # Means we are not hijacked
+			auth.logout(request)
+
 
 
 class UserViewMixIn(UserBaseMixin):
@@ -160,6 +169,9 @@ class UserViewMixIn(UserBaseMixin):
 			logger.info('login for {}/{}'.format(user.id, user))
 			return self.respond_with_user(request, user.id)
 
+	def _logout(self, request):
+		auth.logout(request)
+
 	@list_route(name='logout')
 	@no_scoping_required()
 	def logout(self, request):
@@ -180,7 +192,7 @@ class UserViewMixIn(UserBaseMixin):
 
 		self._require_model_perm('logout', request)
 		logger.info('logout for {}/{}'.format(request.user.id, request.user))
-		auth.logout(request)
+		self._logout(request)
 		return HttpResponse(status=204)
 
 	def get_users(self, request, username):
