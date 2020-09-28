@@ -4,7 +4,6 @@ from datetime import date, datetime, time
 from contextlib import suppress
 
 from django.db import models
-from django.db.models.fields.reverse_related import ForeignObjectRel
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
 from django.db.models import signals, F
 from django.core.exceptions import ValidationError
@@ -520,3 +519,15 @@ class ContextAnnotation:
 
 	def get(self, request):
 		return self._func(request)
+
+
+class OptionalAnnotation:
+
+	def __init__(self, expr):
+		self._expr = expr
+
+	def get(self, request):
+		if isinstance(self._expr, ContextAnnotation):
+			return self._expr.get(request)
+		else:
+			return self._expr

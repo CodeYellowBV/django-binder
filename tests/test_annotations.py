@@ -159,3 +159,128 @@ class AnnotationTestCase(TestCase):
 		data = jsonloads(res.content)
 		self.assertEqual(data['data']['name'], 'Harambe')
 		self.assertEqual(data['data']['prefixed_name'], 'Lady Harambe')
+
+
+class IncludeAnnotationsTest(TestCase):
+
+	def setUp(self):
+		super().setUp()
+		u = User(username='testuser', is_active=True, is_superuser=True)
+		u.set_password('test')
+		u.save()
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
+
+		self.caretaker = Caretaker(name='carl')
+		self.caretaker.save()
+
+		self.zoo = Zoo(name='Apenheul')
+		self.zoo.save()
+
+		self.animal = Animal(name='Harambe', zoo=self.zoo, caretaker=self.caretaker)
+		self.animal.save()
+
+	def test_include_one_annotation(self):
+		res = self.client.get(
+			f'/caretaker/{self.caretaker.pk}/?include_annotations=animal_count'
+		)
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+		self.assertIn('animal_count', data['data'])
+		self.assertNotIn('best_animal', data['data'])
+		self.assertNotIn('bsn', data['data'])
+		self.assertNotIn('last_present', data['data'])
+		self.assertNotIn('scary', data['data'])
+
+	def test_exclude_one_annotation(self):
+		res = self.client.get(
+			f'/caretaker/{self.caretaker.pk}/?include_annotations=*,-animal_count'
+		)
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+		self.assertNotIn('animal_count', data['data'])
+		self.assertIn('best_animal', data['data'])
+		self.assertIn('bsn', data['data'])
+		self.assertIn('last_present', data['data'])
+		self.assertNotIn('scary', data['data'])
+
+	def test_include_optional_annotation(self):
+		res = self.client.get(
+			f'/caretaker/{self.caretaker.pk}/?include_annotations=*,scary'
+		)
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+		self.assertIn('animal_count', data['data'])
+		self.assertIn('best_animal', data['data'])
+		self.assertIn('bsn', data['data'])
+		self.assertIn('last_present', data['data'])
+		self.assertIn('scary', data['data'])
+
+	def test_include_no_annotations(self):
+		res = self.client.get(
+			f'/caretaker/{self.caretaker.pk}/?include_annotations='
+		)
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+		self.assertNotIn('animal_count', data['data'])
+		self.assertNotIn('best_animal', data['data'])
+		self.assertNotIn('bsn', data['data'])
+		self.assertNotIn('last_present', data['data'])
+		self.assertNotIn('scary', data['data'])
+
+	def test_relation_include_one_annotation(self):
+		res = self.client.get(
+			f'/animal/{self.animal.pk}/?with=caretaker&include_annotations=caretaker(animal_count)'
+		)
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+		self.assertIn('animal_count', data['with']['caretaker'][0])
+		self.assertNotIn('best_animal', data['with']['caretaker'][0])
+		self.assertNotIn('bsn', data['with']['caretaker'][0])
+		self.assertNotIn('last_present', data['with']['caretaker'][0])
+		self.assertNotIn('scary', data['with']['caretaker'][0])
+
+	def test_relation_exclude_one_annotation(self):
+		res = self.client.get(
+			f'/animal/{self.animal.pk}/?with=caretaker&include_annotations=caretaker(*,-animal_count)'
+		)
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+		self.assertNotIn('animal_count', data['with']['caretaker'][0])
+		self.assertIn('best_animal', data['with']['caretaker'][0])
+		self.assertIn('bsn', data['with']['caretaker'][0])
+		self.assertIn('last_present', data['with']['caretaker'][0])
+		self.assertNotIn('scary', data['with']['caretaker'][0])
+
+	def test_relation_include_optional_annotation(self):
+		res = self.client.get(
+			f'/animal/{self.animal.pk}/?with=caretaker&include_annotations=caretaker(*,scary)'
+		)
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+		self.assertIn('animal_count', data['with']['caretaker'][0])
+		self.assertIn('best_animal', data['with']['caretaker'][0])
+		self.assertIn('bsn', data['with']['caretaker'][0])
+		self.assertIn('last_present', data['with']['caretaker'][0])
+		self.assertIn('scary', data['with']['caretaker'][0])
+
+	def test_relation_include_no_annotations(self):
+		res = self.client.get(
+			f'/animal/{self.animal.pk}/?with=caretaker&include_annotations=caretaker()'
+		)
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+		self.assertNotIn('animal_count', data['with']['caretaker'][0])
+		self.assertNotIn('best_animal', data['with']['caretaker'][0])
+		self.assertNotIn('bsn', data['with']['caretaker'][0])
+		self.assertNotIn('last_present', data['with']['caretaker'][0])
+		self.assertNotIn('scary', data['with']['caretaker'][0])

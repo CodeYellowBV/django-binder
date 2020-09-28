@@ -27,9 +27,41 @@ from django.db.models.fields.reverse_related import ForeignObjectRel
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat
-from .models import FieldFilter, BinderModel, ContextAnnotation
+from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation
 from .json import JsonResponse, jsonloads
 
+
+def split_par_aware(content):
+	start = 0
+	depth = 0
+
+	for i, char in enumerate(content):
+		if char == '(':
+			depth += 1
+		elif char == ')':
+			depth -= 1
+		elif char == ',' and depth == 0:
+			yield content[start:i]
+			start = i + 1
+
+	yield content[start:]
+
+
+def get_default_annotations(model):
+	annotations = set()
+
+	if issubclass(model, BinderModel) and hasattr(model, 'Annotations'):
+		for attr in dir(model.Annotations):
+			# Skip internal python keys
+			if attr.startswith('__') and attr.endswith('__'):
+				continue
+			# Get expr
+			expr = getattr(model.Annotations, attr)
+			# Check if not optional
+			if not isinstance(expr, OptionalAnnotation):
+				annotations.add(attr)
+
+	return annotations
 
 
 # Haha kill me now
@@ -56,41 +88,40 @@ def fix_output_field(expr, model):
 				fix_output_field(subexpr, model)
 
 
-def get_annotations(model, request=None):
-	annotations = {}
+def get_annotations(model, request=None, annotations=None):
+	if annotations is None:
+		annotations = get_default_annotations(model)
 
-	if issubclass(model, BinderModel) and hasattr(model, 'Annotations'):
-		for attr in dir(model.Annotations):
-			# Skip internal python keys
-			if attr.startswith('__') and attr.endswith('__'):
-				continue
-			# Get expr
-			expr = getattr(model.Annotations, attr)
-			if isinstance(expr, ContextAnnotation):
-				expr = expr.get(request)
-			fix_output_field(expr, model)
-			if callable(expr) and not isinstance(expr, F) and not isinstance(expr, BaseExpression):
-				expr = expr()
-			# Get field
-			if isinstance(expr, F):
-				field = expr._output_field_or_none
-			elif isinstance(expr, BaseExpression):
-				field = expr.field.clone()
-				field.name = attr
-				field.model = model
-			else:
-				raise ValueError(
-					'{}.Annotations.{} is not a valid django query expression'
-					.format(model.__name__, attr)
-				)
-			# Add annotation
-			annotations[attr] = {'expr': expr, 'field': field}
+	res = {}
 
-	return annotations
+	for attr in annotations:
+		# Get expr
+		expr = getattr(model.Annotations, attr)
+		if isinstance(expr, (ContextAnnotation, OptionalAnnotation)):
+			expr = expr.get(request)
+		if callable(expr) and not isinstance(expr, F) and not isinstance(expr, BaseExpression):
+			expr = expr()
+		fix_output_field(expr, model)
+		# Get field
+		if isinstance(expr, F):
+			field = expr._output_field_or_none
+		elif isinstance(expr, BaseExpression):
+			field = expr.field.clone()
+			field.name = attr
+			field.model = model
+		else:
+			raise ValueError(
+				'{}.Annotations.{} is not a valid django query expression'
+				.format(model.__name__, attr)
+			)
+		# Add annotation
+		res[attr] = {'expr': expr, 'field': field}
+
+	return res
 
 
-def annotate(qs, request=None):
-	for name, annotation in get_annotations(qs.model, request).items():
+def annotate(qs, request=None, annotations=None):
+	for name, annotation in get_annotations(qs.model, request, annotations).items():
 		qs = qs.annotate(**{name: annotation['expr']})
 	return qs
 
@@ -256,8 +287,10 @@ class ModelView(View):
 		return GroupConcat if connections[self.model.objects.db].vendor == 'mysql' else OrderableArrayAgg
 
 
-	def annotations(self, request):
-		return get_annotations(self.model, request)
+	def annotations(self, request, include_annotations=None):
+		if include_annotations is None:
+			include_annotations = self._parse_include_annotations(request)
+		return get_annotations(self.model, request, include_annotations.get(''))
 
 
 	#### XXX WARNING XXX
@@ -385,7 +418,7 @@ class ModelView(View):
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_objs(self, queryset, request):
+	def _get_objs(self, queryset, request, annotations=None):
 		datas = []
 		datas_by_id = {} # Save datas so we can annotate m2m fields later (avoiding a query)
 		objs_by_id = {} # Same for original objects
@@ -396,7 +429,8 @@ class ModelView(View):
 		else:
 			fields = [f for f in self.model._meta.fields if f.name in self.shown_fields]
 
-		annotations = set(self.annotations(request))
+		if annotations is None:
+			annotations = set(self.annotations(request))
 		if self.shown_annotations is None:
 			annotations -= set(self.hidden_annotations)
 		else:
@@ -472,10 +506,13 @@ class ModelView(View):
 	# Fetches the object specified by <pk>, and serializes it to a Binder json dict.
 	# It goes through get_queryset(), so permission scoping applies.
 	# Raises model.DoesNotExist if the pk isn't found or not accessible to the user.
-	def _get_obj(self, pk, request):
+	def _get_obj(self, pk, request, include_annotations=None):
+		if include_annotations is None:
+			include_annotations = self._parse_include_annotations(request)
 		results = self._get_objs(
-			annotate(self.get_queryset(request).filter(pk=pk), request),
+			annotate(self.get_queryset(request).filter(pk=pk), request, include_annotations.get('')),
 			request=request,
+			annotations=include_annotations.get(''),
 		)
 		if results:
 			return results[0]
@@ -534,9 +571,15 @@ class ModelView(View):
 	# the ones requested.  The reverse key allows the frontend to
 	# reconstruct to which property in the main model the "with'ed"
 	# model belongs.
-	def _get_withs(self, pks, withs, request, wheres=None):
+	def _get_withs(self, pks, withs, request, wheres=None, include_annotations=None):
 		if withs is None and request is not None:
 			withs = list(filter(None, request.GET.get('with', '').split(',')))
+
+		if include_annotations is None:
+			if request is not None:
+				include_annotations = self._parse_include_annotations(request)
+			else:
+				include_annotations = {}
 
 		# Make sure to include A if A.B is specified.
 		for w in withs:
@@ -545,24 +588,8 @@ class ModelView(View):
 
 		if wheres is None and request is not None:
 			where_str = request.GET.get('where', '')
-
-			# Split on top level commas
-			where_params = []
-			start = 0
-			depth = 0
-			for i, c in enumerate(where_str):
-				if c == '(':
-					depth += 1
-				elif c == ')':
-					depth -= 1
-				elif c == ',' and depth == 0:
-					where_params.append(where_str[start:i])
-					start = i + 1
-			where_params.append(where_str[start:])
-
 			# Filter out empty params
-			where_params = list(filter(bool, where_params))
-
+			where_params = list(filter(bool, split_par_aware(where_str)))
 			where_map = self._parse_wheres(where_params, withs)
 
 		if isinstance(pks, django.db.models.query.QuerySet):
@@ -573,7 +600,7 @@ class ModelView(View):
 		# Force evaluation of querysets, as nesting too deeply causes problems. See T1850.
 		pks = list(pks)
 
-		extras_with_flat_ids = defaultdict(set)
+		extras_with_flat_ids = {}
 		withs_per_model = defaultdict(dict)
 		extras_mapping = {}
 		extras_reverse_mapping_dict = {}
@@ -602,12 +629,16 @@ class ModelView(View):
 			model_name = view._model_name()
 			extras_mapping[w] = model_name
 
-			(view, flat_ids) = extras_with_flat_ids.get(model_name, (view, set()))
+			try:
+				annotations = include_annotations[w]
+			except KeyError:
+				annotations = get_default_annotations(view.model)
+			annotations = frozenset(annotations)  # So that it is hashable
 
+			(view, annotation_ids) = extras_with_flat_ids.setdefault(model_name, (view, {}))
+			flat_ids = annotation_ids.setdefault(annotations, set())
 			for new_ids in new_ids_dict.values():
 				flat_ids.update(set(new_ids))
-
-			extras_with_flat_ids[model_name] = (view, flat_ids)
 
 			# Filter all annotations we need to add to this particular model
 			for (w2, (view2, new_ids_dict2, is_singular2)) in field_results.items():
@@ -626,20 +657,110 @@ class ModelView(View):
 
 		extras_dict = {}
 		# FIXME: delegate this to a router or something
-		for (model_name, (view, with_pks)) in extras_with_flat_ids.items():
-			view = view()
-			# {router-view-instance}
-			view.router = self.router
-			objs = view._get_objs(
-				annotate(view.get_queryset(request).filter(pk__in=with_pks), request),
-				request=request,
-			)
-			for obj in objs:
-				view._annotate_obj_with_related_withs(obj, withs_per_model[model_name])
-			extras_dict[model_name] = objs
+		for (model_name, (view, annotation_ids)) in extras_with_flat_ids.items():
+			# It can happen that an id appears in multiple annotation sets, here
+			# we move those ids to new annotation sets containing a union of the
+			# two annotation sets
+			to_add = list(annotation_ids.items())
+			annotation_ids = {}
+			while to_add:
+				rannotations, rids = to_add.pop()
+				for lannotations, lids in list(annotation_ids.items()):
+					overlap = lids & rids
+					if overlap:
+						to_add.append((lannotations | rannotations, overlap))
+						lids -= overlap
+						rids -= overlap
+						if not lids:
+							del annotation_ids[lannotations]
+						if not rids:
+							break
+				if rids:
+					annotation_ids.setdefault(rannotations, set()).update(rids)
+
+			extras_dict[model_name] = []
+			for annotations, with_pks in annotation_ids.items():
+				view = view()
+				# {router-view-instance}
+				view.router = self.router
+				objs = view._get_objs(
+					annotate(view.get_queryset(request).filter(pk__in=with_pks), request, annotations),
+					request=request,
+					annotations=annotations,
+				)
+				for obj in objs:
+					view._annotate_obj_with_related_withs(obj, withs_per_model[model_name])
+				extras_dict[model_name].extend(objs)
 
 		return (extras_dict, extras_mapping, extras_reverse_mapping_dict, field_results)
 
+
+	# Returns a dict mapping relations to a set of annotations that should be
+	# included.
+	# The top level model is indicated with the relation ''.
+	# If a relation is not in the dict this means the annotations returned by
+	# get_default_annotations should be used.
+	def _parse_include_annotations(self, request):
+		if 'include_annotations' in request.GET:
+			includes = list(split_par_aware(request.GET['include_annotations']))
+		else:
+			includes = []
+
+		relation_annotations = {}
+		for include in includes:
+			# Parse relation / annotations from include
+			if not include:
+				include = '()'
+			if include.endswith(')'):
+				relation, sep, annotations = include[:-1].partition('(')
+				if not sep:
+					raise BinderRequestError(
+						'SyntaxError in {{include_annotations={}}}'
+						.format(include)
+					)
+				annotations = annotations.split(',') if annotations else []
+			else:
+				relation, _, annotation = include.rpartition('.')
+				annotations = [annotation]
+			# Modify the relations annotations
+			all_annotations = relation_annotations.setdefault(relation, set())
+			for annotation in annotations:
+				# Check if inverted
+				inverted = False
+				while annotation.startswith('-'):
+					inverted = not inverted
+					annotation = annotation[1:]
+				# Expand * and convert to set
+				related_models = self._follow_related(relation)
+				model = (
+					related_models[-1].model
+					if related_models else
+					self.model
+				)
+				if annotation == '*':
+					annotation = get_default_annotations(model)
+				elif (
+					hasattr(model, 'Annotations') and
+					hasattr(model.Annotations, annotation) and
+					# Do not allow python internals
+					not (
+						annotation.startswith('__') and
+						annotation.endswith('__')
+					)
+				):
+					annotation = {annotation}
+				else:
+					raise BinderRequestError(
+						'Annotation does not exist {{{}}}.{{{}}}.'
+						.format(model.__name__, annotation)
+					)
+				# Add/remove annotations
+				if inverted:
+					all_annotations -= annotation
+				else:
+					all_annotations |= annotation
+
+		return relation_annotations
 
 
 	def _follow_related(self, fieldspec):
@@ -1081,7 +1202,7 @@ class ModelView(View):
 		return meta
 
 
-	def get(self, request, pk=None, withs=None):
+	def get(self, request, pk=None, withs=None, include_annotations=None):
 		include_meta = request.GET.get('include_meta', 'total_records').split(',')
 
 		queryset = self.get_queryset(request)
@@ -1097,7 +1218,9 @@ class ModelView(View):
 		queryset = self.filter_deleted(queryset, pk, request.GET.get('deleted'), request)
 
 		#### annotations
-		queryset = annotate(queryset, request)
+		if include_annotations is None:
+			include_annotations = self._parse_include_annotations(request)
+		queryset = annotate(queryset, request, include_annotations.get(''))
 
 		#### filters
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
@@ -1120,9 +1243,9 @@ class ModelView(View):
 
 		#### with
 		# parse wheres from request
-		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(queryset, withs, request=request)
+		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(queryset, withs, request=request, include_annotations=include_annotations)
 
-		data = self._get_objs(queryset, request=request)
+		data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
 		for obj in data:
 			self._annotate_obj_with_related_withs(obj, field_results)
 
@@ -1293,9 +1416,11 @@ class ModelView(View):
 			return None
 
 		# Permission checks are done at this point, so we can avoid get_queryset()
+		include_annotations = self._parse_include_annotations(request)
 		data = self._get_objs(
-			annotate(self.model.objects.filter(pk=obj.pk), request),
+			annotate(self.model.objects.filter(pk=obj.pk), request, include_annotations.get('')),
 			request=request,
+			annotations=include_annotations.get(''),
 		)[0]
 		data['_meta'] = {'ignored_fields': ignored_fields}
 		return data
@@ -1959,9 +2084,11 @@ class ModelView(View):
 		try:
 			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
 			# Permission checks are done at this point, so we can avoid get_queryset()
+			include_annotations = self._parse_include_annotations(request)
 			old = self._get_objs(
-				annotate(self.model.objects.filter(pk=int(pk)), request),
+				annotate(self.model.objects.filter(pk=int(pk)), request, include_annotations.get('')),
 				request,
+				include_annotations.get(''),
 			)[0]
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
