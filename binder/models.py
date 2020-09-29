@@ -456,7 +456,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		return super().save(*args, **kwargs)
 
 
-	def full_clean(self, *args, **kwargs):
+	def full_clean(self, exclude=None, *args, **kwargs):
 		# Determine if the field needs an extra nullability check.
 		# Expects the field object (not the field name)
 		def field_needs_nullability_check(field):
@@ -467,10 +467,19 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 			return False
 
 
+		# Gather unchanged fields if LoadedValues mixin available, to
+		# avoid querying uniqueness constraints for unchanged
+		# relations (an useful performance optimization).
+		if hasattr(self, 'field_changed'):
+			exclude = set(exclude) if exclude else set()
+			for f in self.binder_concrete_fields_as_dict(skip_deferred_fields=True):
+				if not self.field_changed(f):
+					exclude.add(f)
+
 		validation_errors = defaultdict(list)
 
 		try:
-			res = super().full_clean(*args, **kwargs)
+			res = super().full_clean(exclude=exclude, *args, **kwargs)
 		except ValidationError as ve:
 			if hasattr(ve, 'error_dict'):
 				for key, value in ve.error_dict.items():
