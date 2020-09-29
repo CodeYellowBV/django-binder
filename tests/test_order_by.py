@@ -1,6 +1,6 @@
 import unittest
 
-from django.db.models.functions import Abs, Upper, Reverse, Length
+from django.db.models.functions import Upper, Reverse, Length
 from django.db.models import F
 from django.db.models.expressions import OrderBy
 from django.test import TestCase, Client
@@ -11,6 +11,19 @@ from binder.json import jsonloads
 # from .compare import assert_json, MAYBE, ANY, EXTRA
 from .testapp.models import Animal, Costume, Zoo, Caretaker
 import os
+
+
+try:
+	from django.db.models.functions import Abs
+except ImportError:
+	# We use the Abs function in this test which was added in Django 2.2,
+	# however we support from Django 2.0 so we define it ourselves if the
+	# import fails
+	from django.db.models import Transform
+
+	class Abs(Transform):
+		function = 'ABS'
+		lookup_name = 'abs'
 
 
 
