@@ -148,13 +148,13 @@ class AnnotationTestCase(TestCase):
 		bokito = Animal(zoo=zoo, name='Bokito')
 		bokito.save()
 
-		res = self.client.get(f'/animal/{self.animal.pk}/')
+		res = self.client.get('/animal/{}/'.format(self.animal.pk))
 		self.assertEqual(res.status_code, 200)
 		data = jsonloads(res.content)
 		self.assertEqual(data['data']['name'], 'Harambe')
 		self.assertEqual(data['data']['prefixed_name'], 'Sir Harambe')
 
-		res = self.client.get(f'/animal/{self.animal.pk}/?animal_name_prefix=Lady')
+		res = self.client.get('/animal/{}/?animal_name_prefix=Lady'.format(self.animal.pk))
 		self.assertEqual(res.status_code, 200)
 		data = jsonloads(res.content)
 		self.assertEqual(data['data']['name'], 'Harambe')
@@ -183,7 +183,7 @@ class IncludeAnnotationsTest(TestCase):
 
 	def test_include_one_annotation(self):
 		res = self.client.get(
-			f'/caretaker/{self.caretaker.pk}/?include_annotations=animal_count'
+			'/caretaker/{}/?include_annotations=animal_count'.format(self.caretaker.pk)
 		)
 		self.assertEqual(res.status_code, 200)
 
@@ -196,7 +196,7 @@ class IncludeAnnotationsTest(TestCase):
 
 	def test_exclude_one_annotation(self):
 		res = self.client.get(
-			f'/caretaker/{self.caretaker.pk}/?include_annotations=*,-animal_count'
+			'/caretaker/{}/?include_annotations=*,-animal_count'.format(self.caretaker.pk)
 		)
 		self.assertEqual(res.status_code, 200)
 
@@ -209,7 +209,7 @@ class IncludeAnnotationsTest(TestCase):
 
 	def test_include_optional_annotation(self):
 		res = self.client.get(
-			f'/caretaker/{self.caretaker.pk}/?include_annotations=*,scary'
+			'/caretaker/{}/?include_annotations=*,scary'.format(self.caretaker.pk)
 		)
 		self.assertEqual(res.status_code, 200)
 
@@ -222,7 +222,7 @@ class IncludeAnnotationsTest(TestCase):
 
 	def test_include_no_annotations(self):
 		res = self.client.get(
-			f'/caretaker/{self.caretaker.pk}/?include_annotations='
+			'/caretaker/{}/?include_annotations='.format(self.caretaker.pk)
 		)
 		self.assertEqual(res.status_code, 200)
 
@@ -235,7 +235,7 @@ class IncludeAnnotationsTest(TestCase):
 
 	def test_relation_include_one_annotation(self):
 		res = self.client.get(
-			f'/animal/{self.animal.pk}/?with=caretaker&include_annotations=caretaker(animal_count)'
+			'/animal/{}/?with=caretaker&include_annotations=caretaker(animal_count)'.format(self.animal.pk)
 		)
 		self.assertEqual(res.status_code, 200)
 
@@ -248,7 +248,7 @@ class IncludeAnnotationsTest(TestCase):
 
 	def test_relation_exclude_one_annotation(self):
 		res = self.client.get(
-			f'/animal/{self.animal.pk}/?with=caretaker&include_annotations=caretaker(*,-animal_count)'
+			'/animal/{}/?with=caretaker&include_annotations=caretaker(*,-animal_count)'.format(self.animal.pk)
 		)
 		self.assertEqual(res.status_code, 200)
 
@@ -261,7 +261,7 @@ class IncludeAnnotationsTest(TestCase):
 
 	def test_relation_include_optional_annotation(self):
 		res = self.client.get(
-			f'/animal/{self.animal.pk}/?with=caretaker&include_annotations=caretaker(*,scary)'
+			'/animal/{}/?with=caretaker&include_annotations=caretaker(*,scary)'.format(self.animal.pk)
 		)
 		self.assertEqual(res.status_code, 200)
 
@@ -274,7 +274,7 @@ class IncludeAnnotationsTest(TestCase):
 
 	def test_relation_include_no_annotations(self):
 		res = self.client.get(
-			f'/animal/{self.animal.pk}/?with=caretaker&include_annotations=caretaker()'
+			'/animal/{}/?with=caretaker&include_annotations=caretaker()'.format(self.animal.pk)
 		)
 		self.assertEqual(res.status_code, 200)
 
