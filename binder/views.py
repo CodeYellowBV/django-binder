@@ -18,9 +18,10 @@ from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidd
 from django.http.request import RawPostDataException
 from django.db import models, connections
 from django.db.models import Q, F
+from django.db.models.lookups import Transform
 from django.utils import timezone
 from django.db import transaction
-from django.db.models.expressions import BaseExpression
+from django.db.models.expressions import BaseExpression, Value, CombinedExpression, OrderBy, ExpressionWrapper
 from django.db.models.fields.reverse_related import ForeignObjectRel
 
 
@@ -181,6 +182,36 @@ def getsubclasses(cls):
 	for subcls in cls.__subclasses__():
 		yield subcls
 		yield from getsubclasses(subcls)
+
+
+# Prefix a deconstructible expression by adding a prefix to all
+# fields.  If the expression is a string, just prefix it.  If the
+# expression starts with -, the - is kept at the start for order by
+# expressions.
+def prefix_db_expression(value, prefix):
+	if isinstance(value, str):
+		if value.startswith('-'):
+			return '-%s__%s' % (prefix, value[1:])
+		else:
+			return prefix + '__' + value
+
+	elif not hasattr(value, 'resolve_expression') or isinstance(value, Value):
+		return value
+
+	# Generic case: use deconstruct() to parse and prefix all args
+	elif isinstance(value, (F, Transform, OrderBy, ExpressionWrapper)):
+		path, args, kwargs = value.deconstruct()
+		args = [prefix_db_expression(arg, prefix) for arg in args]
+		klass = value.__class__
+		return klass(*args, **kwargs)
+
+	elif isinstance(value, CombinedExpression):
+		lhs = prefix_db_expression(value.lhs, prefix)
+		rhs = prefix_db_expression(value.rhs, prefix)
+		return CombinedExpression(lhs, value.connector, rhs, output_field=value._output_field_or_none)
+
+	else:
+		raise ValueError('Unknown expression type, cannot apply db prefix: %s', value)
 
 
 class ModelView(View):
@@ -831,13 +862,7 @@ class ModelView(View):
 			orders = []
 			field_alias = field + '___annotation' if vr else field
 			for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
-				if not isinstance(o, str):
-					logger.warning('Not ordering on WITH for field %s, ordering part %s because it is not a plain string.', field, o)
-				else:
-					if o.startswith('-'):
-						orders.append('-'+field_alias+'__'+o[1:])
-					else:
-						orders.append(field_alias+'__'+o)
+				orders.append(prefix_db_expression(o, field_alias))
 
 			# Virtual relation
 			if vr:

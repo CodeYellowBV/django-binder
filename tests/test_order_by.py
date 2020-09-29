@@ -1,6 +1,8 @@
 import unittest
 
-from django.db.models.functions import Abs, Upper
+from django.db.models.functions import Abs, Upper, Reverse, Length
+from django.db.models import F
+from django.db.models.expressions import OrderBy
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
@@ -221,20 +223,29 @@ class TestOrderBy(TestCase):
 		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
 
 
-		# This is a silly temporary test to ensure we don't crash on
-		# complex OrderBy expression.  We currently just skip these
-		# ordering components, with a warning.
-		#
-		# Looks like checking for logging is unreliable when the level
-		# is not high enough?!
-		#with self.assertLogs('warning'):
-		with CustomOrdering(Animal, 'name', Upper('name').asc()):
+		# Check ordering on complex OrderBy expression.
+		with CustomOrdering(Animal, Upper('name').asc(), '-id'):
 			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
 			self.assertEqual(response.status_code, 200)
 			returned_data = jsonloads(response.content)
 
 		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
 
+		# Complex order by with desc on an F field with an operation on it
+		with CustomOrdering(Animal, OrderBy(Length(F('name')), descending=True), '-name'):
+			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		self.assertEqual(returned_data['data']['animals'], [a9, a8, a7, a6, a5, a4, a3, a2, a1, a0])
+
+		# Nested complex order by
+		with CustomOrdering(Animal, Reverse(Upper('name')), 'id'):
+			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
 
 		with CustomOrdering(Animal, '-name'):
 			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
