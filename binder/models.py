@@ -1,5 +1,6 @@
 import re
 import warnings
+from collections import defaultdict
 from datetime import date, datetime, time
 from contextlib import suppress
 
@@ -448,6 +449,57 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 
 					getattr(cls, ann_name)[attr] = {'field': field, 'expr': expr}
 		return getattr(cls, ann_name)
+
+
+	def save(self, *args, **kwargs):
+		self.full_clean() # Never allow saving invalid models!
+		return super().save(*args, **kwargs)
+
+
+	def full_clean(self, *args, **kwargs):
+		# Determine if the field needs an extra nullability check.
+		# Expects the field object (not the field name)
+		def field_needs_nullability_check(field):
+			if isinstance(field, (models.CharField, models.TextField, models.BooleanField)):
+				if field.blank and not field.null:
+					return True
+
+			return False
+
+
+		validation_errors = defaultdict(list)
+
+		try:
+			res = super().full_clean(*args, **kwargs)
+		except ValidationError as ve:
+			if hasattr(ve, 'error_dict'):
+				for key, value in ve.error_dict.items():
+					validation_errors[key] += value
+			elif hasattr(ve, 'error_list'):
+				for e in ve.error_list:
+					validation_errors['null'].append(e) # XXX
+
+		# Django's standard full_clean() doesn't complain about some
+		# not-NULL fields being None.  This causes save() to explode
+		# with a django.db.IntegrityError because the column is NOT
+		# NULL. Tyvm, Django.  So we perform an extra NULL check for
+		# some cases. See #66, T2989, T9646.
+		for f in self._meta.fields:
+			if field_needs_nullability_check(f):
+				# gettattr on a foreignkey foo gets the related model, while foo_id just gets the id.
+				# We don't need or want the model (nor the DB query), we'll take the id thankyouverymuch.
+				name = f.name + ('_id' if isinstance(f, models.ForeignKey) else '')
+
+				if getattr(self, name) is None and getattr(self, f.name) is None:
+					validation_errors[f.name].append(ValidationError(
+						'This field cannot be null.',
+						code='null',
+					))
+
+		if validation_errors:
+			raise ValidationError(validation_errors)
+		else:
+			return res
 
 
 def history_obj_post_init(sender, instance, **kwargs):

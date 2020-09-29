@@ -32,12 +32,6 @@ class Zoo(BinderModel):
 		return self.animals.count()
 
 
-	# A poor man's version of the django-fullclean package.
-	def save(self, *args, **kwargs):
-		self.full_clean()
-		return super().save(*args, **kwargs)
-
-
 	def clean(self):
 		errors = {}
 

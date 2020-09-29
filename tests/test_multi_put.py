@@ -483,16 +483,13 @@ class MultiPutTest(TestCase):
 	# This apparently only happened in the multi-put, but still....
 	def test_update_model_with_m2m_field_causes_no_error(self):
 		artis = Zoo(name='Artis')
-		artis.full_clean()
 		artis.save()
 
 		contact1 = ContactPerson(name='cp1')
-		contact1.full_clean()
 		contact1.save()
 		contact1.zoos.add(artis)
 
 		contact2 = ContactPerson(name='cp2')
-		contact2.full_clean()
 		contact2.save()
 		contact2.zoos.add(artis)
 

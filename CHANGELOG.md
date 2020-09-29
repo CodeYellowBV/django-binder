@@ -13,6 +13,15 @@ Using `Q()` objects instead of querysets allows making queries in
 `with_ids` without requiring a subquery on filtered relations, which
 can be a big performance win on large tables.
 
+Now, `full_clean` is automatically called upon `save()` of a
+`BinderModel`.  This should not be a huge breaking change because most
+projects "in the wild" are already using the
+[django-fullclean](https://github.com/fish-ball/django-fullclean)
+plugin.  This should reduce the number of checks done while saving
+objects.  However, it also means that if a non-binder model is saved
+it will no longer be validated.  If you want this to happen you need
+to override `_store` to do some checking.
+
 ### Features
 - TextFields can now be filtered with the `isnull` qualifier (#134).
 - Added a new `unupdatable_fields` property to views which lists

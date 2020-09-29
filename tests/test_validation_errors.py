@@ -160,7 +160,6 @@ class TestValidationErrors(TestCase):
 
 	def test_put_validate_max_length(self):
 		model = Animal(name='Harambe')
-		model.full_clean()
 		model.save()
 		model_data = {
 			'name': 'HarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambeHarambe'

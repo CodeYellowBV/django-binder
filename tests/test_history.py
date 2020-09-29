@@ -59,7 +59,6 @@ class HistoryTest(TestCase):
 
 	def test_model_with_history_creates_changes_on_update_but_only_for_changed_fields(self):
 		daffy = Animal(name='Daffy Duck')
-		daffy.full_clean()
 		daffy.save()
 
 		# Model changes outside the HTTP API aren't recorded (should they be?)
@@ -94,10 +93,8 @@ class HistoryTest(TestCase):
 
 	def test_model_with_related_history_model_creates_changes_on_the_same_changeset(self):
 		mickey = Caretaker(name='Mickey')
-		mickey.full_clean()
 		mickey.save()
 		pluto = Animal(name='Pluto')
-		pluto.full_clean()
 		pluto.save()
 
 		# Model changes outside the HTTP API aren't recorded (should they be?)
