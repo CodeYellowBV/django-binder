@@ -1,6 +1,6 @@
 import unittest
 
-from django.db.models.functions import Upper, Reverse, Length
+from django.db.models.functions import Upper, Length
 from django.db.models import F
 from django.db.models.expressions import OrderBy
 from django.test import TestCase, Client
@@ -13,17 +13,22 @@ from .testapp.models import Animal, Costume, Zoo, Caretaker
 import os
 
 
+
 try:
-	from django.db.models.functions import Abs
+	from django.db.models.functions import Abs, Reverse
 except ImportError:
-	# We use the Abs function in this test which was added in Django 2.2,
-	# however we support from Django 2.0 so we define it ourselves if the
-	# import fails
+	# We use the Abs and Reverse functions in this test which were added in
+	# Django 2.2, however we support from Django 2.0 so we define them
+	# ourselves if the import fails
 	from django.db.models import Transform
 
 	class Abs(Transform):
 		function = 'ABS'
 		lookup_name = 'abs'
+
+	class Reverse(Transform):
+		function = 'REVERSE'
+		lookup_name = 'reverse'
 
 
 
