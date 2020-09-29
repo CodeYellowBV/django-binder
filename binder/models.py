@@ -6,10 +6,9 @@ from contextlib import suppress
 
 from django.db import models
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
-from django.db.models import signals, F
+from django.db.models import signals
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
-from django.db.models.expressions import BaseExpression
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
@@ -416,40 +415,6 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 	class Meta:
 		abstract = True
 		ordering = ['pk']
-
-	@classmethod
-	def annotations(cls):
-		ann_name = '_{}__annotations'.format(cls.__name__)
-		if not hasattr(cls, ann_name):
-			setattr(cls, ann_name, {})
-			if hasattr(cls, 'Annotations'):
-				for attr in dir(cls.Annotations):
-					# Check for reserved python internal attribute
-					if attr.startswith('__') and attr.endswith('__'):
-						continue
-
-					expr = getattr(cls.Annotations, attr)
-					fix_output_field(expr, cls)
-
-					if callable(expr) and not isinstance(expr, F) and not isinstance(expr, BaseExpression):
-						expr = expr()
-
-					if isinstance(expr, F):
-						field = expr._output_field_or_none
-					elif isinstance(expr, BaseExpression):
-						field = expr.field.clone()
-						field.name = attr
-						field.model = cls
-					else:
-						warnings.warn(
-							'{}.Annotations.{} was ignored because it is not '
-							'a valid django query expression.'.format(cls.__name__, attr)
-						)
-						continue
-
-					getattr(cls, ann_name)[attr] = {'field': field, 'expr': expr}
-		return getattr(cls, ann_name)
-
 
 	def save(self, *args, **kwargs):
 		self.full_clean() # Never allow saving invalid models!
