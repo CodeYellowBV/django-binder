@@ -421,6 +421,13 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		return super().save(*args, **kwargs)
 
 
+	# This can be overridden in your model when there are special
+	# validation rules like partial indexes that may need to be
+	# recomputed when other fields change.
+	def field_requires_clean_validation(self, field):
+		return self.field_changed(field)
+
+
 	def full_clean(self, exclude=None, *args, **kwargs):
 		# Determine if the field needs an extra nullability check.
 		# Expects the field object (not the field name)
@@ -438,7 +445,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		if hasattr(self, 'field_changed'):
 			exclude = set(exclude) if exclude else set()
 			for f in self.binder_concrete_fields_as_dict(skip_deferred_fields=True):
-				if not self.field_changed(f):
+				if not self.field_requires_clean_validation(f):
 					exclude.add(f)
 
 		validation_errors = defaultdict(list)
