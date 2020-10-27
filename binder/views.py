@@ -655,7 +655,7 @@ class ModelView(View):
 		# head = w.split('.')[0]
 		# scoped_wheres = where_map.get(head, [])
 
-		field_results = self._get_with_ids(pks, request=request, with_map=with_map, where_map=where_map)
+		field_results = self._get_with_ids(pks, request=request, include_annotations=include_annotations, with_map=with_map, where_map=where_map)
 		for (w, (view, new_ids_dict, is_singular)) in field_results.items():
 			model_name = view._model_name()
 			extras_mapping[w] = model_name
@@ -841,7 +841,7 @@ class ModelView(View):
 	# tuple values of (view_class, id_dict).  These ids do not require
 	# permission scoping.  This will be done when fetching the actual
 	# objects.
-	def _get_with_ids(self, pks, request, with_map, where_map):
+	def _get_with_ids(self, pks, request, include_annotations, with_map, where_map):
 		result = {}
 
 		annotations = {}
@@ -856,7 +856,11 @@ class ModelView(View):
 
 			next_relation = self._follow_related(field)[0]
 			view = self.get_model_view(next_relation.model)
-			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None), request)
+			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None), request, {
+				rel[len(field) + 1:]
+				for rel, annotations in include_annotations.items()
+				if rel == field or rel.startswith(field + '.')
+			})
 
 			# Model default orders (this sometimes matters)
 			orders = []
@@ -942,7 +946,7 @@ class ModelView(View):
 				wm_scoped = wm_scoped['subrels'] if wm_scoped else {}
 
 				flattened_ids = [id for ids in rel_ids_by_field_by_id[field].values() for id in ids]
-				subrelations = view._get_with_ids(flattened_ids, request=request, with_map=sub_fields, where_map=wm_scoped)
+				subrelations = view._get_with_ids(flattened_ids, request=request, include_annotations=include_annotations, with_map=sub_fields, where_map=wm_scoped)
 				for subrelation, data in subrelations.items():
 					result['.'.join([field, subrelation])] = data
 
@@ -954,7 +958,7 @@ class ModelView(View):
 	# should further be scoped on.
 	#
 	# Returns a Q object for this field we should filter on further.
-	def _filter_relation(self, field_name, where_map, request):
+	def _filter_relation(self, field_name, where_map, request, include_annotations):
 		# If there are no filters, do nothing
 		if where_map is None:
 			return Q(), False
@@ -965,14 +969,14 @@ class ModelView(View):
 		need_distinct = False
 		for where in wheres:
 			field, val = where.split('=')
-			filter_description = self._parse_filter(field, val, request, field_name+'__' if field_name else '')
+			filter_description = self._parse_filter(field, val, request, include_annotations, field_name+'__' if field_name else '')
 			need_distinct |= filter_description.need_distinct
 			q &= filter_description.filter
 
 		return FilterDescription(q, need_distinct)
 
 
-	def _parse_filter(self, field, value, request, partial=''):
+	def _parse_filter(self, field, value, request, include_annotations, partial=''):
 		head, *tail = field.split('.')
 		need_distinct = False
 
@@ -989,7 +993,7 @@ class ModelView(View):
 			except ValueError:
 				qualifier = None
 
-			q = self._filter_field(head, qualifier, value, invert, request, partial)
+			q = self._filter_field(head, qualifier, value, invert, request, include_annotations, partial)
 		else:
 			q = Q()
 
@@ -1004,7 +1008,7 @@ class ModelView(View):
 				raise related_err
 
 			view = self.get_model_view(related.model)
-			filter_description = view._parse_filter('.'.join(tail), value, request, partial + head + '__')
+			filter_description = view._parse_filter('.'.join(tail), value, request, include_annotations, partial + head + '__')
 			need_distinct |= filter_description.need_distinct
 			q &= filter_description.filter
 
@@ -1021,22 +1025,24 @@ class ModelView(View):
 
 
 
-	def _filter_field(self, field_name, qualifier, value, invert, request, partial=''):
-		annotations = self.annotations(request)
-		if field_name in annotations:
+	def _filter_field(self, field_name, qualifier, value, invert, request, include_annotations, partial=''):
+		try:
+			if field_name in self.hidden_fields:
+				raise models.fields.FieldDoesNotExist()
+			field = self.model._meta.get_field(field_name)
+		except models.fields.FieldDoesNotExist:
+			rel = partial and '.'.join(partial[:-2].split('__'))
+			annotations = include_annotations.get(rel)
+			if annotations is None:
+				annotations = self.annotations(request)
+			if field_name not in annotations:
+				raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, field_name))
 			if partial:
 				# NOTE: This creates a subquery; try to avoid this!
-				qs = annotate(self.model.objects.all(), request)
-				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request))
+				qs = annotate(self.model.objects.all(), request, annotations)
+				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request, include_annotations))
 				return Q(**{partial + 'in': qs})
 			field = annotations[field_name]['field']
-		else:
-			try:
-				if field_name in self.hidden_fields:
-					raise models.fields.FieldDoesNotExist()
-				field = self.model._meta.get_field(field_name)
-			except models.fields.FieldDoesNotExist:
-				raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, field_name))
 
 		for field_class in inspect.getmro(field.__class__):
 			filter_class = self.get_field_filter(field_class)
@@ -1251,7 +1257,7 @@ class ModelView(View):
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
 		for field, values in filters.items():
 			for v in values:
-				q, distinct = self._parse_filter(field, v, request)
+				q, distinct = self._parse_filter(field, v, request, include_annotations)
 				queryset = queryset.filter(q)
 				if distinct:
 					queryset = queryset.distinct()
