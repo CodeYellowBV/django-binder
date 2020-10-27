@@ -857,7 +857,7 @@ class ModelView(View):
 			next_relation = self._follow_related(field)[0]
 			view = self.get_model_view(next_relation.model)
 			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None), request, {
-				rel[len(field) + 1:]
+				rel[len(field) + 1:]: annotations
 				for rel, annotations in include_annotations.items()
 				if rel == field or rel.startswith(field + '.')
 			})
@@ -1040,7 +1040,11 @@ class ModelView(View):
 			if partial:
 				# NOTE: This creates a subquery; try to avoid this!
 				qs = annotate(self.model.objects.all(), request, annotations)
-				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request, include_annotations))
+				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request, {
+					rel_[len(rel) + 1:]: annotations
+					for rel_, annotations in include_annotations.items()
+					if rel_ == rel or rel_.startswith(rel + '.')
+				}))
 				return Q(**{partial + 'in': qs})
 			field = annotations[field_name]['field']
 
