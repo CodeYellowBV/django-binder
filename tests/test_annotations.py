@@ -284,3 +284,17 @@ class IncludeAnnotationsTest(TestCase):
 		self.assertNotIn('bsn', data['with']['caretaker'][0])
 		self.assertNotIn('last_present', data['with']['caretaker'][0])
 		self.assertNotIn('scary', data['with']['caretaker'][0])
+
+	def test_filter_on_relation_with_include_annotations(self):
+		res = self.client.get(
+			'/caretaker/?include_annotations=scary&.animals.name=Harambe'
+		)
+		self.assertEqual(res.status_code, 200)
+
+		data = jsonloads(res.content)
+		self.assertEqual(len(data['data']), 1)
+		self.assertNotIn('animal_count', data['data'][0])
+		self.assertNotIn('best_animal', data['data'][0])
+		self.assertNotIn('bsn', data['data'][0])
+		self.assertNotIn('last_present', data['data'][0])
+		self.assertIn('scary', data['data'][0])
