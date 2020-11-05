@@ -1032,7 +1032,7 @@ class ModelView(View):
 			field = self.model._meta.get_field(field_name)
 		except models.fields.FieldDoesNotExist:
 			rel = partial and '.'.join(partial[:-2].split('__'))
-			annotations = self.annotations(request, include_annotations.get(rel))
+			annotations = self.annotations(request, {'': include_annotations.get(rel)})
 			if field_name not in annotations:
 				raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, field_name))
 			if partial:
