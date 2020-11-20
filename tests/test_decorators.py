@@ -23,3 +23,8 @@ class HandleExceptionsTest(TestCase):
 		self.assertEqual(res.status_code, 418)
 
 		self.assertEqual(Zoo.objects.count(), 0)
+
+	def test_method_not_allowed(self):
+		client = Client()
+		res = client.post('/handle_exceptions/')
+		self.assertEqual(res.status_code, 405)

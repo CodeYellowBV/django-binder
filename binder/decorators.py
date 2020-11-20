@@ -6,7 +6,7 @@ from django.http.request import RawPostDataException
 from django.db import transaction
 
 from .views import ellipsize
-from .exceptions import BinderException
+from .exceptions import BinderException, BinderMethodNotAllowed
 
 
 def view_logger(logger, log_request_body=True):
@@ -66,3 +66,21 @@ def handle_exceptions(view):
 		except BinderException as e:
 			return e.response(request)
 	return decorated
+
+
+def allowed_methods(*methods):
+	# Convert methods to ordered list with no repetition
+	# So technically with a list the method check is now O(n) instead of O(1)
+	# as with a set, but since there are only 9 HTTP methods this is fine and
+	# a list allows us to directly use the methods in the error
+	methods = list(sorted(set(methods)))
+
+	def decorator(view):
+		@wraps(view)
+		def decorated(request, *args, **kwargs):
+			if request.method not in methods:
+				raise BinderMethodNotAllowed(methods)
+			return view(request, *args, **kwargs)
+		return decorated
+
+	return decorator

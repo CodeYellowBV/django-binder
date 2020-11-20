@@ -1,12 +1,13 @@
 from django.http import HttpResponse
 
-from binder.decorators import handle_exceptions
+from binder.decorators import handle_exceptions, allowed_methods
 from binder.exceptions import BinderRequestError
 
 from ..models import Zoo
 
 
 @handle_exceptions
+@allowed_methods('GET')
 def handle_exceptions_view(request):
 	# We create a model so we can test transaction rollback on error
 	Zoo.objects.create(name='Test zoo')
