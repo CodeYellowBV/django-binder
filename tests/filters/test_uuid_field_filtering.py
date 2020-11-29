@@ -25,19 +25,15 @@ class UUIDFieldFilteringTest(TestCase):
 		self.artis.save()
 
 		fabbby = Caretaker(name='fabbby')
-		fabbby.full_clean()
 		fabbby.save()
 
 		door1 = Gate(zoo=self.gaia, keeper=fabbby, serial_number=None)
-		door1.full_clean()
 		door1.save()
 
 		door2 = Gate(zoo=self.emmen, keeper=fabbby, serial_number='{2e93ec15-2d68-477d-960f-52779ef6198b}')
-		door2.full_clean()
 		door2.save()
 
 		door3 = Gate(zoo=self.artis, keeper=fabbby, serial_number='3e93ec15-2d68-477d-960f-52779ef6198b')
-		door3.full_clean()
 		door3.save()
 
 

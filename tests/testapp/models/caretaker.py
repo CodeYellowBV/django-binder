@@ -1,6 +1,8 @@
 from django.db import models
-from django.db.models import Count, F, Max
-from binder.models import BinderModel
+from django.db.models import Count, F, Max, Value
+
+from binder.models import BinderModel, OptionalAnnotation
+
 
 class Caretaker(BinderModel):
 	name = models.TextField()
@@ -22,3 +24,6 @@ class Caretaker(BinderModel):
 		animal_count = Count('animals')
 		bsn = F('ssn')  # simple alias
 		last_present = F('last_seen')
+		scary = OptionalAnnotation(
+			Value('boo!', output_field=models.TextField())
+		)

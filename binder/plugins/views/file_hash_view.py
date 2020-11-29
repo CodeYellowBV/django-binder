@@ -54,7 +54,7 @@ class FileHashView:
         else:
             return '?' + '&'.join(params)
 
-    def _get_objs(self, queryset, request=None):
+    def _get_objs(self, queryset, request=None, annotations=None):
         params = {
             obj.pk: {
                 field: self._get_params(obj, field)
@@ -65,7 +65,7 @@ class FileHashView:
             for obj in queryset
         }
 
-        data = super()._get_objs(queryset, request)
+        data = super()._get_objs(queryset, request, annotations)
 
         for obj in data:
             obj.update({

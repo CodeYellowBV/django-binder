@@ -1,7 +1,13 @@
 from django.db import models
-from binder.models import BinderModel
+from django.db.models import Value, F, Func
+from binder.models import BinderModel, ContextAnnotation
 from binder.exceptions import BinderValidationError
 from binder.plugins.loaded_values import LoadedValuesMixin
+
+
+class Concat(Func):
+	function = 'CONCAT'
+	output_field = models.TextField()
 
 # From the api docs: an animal with a name.
 class Animal(LoadedValuesMixin, BinderModel):
@@ -22,3 +28,9 @@ class Animal(LoadedValuesMixin, BinderModel):
 
 	class Binder:
 		history = True
+
+	class Annotations:
+		prefixed_name = ContextAnnotation(lambda request: Concat(
+			Value(request.GET.get('animal_name_prefix', 'Sir') + ' '),
+			F('name'),
+		))

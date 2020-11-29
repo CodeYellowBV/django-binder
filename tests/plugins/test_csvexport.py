@@ -25,7 +25,7 @@ class CsvExportTest(TestCase):
 		return f
 
 	def setUp(self):
-		animal = Animal()
+		animal = Animal(name='test')
 		animal.save()
 
 		self.pictures = []

@@ -1,14 +1,17 @@
+from functools import partial
+
 from django.contrib.auth.models import User
-from django.db.models import Q
+from django.db import models
+from django.db.models import Q, Case, When, Value
 from django.http import HttpResponse
 
 from binder.json import jsondumps
 from binder.permissions.views import PermissionView
-from binder.plugins.views import UserViewMixIn
+from binder.plugins.views import UserViewMixIn, MasqueradeMixin
 from binder.router import list_route
 
 
-class UserView(UserViewMixIn, PermissionView):
+class UserView(MasqueradeMixin, UserViewMixIn, PermissionView):
 	model = User
 
 	hidden_fields = ['password', 'is_staff', 'date_joined']

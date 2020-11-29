@@ -33,7 +33,6 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_model_with_valid_id(self):
 		daffy = Animal(name='Daffy Duck')
-		daffy.full_clean()
 		daffy.save()
 
 		response = self.client.get('/animal/%d/' % (daffy.pk,))
@@ -59,7 +58,6 @@ class ModelViewBasicsTest(TestCase):
 		Test that the properties under shown_properties are added to the result of a get model request
 		"""
 		gaia = Zoo(name='GaiaZOO')
-		gaia.full_clean()
 		gaia.save()
 
 		response = self.client.get('/zoo/{}/'.format(gaia.id))
@@ -71,7 +69,6 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(0, result['data']['animal_count'])
 
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
-		coyote.full_clean()
 		coyote.save()
 
 		response = self.client.get('/zoo/{}/'.format(gaia.id))
@@ -93,23 +90,18 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_collection_sorting(self):
 		gaia = Zoo(name='GaiaZOO')
-		gaia.full_clean()
 		gaia.save()
 
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
-		emmen.full_clean()
 		emmen.save()
 
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
-		coyote.full_clean()
 		coyote.save()
 
 		roadrunner = Animal(name='Roadrunner', zoo=gaia)
-		roadrunner.full_clean()
 		roadrunner.save()
 
 		woody = Animal(name='Woody Woodpecker', zoo=emmen)
-		woody.full_clean()
 		woody.save()
 
 		response = self.client.get('/animal/', data={'order_by': 'name'})
@@ -166,31 +158,24 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_collection_filtering(self):
 		gaia = Zoo(name='GaiaZOO')
-		gaia.full_clean()
 		gaia.save()
 
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
-		emmen.full_clean()
 		emmen.save()
 
 		artis = Zoo(name='Artis')
-		artis.full_clean()
 		artis.save()
 
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
-		coyote.full_clean()
 		coyote.save()
 
 		roadrunner = Animal(name='Roadrunner', zoo=gaia)
-		roadrunner.full_clean()
 		roadrunner.save()
 
 		woody = Animal(name='Woody Woodpecker', zoo=emmen)
-		woody.full_clean()
 		woody.save()
 
 		donald = Animal(name='Donald Duck', zoo=artis)
-		donald.full_clean()
 		donald.save()
 
 		response = self.client.get('/animal/', data={'.name': 'Wile E. Coyote'})
@@ -289,31 +274,24 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_collection_with_foreignkey(self):
 		gaia = Zoo(name='GaiaZOO')
-		gaia.full_clean()
 		gaia.save()
 
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
-		emmen.full_clean()
 		emmen.save()
 
 		artis = Zoo(name='Artis')
-		artis.full_clean()
 		artis.save()
 
 		harderwijk = Zoo(name='Dolfinarium Harderwijk') # Should not be in result set
-		harderwijk.full_clean()
 		harderwijk.save()
 
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
-		coyote.full_clean()
 		coyote.save()
 
 		roadrunner = Animal(name='Roadrunner', zoo=gaia)
-		roadrunner.full_clean()
 		roadrunner.save()
 
 		woody = Animal(name='Woody Woodpecker', zoo=emmen, zoo_of_birth=artis)
-		woody.full_clean()
 		woody.save()
 
 		# Quick check that foreign key relations are excluded unless we ask for them
@@ -353,29 +331,23 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_collection_with_reverse_foreignkey(self):
 		gaia = Zoo(name='GaiaZOO')
-		gaia.full_clean()
 		gaia.save()
 
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
-		emmen.full_clean()
 		emmen.save()
 
 		artis = Zoo(name='Artis')
-		artis.full_clean()
 		artis.save()
 
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
-		coyote.full_clean()
 		coyote.save()
 
 		roadrunner = Animal(name='Roadrunner', zoo=gaia)
-		roadrunner.full_clean()
 		roadrunner.save()
 
 		gaia.most_popular_animals.add(coyote)
 
 		woody = Animal(name='Woody Woodpecker', zoo=emmen, zoo_of_birth=artis)
-		woody.full_clean()
 		woody.save()
 
 		# Quick check that foreign key relations are excluded unless we ask for them
@@ -449,19 +421,15 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_collection_with_reverse_foreignkey_through_other_relation(self):
 		gaia = Zoo(name='GaiaZOO')
-		gaia.full_clean()
 		gaia.save()
 
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
-		coyote.full_clean()
 		coyote.save()
 
 		roadrunner = Animal(name='Roadrunner', zoo=gaia)
-		roadrunner.full_clean()
 		roadrunner.save()
 
 		henk = ZooEmployee(zoo=gaia, name='Henk')
-		henk.full_clean()
 		henk.save()
 
 		response = self.client.get('/zoo_employee/%s/' % henk.id, data={'with': 'zoo.animals'})
@@ -486,29 +454,23 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_collection_with_disabled_reverse_foreignkey(self):
 		gaia = Zoo(name='GaiaZOO')
-		gaia.full_clean()
 		gaia.save()
 
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
-		emmen.full_clean()
 		emmen.save()
 
 		artis = Zoo(name='Artis')
-		artis.full_clean()
 		artis.save()
 
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
-		coyote.full_clean()
 		coyote.save()
 
 		gaia.most_popular_animals.add(coyote)
 
 		roadrunner = Animal(name='Roadrunner', zoo=gaia)
-		roadrunner.full_clean()
 		roadrunner.save()
 
 		woody = Animal(name='Woody Woodpecker', zoo=emmen, zoo_of_birth=artis)
-		woody.full_clean()
 		woody.save()
 
 		# Quick check that foreign key relations are excluded unless we ask for them
@@ -554,24 +516,19 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_collection_with_one_to_one(self):
 		scrooge = Animal(name='Scrooge McDuck')
-		scrooge.full_clean()
 		scrooge.save()
 
 		frock = Costume(description="Gentleman's frock coat", animal=scrooge)
-		frock.full_clean()
 		frock.save()
 
 		donald = Animal(name='Donald Duck')
-		donald.full_clean()
 		donald.save()
 
 		sailor = Costume(description='Weird sailor costume', animal=donald)
-		sailor.full_clean()
 		sailor.save()
 
 		# This animal goes naked
 		pluto = Animal(name='Pluto')
-		pluto.full_clean()
 		pluto.save()
 
 
@@ -604,15 +561,12 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_model_with_relation_without_id(self):
 		gaia = Zoo(name='GaiaZOO')
-		gaia.full_clean()
 		gaia.save()
 
 		fabbby = Caretaker(name='fabbby')
-		fabbby.full_clean()
 		fabbby.save()
 
 		door = Gate(zoo=gaia, keeper=fabbby)
-		door.full_clean()
 		door.save()
 
 		response = self.client.get('/zoo/{}/'.format(gaia.id), data={'with': 'gate.keeper'})
@@ -632,27 +586,21 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_get_collection_filtering_following_nested_references(self):
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
-		emmen.full_clean()
 		emmen.save()
 
 		gaia = Zoo(name='GaiaZOO')
-		gaia.full_clean()
 		gaia.save()
 
 		scrooge = Animal(name='Scrooge McDuck', zoo=gaia)
-		scrooge.full_clean()
 		scrooge.save()
 
 		frock = Costume(description="Gentleman's frock coat", animal=scrooge)
-		frock.full_clean()
 		frock.save()
 
 		donald = Animal(name='Donald Duck', zoo=emmen)
-		donald.full_clean()
 		donald.save()
 
 		sailor = Costume(description='Weird sailor costume', animal=donald)
-		sailor.full_clean()
 		sailor.save()
 
 
@@ -690,7 +638,6 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_post_new_model_with_foreign_key_value(self):
 		artis = Zoo(name='Artis')
-		artis.full_clean()
 		artis.save()
 
 		model_data = {
@@ -713,7 +660,6 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_post_new_model_with_one_to_one_value(self):
 		donald = Animal(name='Donald Duck')
-		donald.full_clean()
 		donald.save()
 
 		model_data = {
@@ -735,15 +681,12 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_post_new_model_with_reverse_foreign_key_multi_value(self):
 		scooby = Animal(name='Scooby Doo')
-		scooby.full_clean()
 		scooby.save()
 
 		scrappy = Animal(name='Scrappy Doo')
-		scrappy.full_clean()
 		scrappy.save()
 
 		woody = Animal(name='Woody Woodpecker')
-		woody.full_clean()
 		woody.save()
 
 		model_data = {
@@ -767,7 +710,6 @@ class ModelViewBasicsTest(TestCase):
 
 	def test_post_put_respect_with_clause(self):
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
-		emmen.full_clean()
 		emmen.save()
 
 		model_data = {

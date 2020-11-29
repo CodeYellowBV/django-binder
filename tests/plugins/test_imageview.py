@@ -37,7 +37,7 @@ class ImageTest(TestCase):
 		return f
 
 	def _get_picture(self, width, height):
-		animal = Animal()
+		animal = Animal(name='test')
 		animal.save()
 
 		file = ImageTest.temp_imagefile(width, height, 'jpeg')

@@ -29,19 +29,15 @@ class PostgresFieldsTest(TestCase):
 		gaia.save()
 
 		coyote = Animal(name='Wile E. Coyote', zoo=gaia)
-		coyote.full_clean()
 		coyote.save()
 
 		roadrunner = Animal(name='Roadrunner', zoo=gaia)
-		roadrunner.full_clean()
 		roadrunner.save()
 
 		self.coyote_feeding = FeedingSchedule(animal=coyote, foods=['meat'], schedule_details={'10:30': ['meat'], '16:00': ['meat']})
-		self.coyote_feeding.full_clean()
 		self.coyote_feeding.save()
 
 		self.rr_feeding = FeedingSchedule(animal=roadrunner, foods=['corn', 'bugs'], schedule_details={'10:30': ['corn'], '16:00': ['corn', 'bugs']})
-		self.rr_feeding.full_clean()
 		self.rr_feeding.save()
 
 

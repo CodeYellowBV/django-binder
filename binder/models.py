@@ -2,6 +2,7 @@ import re
 import warnings
 import hashlib
 import mimetypes
+from collections import defaultdict
 from datetime import date, datetime, time
 from contextlib import suppress
 
@@ -14,9 +15,9 @@ from django.db.models import signals, F
 from django.core import checks
 from django.core.files.base import File
 from django.core.files.images import ImageFile
+from django.db.models import signals
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
-from django.db.models.expressions import BaseExpression
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.utils.dateparse import parse_date, parse_datetime
@@ -26,25 +27,6 @@ from binder.json import jsonloads
 from binder.exceptions import BinderRequestError
 
 from . import history
-
-
-def fix_output_field(expr, model):
-	if isinstance(expr, F):
-		path = expr.name.split('__')
-		for key in path[:-1]:
-			field = model._meta.get_field(key)
-			model = (
-				field.related_model
-				if isinstance(field, ForeignObjectRel) else
-				field.remote_field.model
-			)
-		expr._output_field_or_none = model._meta.get_field(path[-1])
-	elif isinstance(expr, BaseExpression):
-		try:
-			expr.field
-		except AttributeError:
-			for subexpr in expr.get_source_expressions():
-				fix_output_field(subexpr, model)
 
 
 class CaseInsensitiveCharField(CITextField):
@@ -356,7 +338,7 @@ class ArrayFieldFilter(FieldFilter):
 			return []
 		else:
 			values = v.split(',')
-			return map(lambda v: filter.clean_value(qualifier, v), values)
+			return list(map(lambda v: filter.clean_value(qualifier, v), values))
 
 
 class JSONFieldFilter(FieldFilter):
@@ -444,38 +426,71 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		abstract = True
 		ordering = ['pk']
 
-	@classmethod
-	def annotations(cls):
-		ann_name = '_{}__annotations'.format(cls.__name__)
-		if not hasattr(cls, ann_name):
-			setattr(cls, ann_name, {})
-			if hasattr(cls, 'Annotations'):
-				for attr in dir(cls.Annotations):
-					# Check for reserved python internal attribute
-					if attr.startswith('__') and attr.endswith('__'):
-						continue
+	def save(self, *args, **kwargs):
+		self.full_clean() # Never allow saving invalid models!
+		return super().save(*args, **kwargs)
 
-					expr = getattr(cls.Annotations, attr)
-					fix_output_field(expr, cls)
 
-					if callable(expr) and not isinstance(expr, F) and not isinstance(expr, BaseExpression):
-						expr = expr()
+	# This can be overridden in your model when there are special
+	# validation rules like partial indexes that may need to be
+	# recomputed when other fields change.
+	def field_requires_clean_validation(self, field):
+		return self.field_changed(field)
 
-					if isinstance(expr, F):
-						field = expr._output_field_or_none
-					elif isinstance(expr, BaseExpression):
-						field = expr.field.clone()
-						field.name = attr
-						field.model = cls
-					else:
-						warnings.warn(
-							'{}.Annotations.{} was ignored because it is not '
-							'a valid django query expression.'.format(cls.__name__, attr)
-						)
-						continue
 
-					getattr(cls, ann_name)[attr] = {'field': field, 'expr': expr}
-		return getattr(cls, ann_name)
+	def full_clean(self, exclude=None, *args, **kwargs):
+		# Determine if the field needs an extra nullability check.
+		# Expects the field object (not the field name)
+		def field_needs_nullability_check(field):
+			if isinstance(field, (models.CharField, models.TextField, models.BooleanField)):
+				if field.blank and not field.null:
+					return True
+
+			return False
+
+
+		# Gather unchanged fields if LoadedValues mixin available, to
+		# avoid querying uniqueness constraints for unchanged
+		# relations (an useful performance optimization).
+		if hasattr(self, 'field_changed'):
+			exclude = set(exclude) if exclude else set()
+			for f in self.binder_concrete_fields_as_dict(skip_deferred_fields=True):
+				if not self.field_requires_clean_validation(f):
+					exclude.add(f)
+
+		validation_errors = defaultdict(list)
+
+		try:
+			res = super().full_clean(exclude=exclude, *args, **kwargs)
+		except ValidationError as ve:
+			if hasattr(ve, 'error_dict'):
+				for key, value in ve.error_dict.items():
+					validation_errors[key] += value
+			elif hasattr(ve, 'error_list'):
+				for e in ve.error_list:
+					validation_errors['null'].append(e) # XXX
+
+		# Django's standard full_clean() doesn't complain about some
+		# not-NULL fields being None.  This causes save() to explode
+		# with a django.db.IntegrityError because the column is NOT
+		# NULL. Tyvm, Django.  So we perform an extra NULL check for
+		# some cases. See #66, T2989, T9646.
+		for f in self._meta.fields:
+			if field_needs_nullability_check(f):
+				# gettattr on a foreignkey foo gets the related model, while foo_id just gets the id.
+				# We don't need or want the model (nor the DB query), we'll take the id thankyouverymuch.
+				name = f.name + ('_id' if isinstance(f, models.ForeignKey) else '')
+
+				if getattr(self, name) is None and getattr(self, f.name) is None:
+					validation_errors[f.name].append(ValidationError(
+						'This field cannot be null.',
+						code='null',
+					))
+
+		if validation_errors:
+			raise ValidationError(validation_errors)
+		else:
+			return res
 
 
 def history_obj_post_init(sender, instance, **kwargs):
@@ -867,3 +882,24 @@ class BinderImageField(BinderFileField):
 			'form_class': forms.ImageField,
 			**kwargs,
 		})
+
+
+class ContextAnnotation:
+
+	def __init__(self, func):
+		self._func = func
+
+	def get(self, request):
+		return self._func(request)
+
+
+class OptionalAnnotation:
+
+	def __init__(self, expr):
+		self._expr = expr
+
+	def get(self, request):
+		if isinstance(self._expr, ContextAnnotation):
+			return self._expr.get(request)
+		else:
+			return self._expr

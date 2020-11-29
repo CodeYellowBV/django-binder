@@ -50,11 +50,9 @@ class WebsocketTest(TestCase):
 	@override_settings(HIGH_TEMPLAR_URL="http://localhost:8002")
 	def test_post_save_trigger(self, mock):
 		doggo = Animal(name='Woofer')
-		doggo.full_clean()
 		doggo.save()
 
 		costume = Costume(nickname='Gnarls Barker', description='Foo Bark', animal=doggo)
-		costume.full_clean()
 		costume.save()
 		self.assertEqual(1, requests.post.call_count)
 		mock.assert_called_with('http://localhost:8002/trigger/', data=json.dumps({
@@ -64,11 +62,9 @@ class WebsocketTest(TestCase):
 
 	def test_post_succeeds_when_trigger_fails(self):
 		doggo = Animal(name='Woofer')
-		doggo.full_clean()
 		doggo.save()
 
 		costume = Costume(nickname='Gnarls Barker', description='Foo Bark', animal=doggo)
-		costume.full_clean()
 		costume.save()
 
 		self.assertIsNotNone(costume.pk)

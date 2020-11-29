@@ -1,5 +1,8 @@
 import unittest
 
+from django.db.models.functions import Upper, Length
+from django.db.models import F
+from django.db.models.expressions import OrderBy
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
@@ -11,17 +14,35 @@ import os
 
 
 
+try:
+	from django.db.models.functions import Abs, Reverse
+except ImportError:
+	# We use the Abs and Reverse functions in this test which were added in
+	# Django 2.2, however we support from Django 2.0 so we define them
+	# ourselves if the import fails
+	from django.db.models import Transform
+
+	class Abs(Transform):
+		function = 'ABS'
+		lookup_name = 'abs'
+
+	class Reverse(Transform):
+		function = 'REVERSE'
+		lookup_name = 'reverse'
+
+
+
 class CustomOrdering:
-	def __init__(self, cls, order):
+	def __init__(self, cls, *order):
 		self.cls = cls
 		self.order = order
 
 	def __enter__(self):
-		self.old = self.cls._meta.ordering[0]
-		self.cls._meta.ordering[0] = self.order
+		self.old = self.cls._meta.ordering
+		self.cls._meta.ordering = self.order
 
 	def __exit__(self, *args, **kwargs):
-		self.cls._meta.ordering[0] = self.old
+		self.cls._meta.ordering = self.old
 
 
 
@@ -146,6 +167,15 @@ class TestOrderBy(TestCase):
 		self.assertEqual(data, [self.a4.pk, self.a1.pk, self.a3.pk, self.a2.pk])
 
 
+	def test_order_expression_customdefault(self):
+		with CustomOrdering(Costume, Abs('animal_id').desc()):
+			response = self.client.get('/costume/?order_by=-description')
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		data = [x['id'] for x in returned_data['data']]
+		self.assertEqual(data, [self.a4.pk, self.a1.pk, self.a3.pk, self.a2.pk])
+
 
 	# Order by -description, custom model default on related model (-animal.name)
 	# This would break due to Django vs Binder related object syntax mismatch and
@@ -204,6 +234,31 @@ class TestOrderBy(TestCase):
 		a1 = Animal.objects.create(zoo_id=z.id, name='a1').id
 
 		with CustomOrdering(Animal, 'name'):
+			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
+
+
+		# Check ordering on complex OrderBy expression.
+		with CustomOrdering(Animal, Upper('name').asc(), '-id'):
+			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		self.assertEqual(returned_data['data']['animals'], [a0, a1, a2, a3, a4, a5, a6, a7, a8, a9])
+
+		# Complex order by with desc on an F field with an operation on it
+		with CustomOrdering(Animal, OrderBy(Length(F('name')), descending=True), '-name'):
+			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
+			self.assertEqual(response.status_code, 200)
+			returned_data = jsonloads(response.content)
+
+		self.assertEqual(returned_data['data']['animals'], [a9, a8, a7, a6, a5, a4, a3, a2, a1, a0])
+
+		# Nested complex order by
+		with CustomOrdering(Animal, Reverse(Upper('name')), 'id'):
 			response = self.client.get('/zoo/{}/?with=animals'.format(z.id))
 			self.assertEqual(response.status_code, 200)
 			returned_data = jsonloads(response.content)
