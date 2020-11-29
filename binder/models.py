@@ -8,10 +8,8 @@ from contextlib import suppress
 
 from django import forms
 from django.db import models
-from django.db.models.fields.reverse_related import ForeignObjectRel
 from django.db.models.fields.files import FieldFile, FileField
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
-from django.db.models import signals, F
 from django.core import checks
 from django.core.files.base import File
 from django.core.files.images import ImageFile
