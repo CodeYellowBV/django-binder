@@ -37,10 +37,10 @@ class BinderFileFieldTest(TestCase):
 		zoo.picture = ContentFile(CONTENT, name='pic.jpg')
 		zoo.save()
 
-		response = self.client.get(f'/zoo/{zoo.pk}/')
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
 		data = jsonloads(response.content)
 		self.assertEqual(
 			data['data']['picture'],
-			f'/zoo/{zoo.pk}/picture/pic.jpg?h={HASH}&content_type=image/jpeg',
+			'/zoo/{}/picture/pic.jpg?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
 		)
