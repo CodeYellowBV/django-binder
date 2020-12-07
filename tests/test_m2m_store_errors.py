@@ -19,8 +19,8 @@ class M2MStoreErrorsTest(TestCase):
 		self.assertTrue(r)
 
 	# When a model can not be saved due to validation errors its corresponding m2m models should also not be saved
-	# and correctly return a 418 validation error instead of a 500 error after still trying to save the m2m model
-	def test_saving_m2m_models_return_correct_418(self):
+	# and correctly return a 400 validation error instead of a 500 error after still trying to save the m2m model
+	def test_saving_m2m_models_return_correct_400(self):
 		model_data = {"data": [
 			{
 				"id": -4,
