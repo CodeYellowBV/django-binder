@@ -34,4 +34,3 @@ class M2MStoreErrorsTest(TestCase):
 		}
 		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 400)
-		print(response.body)
