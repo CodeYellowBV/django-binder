@@ -710,10 +710,10 @@ class ModelView(View):
 					annotation_ids.setdefault(rannotations, set()).update(rids)
 
 			extras_dict[model_name] = []
+			view = view()
+			# {router-view-instance}
+			view.router = self.router
 			for annotations, with_pks in annotation_ids.items():
-				view = view()
-				# {router-view-instance}
-				view.router = self.router
 				objs = view._get_objs(
 					annotate(view.get_queryset(request).filter(pk__in=with_pks), request, annotations),
 					request=request,
