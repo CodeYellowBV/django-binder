@@ -1496,7 +1496,9 @@ class ModelView(View):
 				return
 			getattr(obj, field).set(value)
 		elif any(f.name == field for f in self.model._meta.many_to_many):
-			getattr(obj, field).set(value)
+			# Only try saving an m2m field if the base model field save was succesfull (checked by looking if it has id)
+			if obj.id:
+				getattr(obj, field).set(value)
 		else:
 			setattr(obj, field, value)
 
