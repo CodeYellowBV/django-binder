@@ -32,6 +32,22 @@ class BinderFileFieldTest(TestCase):
 		self.assertEqual(zoo2.picture.content_type, 'image/jpeg')
 		self.assertEqual(zoo2.picture.content_hash, HASH)
 
+	def test_post(self):
+		zoo = Zoo(name='Apenheul')
+
+		with temp_imagefile(100, 200, 'jpeg') as picture:
+			response = self.client.post('/zoo/%s/picture/' % zoo.id, data={'file': picture})
+			self.assertEqual(response.status_code, 200)
+
+			zoo.refresh_from_db()
+			response = self.client.get('/zoo/{}/'.format(zoo.pk))
+			self.assertEqual(response.status_code, 200)
+			data = jsonloads(response.content)
+			self.assertEqual(
+				data['data']['picture'],
+					'/zoo/{}/picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
+			)
+
 	def test_get(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.picture = ContentFile(CONTENT, name='pic.jpg')
