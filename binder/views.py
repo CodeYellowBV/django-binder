@@ -2,7 +2,6 @@ import logging
 import time
 import io
 import inspect
-import re
 import os
 import hashlib
 import datetime
@@ -446,12 +445,6 @@ class ModelView(View):
 		]
 
 
-	def get_original_filename(self, file):
-		filename = file.name.split('/')[-1]
-		if '.' in filename:
-			return re.sub(r'_[a-zA-Z0-9]{7}\.', '.', filename)
-		return re.sub(r'_[a-zA-Z0-9]{7}$', '', filename)
-
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
@@ -488,7 +481,7 @@ class ModelView(View):
 					file = getattr(obj, f.attname)
 					if file:
 						# {router-view-instance}
-						data[f.name] = self.router.model_route(self.model, obj.id, f) + self.get_original_filename(file)
+						data[f.name] = self.router.model_route(self.model, obj.id, f)
 						if isinstance(f, BinderFileField):
 							data[f.name] += (
 								'?h={}'.format(file.content_hash) +

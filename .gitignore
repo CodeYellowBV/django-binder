@@ -3,7 +3,6 @@
 /django_binder.egg-info/
 /binder/django_binder.egg-info/
 /dist/
-/build/
 __pycache__/
 venv
 *.egg
