@@ -587,7 +587,7 @@ class BinderFieldFile(FieldFile):
 
 	@property
 	def content_hash(self):
-		if self.name is None:
+		if not self.name:
 			self._content_hash = None
 		elif self._content_hash is None:
 			hasher = hashlib.sha1()
@@ -602,7 +602,7 @@ class BinderFieldFile(FieldFile):
 
 	@property
 	def content_type(self):
-		if self.name is None:
+		if not self.name:
 			self._content_type = None
 		elif self._content_type is None:
 			self._content_type, _ = mimetypes.guess_type(self.path)
@@ -720,7 +720,7 @@ class BinderFileField(FileField):
 		return super().__init__(*args, **kwargs)
 
 	def get_prep_value(self, value):
-		if value is None or value.name is None:
+		if not value or value.name is None:
 			return None
 
 		return serialize_tuple((

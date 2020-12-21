@@ -1,6 +1,7 @@
 from django.test import TestCase, Client
 from django.core.files.base import ContentFile
 from django.contrib.auth.models import User
+from django.db import connection
 
 from binder.json import jsonloads
 
@@ -54,6 +55,33 @@ class BinderFileFieldTest(TestCase):
 		zoo = Zoo(name='Apenheul')
 		zoo.picture = ContentFile(CONTENT, name='pic.jpg')
 		zoo.save()
+
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+		self.assertEqual(
+			data['data']['picture'],
+			'/zoo/{}/picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
+		)
+
+	def test_setting_blank_works(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.picture = ''
+		zoo.save()
+
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+		self.assertIsNone(data['data']['picture'])
+
+	def test_upgrade_from_normal_file_field_with_existing_data_works(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		ContentFile(CONTENT, name='pic.jpg')
+		with connection.cursor() as cur:
+			# Update db directly to mimic existing records.
+			cur.execute("UPDATE {} set picture='pic.jpg'".format(zoo._meta.db_table))
 
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
