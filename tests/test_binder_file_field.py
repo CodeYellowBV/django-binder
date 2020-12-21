@@ -35,9 +35,11 @@ class BinderFileFieldTest(TestCase):
 
 	def test_post(self):
 		zoo = Zoo(name='Apenheul')
+		zoo.save()
 
 		with temp_imagefile(100, 200, 'jpeg') as picture:
 			response = self.client.post('/zoo/%s/picture/' % zoo.id, data={'file': picture})
+			print(response.content)
 			self.assertEqual(response.status_code, 200)
 
 			zoo.refresh_from_db()
