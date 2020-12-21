@@ -663,11 +663,14 @@ class BinderFileDescriptor:
 		# object understands how to convert a path to a file, and also how to
 		# handle None.
 		if isinstance(file, str) or file is None:
+			content_hash = None
+			content_type = None
 			if file is not None:
-				file, content_hash, content_type = parse_tuple(file)
-			else:
-				content_hash = None
-				content_type = None
+				data = parse_tuple(file)
+				try:
+					file, content_hash, content_type = data
+				except ValueError:
+					pass
 			attr = self.field.attr_class(
 				instance, self.field, file, content_hash, content_type,
 			)

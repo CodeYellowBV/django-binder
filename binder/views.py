@@ -483,9 +483,9 @@ class ModelView(View):
 						# {router-view-instance}
 						data[f.name] = self.router.model_route(self.model, obj.id, f)
 						if isinstance(f, BinderFileField):
-							data[f.name] += (
-								'?h={}'.format(file.content_hash) +
-								'&content_type={}'.format(file.content_type)
+							data[f.name] += '?h={}&content_type={}'.format(
+								file.content_hash,
+								file.content_type,
 							)
 					else:
 						data[f.name] = None
