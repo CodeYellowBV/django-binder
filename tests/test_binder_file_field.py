@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from binder.json import jsonloads
 
 from .testapp.models import Zoo
+from .utils import temp_imagefile
 
 
 CONTENT = b'een foto met die stenen gorilla bij de ingang'
