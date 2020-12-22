@@ -64,7 +64,7 @@ class BinderFileFieldTest(TestCase):
 			'/zoo/{}/picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
 		)
 
-	def test_setting_blank_works(self):
+	def test_setting_blank(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.picture = ''
 		zoo.save()
@@ -74,7 +74,7 @@ class BinderFileFieldTest(TestCase):
 		data = jsonloads(response.content)
 		self.assertIsNone(data['data']['picture'])
 
-	def test_setting_blank_for_not_nullable_works(self):
+	def test_setting_blank_for_not_nullable(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.picture_not_null = ''
 		zoo.save()
@@ -84,7 +84,14 @@ class BinderFileFieldTest(TestCase):
 		data = jsonloads(response.content)
 		self.assertIsNone(data['data']['picture_not_null'])
 
-	def test_upgrade_from_normal_file_field_with_existing_data_works(self):
+	def test_deleting_not_nullable(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.picture_not_null = ContentFile(CONTENT, name='pic.jpg')
+		zoo.save()
+
+		zoo.picture_not_null.delete()
+
+	def test_upgrade_from_normal_file_field_with_existing_data(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
 
