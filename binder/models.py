@@ -720,6 +720,9 @@ class BinderFileField(FileField):
 		return super().__init__(*args, **kwargs)
 
 	def get_prep_value(self, value):
+		if value == '':
+			return ''
+
 		if not value or value.name is None:
 			return None
 

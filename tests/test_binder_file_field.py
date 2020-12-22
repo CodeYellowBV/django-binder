@@ -74,6 +74,16 @@ class BinderFileFieldTest(TestCase):
 		data = jsonloads(response.content)
 		self.assertIsNone(data['data']['picture'])
 
+	def test_setting_blank_for_not_nullable_works(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.picture_not_null = ''
+		zoo.save()
+
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+		self.assertIsNone(data['data']['picture_not_null'])
+
 	def test_upgrade_from_normal_file_field_with_existing_data_works(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
