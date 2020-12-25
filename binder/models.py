@@ -591,7 +591,16 @@ class BinderFieldFile(FieldFile):
 			self._content_hash = None
 		elif self._content_hash is None:
 			hasher = hashlib.sha1()
-			with self.open('rb') as fh:
+
+			# Don't use self.open, since it then closes self.file. Apparently
+			# Django requires this here:
+			#
+			# https://github.com/django/django/blob/master/django/core/files/uploadedfile.py#L91
+			#
+			# To make sure we have as much compatibility as possible, this is tested in
+			#
+			# test_binder_file_field.test_reusing_same_file_for_multiple_fields
+			with open(self.path, 'rb') as fh:
 				while True:
 					chunk = fh.read(4096)
 					if not chunk:

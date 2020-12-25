@@ -8,7 +8,7 @@ from ..models import Zoo, Animal
 class ZooView(PermissionView):
 	m2m_fields = ['contacts', 'zoo_employees', 'most_popular_animals']
 	model = Zoo
-	file_fields = ['floor_plan', 'picture']
+	file_fields = ['floor_plan', 'django_picture', 'binder_picture']
 	shown_properties = ['animal_count']
 	image_resize_threshold = {
 		'floor_plan': 500,

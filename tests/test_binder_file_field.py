@@ -1,5 +1,9 @@
+from io import BytesIO
+from PIL import Image
+
 from django.test import TestCase, Client
 from django.core.files.base import ContentFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth.models import User
 from django.db import connection
 
@@ -24,20 +28,20 @@ class BinderFileFieldTest(TestCase):
 
 	def test_save(self):
 		zoo = Zoo(name='Apenheul')
-		zoo.picture = ContentFile(CONTENT, name='pic.jpg')
-		self.assertEqual(zoo.picture.content_type, 'image/jpeg')
-		self.assertEqual(zoo.picture.content_hash, HASH)
+		zoo.binder_picture = ContentFile(CONTENT, name='pic.jpg')
+		self.assertEqual(zoo.binder_picture.content_type, 'image/jpeg')
+		self.assertEqual(zoo.binder_picture.content_hash, HASH)
 		zoo.save()
 
 		zoo2 = Zoo.objects.get(pk=zoo.pk)
-		self.assertEqual(zoo2.picture.content_type, 'image/jpeg')
-		self.assertEqual(zoo2.picture.content_hash, HASH)
+		self.assertEqual(zoo2.binder_picture.content_type, 'image/jpeg')
+		self.assertEqual(zoo2.binder_picture.content_hash, HASH)
 
 	def test_post(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
 
-		response = self.client.post('/zoo/%s/picture/' % zoo.id, data={
+		response = self.client.post('/zoo/%s/binder_picture/' % zoo.id, data={
 			'file': ContentFile(CONTENT, name='pic.jpg'),
 		})
 		self.assertEqual(response.status_code, 200)
@@ -47,32 +51,32 @@ class BinderFileFieldTest(TestCase):
 		self.assertEqual(response.status_code, 200)
 		data = jsonloads(response.content)
 		self.assertEqual(
-			data['data']['picture'],
-			'/zoo/{}/picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
+			data['data']['binder_picture'],
+			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
 		)
 
 	def test_get(self):
 		zoo = Zoo(name='Apenheul')
-		zoo.picture = ContentFile(CONTENT, name='pic.jpg')
+		zoo.binder_picture = ContentFile(CONTENT, name='pic.jpg')
 		zoo.save()
 
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
 		data = jsonloads(response.content)
 		self.assertEqual(
-			data['data']['picture'],
-			'/zoo/{}/picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
+			data['data']['binder_picture'],
+			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
 		)
 
 	def test_setting_blank(self):
 		zoo = Zoo(name='Apenheul')
-		zoo.picture = ''
+		zoo.binder_picture = ''
 		zoo.save()
 
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
 		data = jsonloads(response.content)
-		self.assertIsNone(data['data']['picture'])
+		self.assertIsNone(data['data']['binder_picture'])
 
 	def test_upgrade_from_normal_file_field_with_existing_data(self):
 		zoo = Zoo(name='Apenheul')
@@ -81,15 +85,33 @@ class BinderFileFieldTest(TestCase):
 		ContentFile(CONTENT, name='pic.jpg')
 		with connection.cursor() as cur:
 			# Update db directly to mimic existing records.
-			cur.execute("UPDATE {} set picture='pic.jpg'".format(zoo._meta.db_table))
+			cur.execute("UPDATE {} set binder_picture='pic.jpg'".format(zoo._meta.db_table))
 
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
 		data = jsonloads(response.content)
 		self.assertEqual(
-			data['data']['picture'],
-			'/zoo/{}/picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
+			data['data']['binder_picture'],
+			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
 		)
+
+	def test_reusing_same_file_for_multiple_fields(self):
+		with BytesIO() as bytesio:
+			im = Image.new('RGBA', (50,100))
+			im.save(bytesio, format='png')
+			bytesio.seek(0)
+			test_image = SimpleUploadedFile(f'test.png', bytesio.read())
+
+		zoo1 = Zoo(name='Apenheul', django_picture=test_image)
+		zoo1.save()
+		zoo2 = Zoo(name='Apenheul', django_picture=test_image)
+		zoo2.save()
+
+		zoo3 = Zoo(name='Apenheul', binder_picture=test_image)
+		zoo3.save()
+		zoo4 = Zoo(name='Apenheul', binder_picture=test_image)
+		zoo4.save()
+
 
 class BinderFileFieldBlankNotNullableTest(TestCase):
 	def setUp(self):
