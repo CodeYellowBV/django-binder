@@ -74,23 +74,6 @@ class BinderFileFieldTest(TestCase):
 		data = jsonloads(response.content)
 		self.assertIsNone(data['data']['picture'])
 
-	def test_setting_blank_for_not_nullable(self):
-		zoo = Zoo(name='Apenheul')
-		zoo.picture_not_null = ''
-		zoo.save()
-
-		response = self.client.get('/zoo/{}/'.format(zoo.pk))
-		self.assertEqual(response.status_code, 200)
-		data = jsonloads(response.content)
-		self.assertIsNone(data['data']['picture_not_null'])
-
-	def test_deleting_not_nullable(self):
-		zoo = Zoo(name='Apenheul')
-		zoo.picture_not_null = ContentFile(CONTENT, name='pic.jpg')
-		zoo.save()
-
-		zoo.picture_not_null.delete()
-
 	def test_upgrade_from_normal_file_field_with_existing_data(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
@@ -107,3 +90,40 @@ class BinderFileFieldTest(TestCase):
 			data['data']['picture'],
 			'/zoo/{}/picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
 		)
+
+class BinderFileFieldBlankNotNullableTest(TestCase):
+	def setUp(self):
+		super().setUp()
+		u = User(username='testuser', is_active=True, is_superuser=True)
+		u.set_password('test')
+		u.save()
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
+
+	def test_setting_blank(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.django_picture_not_null = ''
+		zoo.binder_picture_not_null = ''
+		zoo.save()
+
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+		self.assertIsNone(data['data']['django_picture_not_null'])
+		self.assertIsNone(data['data']['binder_picture_not_null'])
+
+	# When a file field is blank=True and null=False, Django will convert the
+	# None to empty string.
+	def test_deleting(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.django_picture_not_null = ContentFile(CONTENT, name='pic.jpg')
+		zoo.binder_picture_not_null = ContentFile(CONTENT, name='pic.jpg')
+		zoo.save()
+
+		zoo.django_picture_not_null.delete()
+		zoo.binder_picture_not_null.delete()
+
+		zoo.refresh_from_db()
+		self.assertEqual('', zoo.django_picture_not_null)
+		self.assertEqual('', zoo.binder_picture_not_null)

@@ -720,10 +720,16 @@ class BinderFileField(FileField):
 		return super().__init__(*args, **kwargs)
 
 	def get_prep_value(self, value):
-		if value == '':
-			return ''
+		blank_or_null_conversion = super().get_prep_value(value)
 
-		if not value or value.name is None:
+		# Let Django FileField do some magic regarding blank / null before
+		# applying our custom code. See also:
+		#
+		# https://github.com/django/django/blob/stable/2.2.x/django/db/models/fields/files.py#L280
+		if not blank_or_null_conversion:
+			return blank_or_null_conversion
+
+		if value is None or value.name is None:
 			return None
 
 		return serialize_tuple((
