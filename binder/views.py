@@ -485,9 +485,10 @@ class ModelView(View):
 
 						# {duplicate-binder-file-field-hash-code}
 						if isinstance(f, BinderFileField):
-							data[f.name] += '?h={}&content_type={}'.format(
+							data[f.name] += '?h={}&content_type={}&filename={}'.format(
 								file.content_hash,
 								file.content_type,
+								file.name,
 							)
 					else:
 						data[f.name] = None
@@ -2323,16 +2324,13 @@ class ModelView(View):
 						format = format_override
 						changes = True
 
+					filename = '{}.{}'.format(os.path.basename(file.name), format)
+
 					if changes:
 						file = io.BytesIO()
 						img.save(file, format)
-
-					filename = '{}.{}'.format(obj.id, format)
 				else:
-					if file.name.find('.') != -1:
-						filename = '{}.{}'.format(obj.id, file.name.split('.')[-1])
-					else:
-						filename = str(obj.id)
+					filename = file.name
 
 				# FIXME: duplicate code
 				if file_field:
@@ -2362,9 +2360,10 @@ class ModelView(View):
 
 				# {duplicate-binder-file-field-hash-code}
 				if isinstance(field, BinderFileField):
-					path += '?h={}&content_type={}'.format(
+					path += '?h={}&content_type={}&filename={}'.format(
 						file_field.content_hash,
 						file_field.content_type,
+						file_field.name,
 					)
 
 				return JsonResponse( {"data": {file_field_name: path}} )

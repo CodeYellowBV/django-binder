@@ -38,39 +38,50 @@ class BinderFileFieldTest(TestCase):
 		self.assertEqual(zoo2.binder_picture.content_hash, HASH)
 
 	def test_post(self):
+		filename = 'pic.jpg'
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
 
 		response = self.client.post('/zoo/%s/binder_picture/' % zoo.id, data={
-			'file': ContentFile(CONTENT, name='pic.jpg'),
+			'file': ContentFile(CONTENT, name=filename),
 		})
 		self.assertEqual(response.status_code, 200)
 		content = jsonloads(response.content)
+
+		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+		zoo.refresh_from_db()
+		filename = zoo.binder_picture.name
+
 		self.assertEqual(
 			content['data']['binder_picture'],
-			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
+			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, HASH, filename),
 		)
 
-		zoo.refresh_from_db()
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
 		data = jsonloads(response.content)
 		self.assertEqual(
 			data['data']['binder_picture'],
-			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
+			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, HASH, filename),
 		)
 
 	def test_get(self):
+		filename = 'pic.jpg'
 		zoo = Zoo(name='Apenheul')
-		zoo.binder_picture = ContentFile(CONTENT, name='pic.jpg')
+		zoo.binder_picture = ContentFile(CONTENT, name=filename)
 		zoo.save()
 
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
 		data = jsonloads(response.content)
+
+		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+		zoo.refresh_from_db()
+		filename = zoo.binder_picture.name
+
 		self.assertEqual(
 			data['data']['binder_picture'],
-			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
+			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, HASH, filename),
 		)
 
 	def test_setting_blank(self):
@@ -84,10 +95,11 @@ class BinderFileFieldTest(TestCase):
 		self.assertIsNone(data['data']['binder_picture'])
 
 	def test_upgrade_from_normal_file_field_with_existing_data(self):
+		filename = 'pic.jpg'
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
 
-		ContentFile(CONTENT, name='pic.jpg')
+		ContentFile(CONTENT, name=filename)
 		with connection.cursor() as cur:
 			# Update db directly to mimic existing records.
 			cur.execute("UPDATE {} set binder_picture='pic.jpg'".format(zoo._meta.db_table))
@@ -95,9 +107,14 @@ class BinderFileFieldTest(TestCase):
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
 		data = jsonloads(response.content)
+
+		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+		zoo.refresh_from_db()
+		filename = zoo.binder_picture.name
+
 		self.assertEqual(
 			data['data']['binder_picture'],
-			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg'.format(zoo.pk, HASH),
+			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, HASH, filename),
 		)
 
 	def test_reusing_same_file_for_multiple_fields(self):
