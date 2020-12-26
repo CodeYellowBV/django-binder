@@ -28,7 +28,7 @@ from django.db.models.fields.reverse_related import ForeignObjectRel
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat
-from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation
+from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField
 from .json import JsonResponse, jsonloads
 
 
@@ -445,7 +445,6 @@ class ModelView(View):
 		]
 
 
-
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
@@ -483,6 +482,13 @@ class ModelView(View):
 					if file:
 						# {router-view-instance}
 						data[f.name] = self.router.model_route(self.model, obj.id, f)
+
+						# {duplicate-binder-file-field-hash-code}
+						if isinstance(f, BinderFileField):
+							data[f.name] += '?h={}&content_type={}'.format(
+								file.content_hash,
+								file.content_type,
+							)
 					else:
 						data[f.name] = None
 				else:
@@ -2353,6 +2359,14 @@ class ModelView(View):
 
 				logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
 				path = self.router.model_route(self.model, obj.id, field)
+
+				# {duplicate-binder-file-field-hash-code}
+				if isinstance(field, BinderFileField):
+					path += '?h={}&content_type={}'.format(
+						file_field.content_hash,
+						file_field.content_type,
+					)
+
 				return JsonResponse( {"data": {file_field_name: path}} )
 
 			except ValidationError as ve:

@@ -14,6 +14,31 @@ class Animal(BinderModel):
 	name = UpperCaseCharField()
 ```
 
+### BinderFileField / BinderImageField
+
+
+When a model has a file attached to it, the url normally becomes something like this:
+
+`/api/some_model/123/some_file_name/`
+
+In this case, the frontend has to hit the file endpoint to know if the file has changes. When using BinderFileField / BinderImageField, the url will contain extra info encoded in the url:
+
+`/api/some_model/123/some_file_name/?h=0759a35e9983833ce52fe433d2326addf400f344&content_type=image/jpeg`
+
+- `h`: The sha1 of the file.
+- `content_type`: The content type of the file.
+
+You can upgrade from default Django FileField / ImageField as follows:
+
+Old: `picture = models.FileField(blank=True, null=True)`
+New: `picture = BinderFileField(blank=True, null=True)`
+
+Old: `picture = models.ImageField(blank=True, null=True)`
+New: `picture = BinderImageField(blank=True, null=True)`
+
+Then, run `manage.py makemigrations` to add the required migrations.
+
+
 ## Enums
 
 Binder makes it easy to use enums.

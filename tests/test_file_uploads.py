@@ -1,32 +1,14 @@
 import json
-from os import urandom
-from PIL import Image
-from tempfile import NamedTemporaryFile
-from django.test import TestCase, Client
 import mimetypes
 
-from binder.json import jsonloads
+from django.test import TestCase, Client
 from django.core.files import File
 from django.contrib.auth.models import User
 
+from binder.json import jsonloads
+
 from .testapp.models import Animal, Zoo
-
-def image(width, height):
-	return Image.frombytes('RGB', (width, height), urandom(width * height * 3))
-
-
-IMG_SUFFIX = {
-	'jpeg': '.jpg',
-	'png': '.png',
-}
-
-
-def temp_imagefile(width, height, format):
-	i = image(width, height)
-	f = NamedTemporaryFile(suffix=IMG_SUFFIX[format])
-	i.save(f, format)
-	f.seek(0)
-	return f
+from .utils import temp_imagefile
 
 
 class FileUploadTest(TestCase):
