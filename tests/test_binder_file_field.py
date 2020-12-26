@@ -105,7 +105,7 @@ class BinderFileFieldTest(TestCase):
 			im = Image.new('RGBA', (50,100))
 			im.save(bytesio, format='png')
 			bytesio.seek(0)
-			test_image = SimpleUploadedFile(f'test.png', bytesio.read())
+			test_image = SimpleUploadedFile('test.png', bytesio.read())
 
 		zoo1 = Zoo(name='Apenheul', django_picture=test_image)
 		zoo1.save()
