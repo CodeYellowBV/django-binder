@@ -2355,6 +2355,13 @@ class ModelView(View):
 
 				logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
 				path = self.router.model_route(self.model, obj.id, field)
+
+				if isinstance(field, BinderFileField):
+					path += '?h={}&content_type={}'.format(
+						file_field.content_hash,
+						file_field.content_type,
+					)
+
 				return JsonResponse( {"data": {file_field_name: path}} )
 
 			except ValidationError as ve:
