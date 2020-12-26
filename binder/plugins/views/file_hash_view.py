@@ -9,6 +9,7 @@ from binder.models import BinderFileField
 
 class FileHashView:
     """
+    DEPRECATED: Use BinderFileField instead.
     A mixin for BinderViews to append a hash based on the modification time to
     file fields. This is used to detect changes in cached files.
     """

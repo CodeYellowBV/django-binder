@@ -24,7 +24,7 @@ class Zoo(BinderModel):
 	most_popular_animals = models.ManyToManyField('Animal', blank=True, related_name='+')
 	opening_time = models.TimeField(default=datetime.time(9, 0, 0))
 
-	django_picture = models.ImageField(blank=True, null=True);
+	django_picture = models.ImageField(blank=True, null=True)
 	binder_picture = BinderImageField(blank=True, null=True)
 
 	django_picture_not_null = models.ImageField(blank=True)

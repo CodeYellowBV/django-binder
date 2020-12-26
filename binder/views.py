@@ -482,6 +482,8 @@ class ModelView(View):
 					if file:
 						# {router-view-instance}
 						data[f.name] = self.router.model_route(self.model, obj.id, f)
+
+						# {duplicate-binder-file-field-hash-code}
 						if isinstance(f, BinderFileField):
 							data[f.name] += '?h={}&content_type={}'.format(
 								file.content_hash,
@@ -2356,6 +2358,7 @@ class ModelView(View):
 				logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
 				path = self.router.model_route(self.model, obj.id, field)
 
+				# {duplicate-binder-file-field-hash-code}
 				if isinstance(field, BinderFileField):
 					path += '?h={}&content_type={}'.format(
 						file_field.content_hash,
