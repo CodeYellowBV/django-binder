@@ -1,3 +1,4 @@
+from os.path import basename
 from io import BytesIO
 from PIL import Image
 
@@ -50,7 +51,7 @@ class BinderFileFieldTest(TestCase):
 
 		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
 		zoo.refresh_from_db()
-		filename = zoo.binder_picture.name
+		filename = basename(zoo.binder_picture.name) # Without folders foo/bar/
 
 		self.assertEqual(
 			content['data']['binder_picture'],
@@ -77,7 +78,7 @@ class BinderFileFieldTest(TestCase):
 
 		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
 		zoo.refresh_from_db()
-		filename = zoo.binder_picture.name
+		filename = basename(zoo.binder_picture.name) # Without folders foo/bar/
 
 		self.assertEqual(
 			data['data']['binder_picture'],

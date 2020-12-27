@@ -488,7 +488,7 @@ class ModelView(View):
 							data[f.name] += '?h={}&content_type={}&filename={}'.format(
 								file.content_hash,
 								file.content_type,
-								file.name,
+								os.path.basename(file.name),
 							)
 					else:
 						data[f.name] = None
@@ -2363,7 +2363,7 @@ class ModelView(View):
 					path += '?h={}&content_type={}&filename={}'.format(
 						file_field.content_hash,
 						file_field.content_type,
-						file_field.name,
+						os.path.basename(file_field.name),
 					)
 
 				return JsonResponse( {"data": {file_field_name: path}} )
