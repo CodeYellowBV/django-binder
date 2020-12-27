@@ -601,13 +601,20 @@ class BinderFieldFile(FieldFile):
 				# To make sure we have as much compatibility as possible, this is tested in
 				#
 				# test_binder_file_field.test_reusing_same_file_for_multiple_fields
-				with open(self.path, 'rb') as fh:
-					while True:
-						chunk = fh.read(4096)
-						if not chunk:
-							break
-						hasher.update(chunk)
+				self.open('rb')
+				while True:
+					chunk = self.read(4096)
+					if not chunk:
+						break
+					hasher.update(chunk)
 				self._content_hash = hasher.hexdigest()
+				# with open(self.path, 'rb') as fh:
+				# 	while True:
+				# 		chunk = fh.read(4096)
+				# 		if not chunk:
+				# 			break
+				# 		hasher.update(chunk)
+				# self._content_hash = hasher.hexdigest()
 			except FileNotFoundError:
 				# In some rare cases, there seems to be a record in the db but the
 				# file is missing from disk. I've seen it a few times now, but have

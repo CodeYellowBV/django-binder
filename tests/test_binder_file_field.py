@@ -1,6 +1,7 @@
 from os.path import basename
 from io import BytesIO
 from PIL import Image
+from tempfile import NamedTemporaryFile
 
 from django.test import TestCase, Client
 from django.core.files.base import ContentFile
@@ -100,10 +101,12 @@ class BinderFileFieldTest(TestCase):
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
 
-		ContentFile(CONTENT, name=filename)
+		with open(filename, 'wb+') as file:
+			file.write(CONTENT)
+
 		with connection.cursor() as cur:
 			# Update db directly to mimic existing records.
-			cur.execute("UPDATE {} set binder_picture='pic.jpg'".format(zoo._meta.db_table))
+			cur.execute("UPDATE {} set binder_picture='{}'".format(zoo._meta.db_table, file.name))
 
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
@@ -149,7 +152,7 @@ class BinderFileFieldTest(TestCase):
 		data = jsonloads(response.content)
 		self.assertEqual(
 			data['data']['binder_picture'],
-			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg'.format(zoo.pk, ''),
+			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, '', 'non-exisiting-pic.jpg'),
 		)
 
 
