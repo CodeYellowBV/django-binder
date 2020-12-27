@@ -487,7 +487,7 @@ class ModelView(View):
 						if isinstance(f, BinderFileField):
 							data[f.name] += '?h={}&content_type={}&filename={}'.format(
 								file.content_hash,
-								file.content_type,
+								file.content_type or '',
 								os.path.basename(file.name),
 							)
 					else:
@@ -2362,7 +2362,7 @@ class ModelView(View):
 				if isinstance(field, BinderFileField):
 					path += '?h={}&content_type={}&filename={}'.format(
 						file_field.content_hash,
-						file_field.content_type,
+						file_field.content_type or '',
 						os.path.basename(file_field.name),
 					)
 

@@ -759,7 +759,7 @@ class BinderFileField(FileField):
 		return serialize_tuple((
 			value.name,
 			value.content_hash,
-			value.content_type,
+			value.content_type or '',
 		))
 
 	def deconstruct(self):

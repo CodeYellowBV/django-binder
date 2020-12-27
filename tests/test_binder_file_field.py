@@ -67,6 +67,34 @@ class BinderFileFieldTest(TestCase):
 			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, HASH, filename),
 		)
 
+	def test_post_no_extension(self):
+		filename = 'foobar'
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		response = self.client.post('/zoo/%s/binder_picture/' % zoo.id, data={
+			'file': ContentFile(CONTENT, name=filename),
+		})
+		self.assertEqual(response.status_code, 200)
+		content = jsonloads(response.content)
+
+		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+		zoo.refresh_from_db()
+		filename = basename(zoo.binder_picture.name) # Without folders foo/bar/
+
+		self.assertEqual(
+			content['data']['binder_picture'],
+			'/zoo/{}/binder_picture/?h={}&content_type=&filename={}'.format(zoo.pk, HASH, filename),
+		)
+
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+		self.assertEqual(
+			data['data']['binder_picture'],
+			'/zoo/{}/binder_picture/?h={}&content_type=&filename={}'.format(zoo.pk, HASH, filename),
+		)
+
 	def test_get(self):
 		filename = 'pic.jpg'
 		zoo = Zoo(name='Apenheul')
