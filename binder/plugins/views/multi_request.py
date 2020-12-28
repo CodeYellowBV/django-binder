@@ -62,6 +62,11 @@ def multi_request_view(request):
 					e.log()
 					res = e.response(request)
 				else:
+					# There's a "sneaky little hack" in Django test client
+					# to avoid csrf checks in tests. This needs to be passed
+					# down to make sure tests for multi request are also skipping
+					# csrf checks. See also: https://github.com/django/django/blob/ebb08d19424c314c75908bc6048ff57c2f872269/django/test/client.py#L142
+					req._dont_enforce_csrf_checks = request._dont_enforce_csrf_checks
 					res = handler.get_response(req)
 
 				# Serialize and add to responses
