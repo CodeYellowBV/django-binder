@@ -1034,9 +1034,9 @@ class ModelView(View):
 	def _filter_field(self, field_name, qualifier, value, invert, request, include_annotations, partial=''):
 		try:
 			if field_name in self.hidden_fields:
-				raise models.fields.FieldDoesNotExist()
+				raise FieldDoesNotExist()
 			field = self.model._meta.get_field(field_name)
-		except models.fields.FieldDoesNotExist:
+		except FieldDoesNotExist:
 			rel = partial and '.'.join(partial[:-2].split('__'))
 			annotations = self.annotations(request, {'': include_annotations.get(rel)})
 			if field_name not in annotations:
@@ -1087,7 +1087,7 @@ class ModelView(View):
 
 		try:
 			self.model._meta.get_field(head)
-		except models.fields.FieldDoesNotExist:
+		except FieldDoesNotExist:
 			if head == 'id':
 				pk = self.model._meta.pk
 				head = pk.get_attname() if pk.one_to_one or pk.many_to_one else pk.name

@@ -1,15 +1,15 @@
 sudo: false
 language: python
 python:
-  - "3.5"
-  - "3.6"
+  - "3.7"
+  - "3.8"
 cache:
   pip: true
 env:
-  - DJANGO_VERSION=2.0.8 BINDER_TEST_MYSQL=0
   - DJANGO_VERSION=2.1.1 BINDER_TEST_MYSQL=0
-  - DJANGO_VERSION=2.0.8 BINDER_TEST_MYSQL=1
+  - DJANGO_VERSION=3.1.4 BINDER_TEST_MYSQL=0
   - DJANGO_VERSION=2.1.1 BINDER_TEST_MYSQL=1
+  - DJANGO_VERSION=3.1.4 BINDER_TEST_MYSQL=1
 install:
   - pip install -q psycopg2 Pillow django-request-id requests django==$DJANGO_VERSION
   - pip install flake8 codecov coverage
