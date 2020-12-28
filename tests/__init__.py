@@ -36,6 +36,7 @@ settings.configure(**{
 		# TODO: Try to reduce the set of absolutely required middlewares
 		'request_id.middleware.RequestIdMiddleware',
 		'django.contrib.sessions.middleware.SessionMiddleware',
+		'django.middleware.csrf.CsrfViewMiddleware',
 		'django.contrib.auth.middleware.AuthenticationMiddleware',
 		'binder.plugins.token_auth.middleware.TokenAuthMiddleware',
 	],

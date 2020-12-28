@@ -1,4 +1,3 @@
-from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import AnonymousUser
 
 from binder.exceptions import BinderException
@@ -46,7 +45,6 @@ class TokenAuthMiddleware:
 	"""
 
 	def __init__(self, get_response):
-		self.get_response_no_csrf = csrf_exempt(get_response)
 		self.get_response = get_response
 
 	def __call__(self, request):
@@ -89,6 +87,12 @@ class TokenAuthMiddleware:
 
 		request.user = token.user
 		token.save()  # Auto updates last_used_at
+
 		# CSRF not needed because the token already establishes that the
-		# request was not forged
-		return self.get_response_no_csrf(request)
+		# request was not forged.
+		#
+		# Before django.views.decorators.csrf.csrf_exempt was used, but
+		# somehow this still looks for the existance of a cookie...
+		request._dont_enforce_csrf_checks = True
+
+		return self.get_response(request)
