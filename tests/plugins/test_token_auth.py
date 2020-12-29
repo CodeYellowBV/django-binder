@@ -1,5 +1,6 @@
 from io import StringIO
 from datetime import timedelta
+import json
 
 from django.test import TestCase, Client, override_settings
 from django.contrib.auth.models import User
@@ -19,7 +20,7 @@ from ..compare import assert_json, ANY, EXTRA
 class TokenAuthTest(TestCase):
 
 	def setUp(self):
-		self.user = User.objects.create_user(username='foo', password='bar')
+		self.user = User.objects.create_user(username='foo', password='bar', is_superuser=True)
 		self.user.save()
 		self.token = Token(user=self.user)
 		self.token.save()
@@ -75,6 +76,22 @@ class TokenAuthTest(TestCase):
 		client = Client(HTTP_AUTHORIZATION='Foo ' + self.token.token)
 		res = client.get('/user/identify/')
 		self.assertEqual(res.status_code, 403)
+
+
+	def test_post_using_token_bypasses_csrf_checks(self):
+		client = Client(HTTP_AUTHORIZATION='Token ' + self.token.token, enforce_csrf_checks=True)
+
+		model_data = {
+			'name': 'Apenheul',
+		}
+		response = client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
+
+		self.assertEqual(response.status_code, 200)
+
+		returned_data = jsonloads(response.content)
+		self.assertIsNotNone(returned_data.get('id'))
+		self.assertEqual(returned_data.get('name'), 'Apenheul')
+
 
 
 @override_settings(
