@@ -117,6 +117,23 @@ class BinderFileFieldTest(TestCase):
 		zoo4 = Zoo(name='Apenheul', binder_picture=test_image)
 		zoo4.save()
 
+	# I've seen this happen a few times, where a file exists in the db but not on disk.
+	def test_non_existing_file_on_diks(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		with connection.cursor() as cur:
+			# Update db directly to mimic record without existing file
+			cur.execute("UPDATE {} set binder_picture='non-exisiting-pic.jpg'".format(zoo._meta.db_table))
+
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+		self.assertEqual(
+			data['data']['binder_picture'],
+			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg'.format(zoo.pk, ''),
+		)
+
 
 class BinderFileFieldBlankNotNullableTest(TestCase):
 	def setUp(self):
