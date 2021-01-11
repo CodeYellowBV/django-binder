@@ -2232,13 +2232,14 @@ class ModelView(View):
 		file_field_name = file_field
 		file_field = getattr(obj, file_field_name)
 
+		raise BinderRequestError(request)
+
 		if request.method == 'GET':
 			if not file_field:
 				raise BinderNotFound(file_field_name)
 
 			guess = mimetypes.guess_type(file_field.path)
 			guess = guess[0] if guess and guess[0] else 'application/octet-stream'
-			raise BinderRequestError(f'MIME: {guess}')
 
 			try:
 				resp = StreamingHttpResponse(open(file_field.path, 'rb'), content_type=guess)
