@@ -10,6 +10,7 @@ import functools
 from collections import defaultdict, namedtuple
 from PIL import Image
 from inspect import getmro
+import base64
 
 import django
 from django.views.generic import View
@@ -2233,7 +2234,7 @@ class ModelView(View):
 		file_field = getattr(obj, file_field_name)
 
 		if request.method == 'GET':
-			if file_field:
+			if not file_field:
 				raise BinderNotFound(file_field_name)
 
 			guess = mimetypes.guess_type(file_field.path)
@@ -2250,6 +2251,14 @@ class ModelView(View):
 				if 'prefix' in request.GET:
 					filename = request.GET['prefix'] + ' - ' + filename
 				resp['Content-Disposition'] = 'attachment; filename="{}"'.format(filename)
+
+			if 'encode' in request.GET:
+				with open(file_field.path, 'rb') as file_data:
+					encoded_data = base64.b64encode(file_data.read())
+					if 'prefix' in request.GET:
+						encoded_data = request.GET['prefix'] + ' - ' + encoded_data
+					resp['Content-Disposition'] = 'attachment; filename="{}"'.format(encoded_data)
+
 			return resp
 
 		if request.method == 'POST':
