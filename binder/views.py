@@ -2258,7 +2258,10 @@ class ModelView(View):
 					# if 'prefix' in request.GET:
 					# 	encoded_data = request.GET['prefix'] + ' - ' + encoded_data
 					# resp['Content-Disposition'] = 'attachment; filename="{}"'.format(encoded_data)
+					raise BinderException("IDK")
 					return HttpResponse(encoded_data)
+				raise BinderException("Pls dont")
+
 
 			return resp
 
