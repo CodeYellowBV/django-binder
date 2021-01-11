@@ -2238,7 +2238,7 @@ class ModelView(View):
 
 			guess = mimetypes.guess_type(file_field.path)
 			guess = guess[0] if guess and guess[0] else 'application/octet-stream'
-			raise BinderRequestError(guess)
+			raise BinderRequestError({"data": guess})
 
 			try:
 				resp = StreamingHttpResponse(open(file_field.path, 'rb'), content_type=guess)
