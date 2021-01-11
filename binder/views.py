@@ -2255,9 +2255,10 @@ class ModelView(View):
 			if 'encode' in request.GET:
 				with open(file_field.path, 'rb') as file_data:
 					encoded_data = base64.b64encode(file_data.read())
-					if 'prefix' in request.GET:
-						encoded_data = request.GET['prefix'] + ' - ' + encoded_data
-					resp['Content-Disposition'] = 'attachment; filename="{}"'.format(encoded_data)
+					# if 'prefix' in request.GET:
+					# 	encoded_data = request.GET['prefix'] + ' - ' + encoded_data
+					# resp['Content-Disposition'] = 'attachment; filename="{}"'.format(encoded_data)
+					return HttpResponse(encoded_data)
 
 			return resp
 
