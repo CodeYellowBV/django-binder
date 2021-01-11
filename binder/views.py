@@ -2232,10 +2232,8 @@ class ModelView(View):
 		file_field_name = file_field
 		file_field = getattr(obj, file_field_name)
 
-		raise BinderRequestError(request)
-
 		if request.method == 'GET':
-			if not file_field:
+			if file_field:
 				raise BinderNotFound(file_field_name)
 
 			guess = mimetypes.guess_type(file_field.path)
