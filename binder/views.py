@@ -2252,16 +2252,13 @@ class ModelView(View):
 					filename = request.GET['prefix'] + ' - ' + filename
 				resp['Content-Disposition'] = 'attachment; filename="{}"'.format(filename)
 
-			if 'encode' in request.GET:
-				print(resp)
-				raise BinderRequestError(resp)
+			elif 'encode' in request.GET:
+				# print(resp)
+				# raise BinderRequestError(resp)
 			
 				with open(file_field.path, 'rb') as file_data:
 					encoded_data = base64.b64encode(file_data.read())
-					# if 'prefix' in request.GET:
-					# 	encoded_data = request.GET['prefix'] + ' - ' + encoded_data
-					# resp['Content-Disposition'] = 'attachment; filename="{}"'.format(encoded_data)
-					raise BinderException("IDK")
+					return HttpResponse(encoded_data)
 
 
 			return resp
