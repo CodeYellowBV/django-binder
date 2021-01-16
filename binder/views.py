@@ -2253,6 +2253,7 @@ class ModelView(View):
 				resp['Content-Disposition'] = 'attachment; filename="{}"'.format(filename)
 
 			if 'encode' in request.GET:
+				print(resp)
 				raise BinderRequestError(resp)
 			
 				with open(file_field.path, 'rb') as file_data:
