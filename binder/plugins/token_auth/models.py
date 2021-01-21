@@ -8,7 +8,7 @@ from binder.models import BinderModel
 
 
 def generate_token():
-	return urandom(16).hex()
+	return urandom(32).hex()
 
 
 class Token(BinderModel):
@@ -27,7 +27,7 @@ class Token(BinderModel):
 		settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
 		related_name='tokens',
 	)
-	token = models.CharField(default=generate_token, unique=True, max_length=32)
+	token = models.CharField(default=generate_token, unique=True, max_length=64)
 	created_at = models.DateTimeField(auto_now_add=True)
 	last_used_at = models.DateTimeField(auto_now=True)
 
