@@ -732,8 +732,9 @@ class BinderFileField(FileField):
 
 	def __init__(self, *args, **kwargs):
 		# Since we also need to store a content type and a hash in the field
-		# we up the default max_length from 100 to 200
-		kwargs.setdefault('max_length', 200)
+		# we up the default max_length from 100 to 200. Now we store also
+		# the original file name, so lets make it 400 chars.
+		kwargs.setdefault('max_length', 400)
 		return super().__init__(*args, **kwargs)
 
 	def get_prep_value(self, value):
@@ -757,10 +758,9 @@ class BinderFileField(FileField):
 
 	def deconstruct(self):
 		name, path, args, kwargs = super().deconstruct()
-		# Standard file field omits max length when it is 100 so we readd that
-		# as the default and then omit if it is 200, which is our default
-		if kwargs.setdefault('max_length', 100) == 200:
-			del kwargs['max_length']
+
+		# FileField doesn't return max_length if it is 100, because that is the Django default.
+		kwargs.setdefault('max_length', 100)
 		return name, path, args, kwargs
 
 
