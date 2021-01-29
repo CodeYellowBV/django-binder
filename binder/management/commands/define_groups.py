@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.core.management.base import BaseCommand
 from django.conf import settings
-from django.utils.translation import ugettext as _
+from django.utils.translation import gettext as _
 from django.contrib.auth.models import Group, Permission, ContentType
 
 
