@@ -2258,7 +2258,9 @@ class ModelView(View):
 			
 				with open(file_field.path, 'rb') as file_data:
 					header = bytes(f"data:{guess};base64,", encoding='utf-8')
-					encoded_data = base64.b64encode(file_data.read())
+					data = file_data.read()
+					print(data)
+					encoded_data = base64.b64encode(data)
 
 					return HttpResponse(header+encoded_data)
 
