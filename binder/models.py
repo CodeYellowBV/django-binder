@@ -110,10 +110,7 @@ class FieldFilter(object):
 			cleaned_value = [self.clean_value(qualifier, value) for value in values]
 
 		else:
-			try:
-				cleaned_value = self.clean_value(qualifier, value)
-			except IndexError:
-				raise ValidationError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.field.model.__name__, self.field.name))
+			cleaned_value = self.clean_value(qualifier, value)
 
 		return qualifier, cleaned_value
 
