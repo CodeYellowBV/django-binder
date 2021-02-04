@@ -999,7 +999,7 @@ class ModelView(View):
 
 				# If we have a isnull qualifier, the value is not parsed really. That means that if we do not
 				# do anything isnull=False => isnull=True. Which makes no sense at all.
-				if qualifier == 'isnull' and value in ['0', 'False', 'false', '']:
+				if qualifier == 'isnull' and value in ['0', 'False', 'false']:
 					invert ^= True # Invert the invert
 
 
