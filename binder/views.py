@@ -996,6 +996,13 @@ class ModelView(View):
 				elif qualifier.startswith('not:'):
 					qualifier = qualifier[4:]
 					invert = True
+
+				# If we have a isnull qualifier, the value is not parsed really. That means that if we do not
+				# do anything isnull=False => isnull=True. Which makes no sense at all.
+				if qualifier == 'isnull' and value in ['0', 'False', 'false', '']:
+					invert ^= True # Invert the invert
+
+
 			except ValueError:
 				qualifier = None
 
