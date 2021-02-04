@@ -101,7 +101,7 @@ class FieldFilter(object):
 
 	def clean_qualifier(self, qualifier, value):
 		if qualifier == 'isnull':
-			cleaned_value = value != 'false'
+			cleaned_value = value not in ['0', 'false', 'False']
 
 		elif qualifier in ('in', 'range'):
 			values = value.split(',')
@@ -111,7 +111,7 @@ class FieldFilter(object):
 
 		else:
 			try:
-				qualifier, cleaned_value = self.clean_value(qualifier, value)
+				cleaned_value = self.clean_value(qualifier, value)
 			except IndexError:
 				raise ValidationError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.field.model.__name__, self.field.name))
 
@@ -206,10 +206,17 @@ class DateTimeFieldFilter(FieldFilter):
 		qualifier, cleaned_value = super().clean_qualifier(qualifier, value)
 
 		if qualifier in ('in', 'range'):
-			types = {type(v) for v in cleaned_value}
-			if len(types) != 1:
+			try:
+				value_type, = {type(v) for v in cleaned_value}
+			except ValueError:  # Implies incorrect amount
 				raise ValidationError('Values for filter {{{}}}.{{{}}} must be the same types.'.format(self.field.model.__name__, self.field.name))
-			if isinstance(cleaned_value[0], date) and not isinstance(cleaned_value[0], datetime):
+		else:
+			value_type = type(cleaned_value)
+
+		if issubclass(value_type, date) and not issubclass(value_type, datetime):
+			if qualifier is None:
+				qualifier = 'date'
+			else:
 				qualifier = 'date__' + qualifier
 
 		return qualifier, cleaned_value
