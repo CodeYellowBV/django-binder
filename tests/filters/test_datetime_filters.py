@@ -15,7 +15,7 @@ class DateTimeFiltersTest(TestCase):
 		self.assertTrue(r)
 
 		Caretaker(name='Peter', last_seen='2017-03-24T14:44:55Z').save()
-		Caretaker(name='Marcel', last_seen='2017-03-23T11:26:14Z').save()
+		Caretaker(name='Stefan', last_seen='2017-03-23T11:26:14Z').save()
 
 
 	def test_datetime_filter_exact_match(self):
@@ -32,7 +32,7 @@ class DateTimeFiltersTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual(1, len(result['data']))
-		self.assertEqual('Marcel', result['data'][0]['name'])
+		self.assertEqual('Stefan', result['data'][0]['name'])
 
 
 	def test_datetime_filter_range(self):
@@ -49,8 +49,8 @@ class DateTimeFiltersTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual(2, len(result['data']))
-		self.assertEqual('Marcel', result['data'][0]['name'])
-		self.assertEqual('Peter', result['data'][1]['name'])
+		self.assertEqual('Peter', result['data'][0]['name'])
+		self.assertEqual('Stefan', result['data'][1]['name'])
 
 
 	def test_datetime_filter_gte_match(self):
@@ -60,7 +60,7 @@ class DateTimeFiltersTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual(2, len(result['data']))
-		self.assertEqual('Marcel', result['data'][0]['name'])
+		self.assertEqual('Stefan', result['data'][0]['name'])
 		self.assertEqual('Peter', result['data'][1]['name'])
 
 		response = self.client.get('/caretaker/', data={'.last_seen:gte': '2017-03-23T12:00:00Z', 'order_by': 'last_seen'})
@@ -87,7 +87,7 @@ class DateTimeFiltersTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual(2, len(result['data']))
-		self.assertEqual('Marcel', result['data'][0]['name'])
+		self.assertEqual('Stefan', result['data'][0]['name'])
 		self.assertEqual('Peter', result['data'][1]['name'])
 
 		# One second later (exactly _on_ earliest "last seen")
@@ -155,3 +155,13 @@ class DateTimeFiltersTest(TestCase):
 		# Missing +/- (or too many seconds)
 		response = self.client.get('/caretaker/', data={'.last_seen': '1838-05-01T02:10:0220'})
 		self.assertEqual(response.status_code, 418)
+
+	def test_datetime_isnull(self):
+		# Due to corona, I forgot when I last saw bob
+		Caretaker(name='Bob', last_seen=None).save()
+		response = self.client.get('/caretaker/', data={'.last_seen:isnull': 'True'})
+		result = jsonloads(response.content)
+
+		# We only get bob back with no data
+		self.assertEqual(1, len(result['data']))
+		self.assertEqual('Bob', result['data'][0]['name'])
