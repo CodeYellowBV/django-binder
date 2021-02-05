@@ -165,3 +165,17 @@ class DateTimeFiltersTest(TestCase):
 		# We only get bob back with no data
 		self.assertEqual(1, len(result['data']))
 		self.assertEqual('Bob', result['data'][0]['name'])
+
+	def test_datetime__isnull_false(self):
+		# Due to corona, I forgot when I last saw bob
+		Caretaker(name='Bob', last_seen=None).save()
+
+		for false_value in ['0', 'false', 'False']:
+
+			response = self.client.get('/caretaker/', data={'.last_seen:isnull': false_value})
+			result = jsonloads(response.content)
+
+			# We only get bob back with no data
+			self.assertEqual(2, len(result['data']))
+			self.assertNotEqual('Bob', result['data'][0]['name'])
+			self.assertNotEqual('Bob', result['data'][1]['name'])
