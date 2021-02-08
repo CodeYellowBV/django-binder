@@ -2,7 +2,7 @@ from PIL import Image
 from abc import ABCMeta
 
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
-from django.utils.translation import ugettext as _
+from django.utils.translation import gettext as _
 from django import forms
 
 from binder.json import jsonloads, JsonResponse

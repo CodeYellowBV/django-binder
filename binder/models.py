@@ -99,6 +99,23 @@ class FieldFilter(object):
 
 
 
+	def clean_qualifier(self, qualifier, value):
+		if qualifier == 'isnull':
+			cleaned_value = value not in ['0', 'false', 'False']
+
+		elif qualifier in ('in', 'range'):
+			values = value.split(',')
+			if qualifier == 'range' and len(values) != 2:
+				raise BinderRequestError('Range requires exactly 2 values for {}.'.format(self.field_description()))
+			cleaned_value = [self.clean_value(qualifier, value) for value in values]
+
+		else:
+			cleaned_value = self.clean_value(qualifier, value)
+
+		return qualifier, cleaned_value
+
+
+
 	def clean_value(self, qualifier, v):
 		raise ValueError('FieldFilter {} has not overridden the clean_value method'.format(self.__class__.name))
 
@@ -113,26 +130,7 @@ class FieldFilter(object):
 
 	def get_q(self, qualifier, value, invert, partial=''):
 		self.check_qualifier(qualifier)
-
-		# TODO: Try to make the splitting and cleaning more re-usable
-		if qualifier in ('in', 'range'):
-			values = value.split(',')
-			if qualifier == 'range':
-				if len(values) != 2:
-					raise BinderRequestError('Range requires exactly 2 values for {}.'.format(self.field_description()))
-		else:
-			values = [value]
-
-
-		if qualifier == 'isnull':
-			cleaned_value = True
-		elif qualifier in ('in', 'range'):
-			cleaned_value = [self.clean_value(qualifier, v) for v in values]
-		else:
-			try:
-				cleaned_value = self.clean_value(qualifier, values[0])
-			except IndexError:
-				raise ValidationError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.field.model.__name__, self.field.name))
+		qualifier, cleaned_value = self.clean_qualifier(qualifier, value)
 
 		suffix = '__' + qualifier if qualifier else ''
 		if invert:
@@ -201,43 +199,24 @@ class DateTimeFieldFilter(FieldFilter):
 			raise ValidationError('Invalid YYYY-MM-DD(.mmm)ZONE value {{{}}} for {}.'.format(v, self.field_description()))
 		return v
 
+	def clean_qualifier(self, qualifier, value):
+		qualifier, cleaned_value = super().clean_qualifier(qualifier, value)
 
-	def get_q(self, qualifier, value, invert, partial=''):
-		self.check_qualifier(qualifier)
-
-		# TODO: Try to make the splitting and cleaning more re-usable
 		if qualifier in ('in', 'range'):
-			values = value.split(',')
-			if qualifier == 'range':
-				if len(values) != 2:
-					raise BinderRequestError('Range requires exactly 2 values for {}.'.format(self.field_description()))
-		else:
-			values = [value]
-
-
-		if qualifier == 'isnull':
-			cleaned_value = True
-		elif qualifier in ('in', 'range'):
-			cleaned_value = [self.clean_value(qualifier, v) for v in values]
-			types = {type(v) for v in cleaned_value}
-			if len(types) != 1:
-				raise ValidationError('Values for filter {{{}}}.{{{}}} must be the same types.'.format(self.field.model.__name__, self.field.name))
-			if isinstance(cleaned_value[0], date) and not isinstance(cleaned_value[0], datetime):
-				qualifier = 'date__' + qualifier
-		else:
 			try:
-				cleaned_value = self.clean_value(qualifier, values[0])
-				if isinstance(cleaned_value, date) and not isinstance(cleaned_value, datetime):
-					qualifier = 'date__' + qualifier if qualifier else 'date'
-			except IndexError:
-				raise ValidationError('Value for filter {{{}}}.{{{}}} may not be empty.'.format(self.field.model.__name__, self.field.name))
-
-		suffix = '__' + qualifier if qualifier else ''
-		if invert:
-			return ~Q(**{partial + self.field.name + suffix: cleaned_value})
+				value_type, = {type(v) for v in cleaned_value}
+			except ValueError:  # Implies incorrect amount
+				raise ValidationError('Values for filter {{{}}}.{{{}}} must be the same types.'.format(self.field.model.__name__, self.field.name))
 		else:
-			return Q(**{partial + self.field.name + suffix: cleaned_value})
+			value_type = type(cleaned_value)
 
+		if issubclass(value_type, date) and not issubclass(value_type, datetime):
+			if qualifier is None:
+				qualifier = 'date'
+			else:
+				qualifier = 'date__' + qualifier
+
+		return qualifier, cleaned_value
 
 
 class TimeFieldFilter(FieldFilter):
