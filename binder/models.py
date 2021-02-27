@@ -13,7 +13,6 @@ from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
 from django.core import checks
 from django.core.files.base import File, ContentFile
 from django.core.files.images import ImageFile
-from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db.models import signals
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
@@ -616,7 +615,7 @@ class BinderFieldFile(FieldFile):
 					#
 					# test_binder_file_field.test_reusing_same_file_for_multiple_fields
 					with open(self.path, 'rb') as fh:
-						self._content_hash =  self.calculate_hash(fh)
+						self._content_hash = self.calculate_hash(fh)
 
 			except FileNotFoundError:
 				# In some rare cases, there seems to be a record in the db but the
