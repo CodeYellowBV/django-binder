@@ -11,8 +11,9 @@ from django.db import models
 from django.db.models.fields.files import FieldFile, FileField
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
 from django.core import checks
-from django.core.files.base import File
+from django.core.files.base import File, ContentFile
 from django.core.files.images import ImageFile
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db.models import signals
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
@@ -585,29 +586,38 @@ class BinderFieldFile(FieldFile):
 		self._content_hash = content_hash
 		self._content_type = content_type
 
+	def calculate_hash(self, fh):
+		hasher = hashlib.sha1()
+
+		while True:
+			chunk = fh.read(4096)
+			if not chunk:
+				break
+			hasher.update(chunk)
+
+		return hasher.hexdigest()
+
 	@property
 	def content_hash(self):
 		if not self.name:
 			self._content_hash = None
 		elif self._content_hash is None:
-			hasher = hashlib.sha1()
-
 			try:
-				# Don't use self.open, since it then closes self.file. Apparently
-				# Django requires this here:
-				#
-				# https://github.com/django/django/blob/master/django/core/files/uploadedfile.py#L91
-				#
-				# To make sure we have as much compatibility as possible, this is tested in
-				#
-				# test_binder_file_field.test_reusing_same_file_for_multiple_fields
-				with open(self.path, 'rb') as fh:
-					while True:
-						chunk = fh.read(4096)
-						if not chunk:
-							break
-						hasher.update(chunk)
-				self._content_hash = hasher.hexdigest()
+				if isinstance(self.file, ContentFile):
+					fh = self.open('rb')
+					self._content_hash = self.calculate_hash(fh)
+				else:
+					# Don't use self.open, since it then closes self.file. Apparently
+					# Django requires this here:
+					#
+					# https://github.com/django/django/blob/master/django/core/files/uploadedfile.py#L91
+					#
+					# To make sure we have as much compatibility as possible, this is tested in
+					#
+					# test_binder_file_field.test_reusing_same_file_for_multiple_fields
+					with open(self.path, 'rb') as fh:
+						self._content_hash =  self.calculate_hash(fh)
+
 			except FileNotFoundError:
 				# In some rare cases, there seems to be a record in the db but the
 				# file is missing from disk. I've seen it a few times now, but have
