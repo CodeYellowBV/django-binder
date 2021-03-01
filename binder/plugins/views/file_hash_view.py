@@ -61,7 +61,7 @@ class FileHashView:
                 field: self._get_params(obj, field)
                 for field in self.file_fields
                 # BinderFileField handles this by default
-                if not isinstance(self._meta.get_field(field), BinderFileField)
+                if not isinstance(obj._meta.get_field(field), BinderFileField)
             }
             for obj in queryset
         }
