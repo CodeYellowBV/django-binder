@@ -19,25 +19,48 @@ class Animal(BinderModel):
 
 When a model has a file attached to it, the url normally becomes something like this:
 
-`/api/some_model/123/some_file_name/`
+`/api/some_model/123/some_file/`
 
 In this case, the frontend has to hit the file endpoint to know if the file has changes. When using BinderFileField / BinderImageField, the url will contain extra info encoded in the url:
 
-`/api/some_model/123/some_file_name/?h=0759a35e9983833ce52fe433d2326addf400f344&content_type=image/jpeg`
+`/api/some_model/123/some_file/?h=0759a35e9983833ce52fe433d2326addf400f344&content_type=image/jpeg&filename=sample.pdf`
 
-- `h`: The sha1 of the file.
-- `content_type`: The content type of the file.
+| key | description |
+| - | - |
+| `h` | The sha1 of the file. You can use this to check if the file has changed. |
+| `content_type` | The content type of the file. |
+| `filename` |  The name of the file. This can be used for the `download` attribute of an anchor. |
 
 You can upgrade from default Django FileField / ImageField as follows:
 
-Old: `picture = models.FileField(blank=True, null=True)`
-New: `picture = BinderFileField(blank=True, null=True)`
+```
+# FileField
+picture = models.FileField(blank=True, null=True) # Old
+picture = BinderFileField(blank=True, null=True) # New
 
-Old: `picture = models.ImageField(blank=True, null=True)`
-New: `picture = BinderImageField(blank=True, null=True)`
+# ImageField
+picture = models.ImageField(blank=True, null=True) # Old
+picture = BinderImageField(blank=True, null=True) # New
+```
 
 Then, run `manage.py makemigrations` to add the required migrations.
 
+---
+> **_IMPORTANT:_** If you upgrade from an older BinderFileField to one that also includes filename, you unfortunately need to manually change your old migration file before you run makemigrations:
+
+```
+migrations.AlterField(
+    ...
+    # Old: without specifying `max_length=200`
+    # field=binder.models.BinderImageField(blank=True, upload_to='document/file/%Y/%m/%d/'),
+
+    # Manual change: add `max_length=200`
+    field=binder.models.BinderImageField(blank=True, upload_to='document/file/%Y/%m/%d/', max_length=200),
+)
+```
+When manually changed, Django will then correctly make new migration files.
+
+---
 
 ## Enums
 
