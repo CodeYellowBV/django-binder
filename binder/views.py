@@ -2266,6 +2266,12 @@ class ModelView(View):
 					raise BinderFileSizeExceeded(self.max_upload_size)
 
 				field = self.model._meta.get_field(file_field_name)
+
+				if field.allowed_extensions is not None:
+					extension = file.name.split('.')[-1]
+					if extension not in field.allowed_extensions:
+						raise BinderFileTypeIncorrect([{'extension': extension} for t in field.allowed_extensions])
+
 				if isinstance(field, models.fields.files.ImageField):
 					try:
 						img = Image.open(file)
