@@ -259,7 +259,7 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
 
-	def test_post_allowed_extension(self):
+	def test_post_allowed_extension_fail(self):
 		filename = 'foobar.jpg'
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
@@ -268,7 +268,11 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 			'file': ContentFile(CONTENT, name='foobar.png'),
 		})
 		self.assertEqual(response.status_code, 400)
-
+	
+	def test_post_allowed_extension_success(self):
+		filename = 'foobar.png'
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
 
 		response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
 			'file': ContentFile(CONTENT, name=filename),
