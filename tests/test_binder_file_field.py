@@ -89,6 +89,8 @@ class BinderFileFieldTest(TestCase):
 
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
+
+		
 		data = jsonloads(response.content)
 		self.assertEqual(
 			data['data']['binder_picture'],
@@ -260,12 +262,11 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 		self.assertTrue(r)
 
 	def test_post_allowed_extension_fail(self):
-		filename = 'foobar.jpg'
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
 
 		response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
-			'file': ContentFile(CONTENT, name='foobar.png'),
+			'file': ContentFile(CONTENT, name='foobar.jpg'),
 		})
 		self.assertEqual(response.status_code, 400)
 	
@@ -282,17 +283,19 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 
 		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
 		zoo.refresh_from_db()
-		filename = basename(zoo.binder_picture.name) # Without folders foo/bar/
+		filename = basename(zoo.binder_picture_custom_extensions.name) # Without folders foo/bar/
+
+
 
 		self.assertEqual(
-			content['data']['binder_picture'],
-			'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=&filename={}'.format(zoo.pk, HASH, filename),
+			content['data']['binder_picture_custom_extensions'],
+			'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=image/png&filename={}'.format(zoo.pk, HASH, filename),
 		)
 
 		response = self.client.get('/zoo/{}/'.format(zoo.pk))
 		self.assertEqual(response.status_code, 200)
 		data = jsonloads(response.content)
 		self.assertEqual(
-			data['data']['binder_picture'],
-			'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=&filename={}'.format(zoo.pk, HASH, filename),
+			data['data']['binder_picture_custom_extensions'],
+			'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=image/png&filename={}'.format(zoo.pk, HASH, filename),
 		)
