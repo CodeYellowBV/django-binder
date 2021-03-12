@@ -30,6 +30,8 @@ class Zoo(BinderModel):
 	django_picture_not_null = models.ImageField(blank=True)
 	binder_picture_not_null = BinderImageField(blank=True)
 
+	binder_picture_custom_extensions = BinderImageField(allowed_extensions=['png'], blank=True, null=True)
+
 	def __str__(self):
 		return 'zoo %d: %s' % (self.pk, self.name)
 
