@@ -2074,7 +2074,8 @@ class ModelView(View):
 
 		return JsonResponse({'idmap': output})
 
-
+	def _get_request_values(self, request):
+		return jsonloads(request.body)
 
 	def put(self, request, pk=None):
 		if pk is None:
@@ -2082,7 +2083,7 @@ class ModelView(View):
 
 		self._require_model_perm('change', request, pk)
 
-		values = jsonloads(request.body)
+		values = self._get_request_values(request)
 
 		try:
 			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
@@ -2127,7 +2128,7 @@ class ModelView(View):
 		if pk is not None:
 			return self.delete(request, pk, undelete=True)
 
-		values = jsonloads(request.body)
+		values = self._get_request_values(request)
 
 		data = self._store(self.model(), values, request)
 
