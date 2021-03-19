@@ -46,5 +46,5 @@ curl --location --request POST 'http://localhost:1339/api/dfds/instruction/' --h
 
 When using token auth, csrf is completely bypassed.
 
-## Customization
+# Customization
 Authorization can be customized by overriding the `_get_authorization_token method`. Some external apis do not allow for customization of the authentication header, in this case you might want to customize to also allow the external headers. Next to that a parameter is attached to a request to indicate it is token authorized which could be used to skip other methods such as two-factor authentication.
