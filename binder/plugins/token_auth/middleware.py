@@ -47,6 +47,15 @@ class TokenAuthMiddleware:
 	def __init__(self, get_response):
 		self.get_response = get_response
 
+	def _get_authorization_header(self, request):
+		"""
+		Separate function for getting the authorization header. This allows for overwriting the function in a project
+		to allow for custom authorization headers.
+
+		For example: Some external services allow for callback requests which allow keys to be set but not headers
+		"""
+		return request.META.get('HTTP_AUTHORIZATION')
+
 	def __call__(self, request):
 		if not hasattr(request, 'user'):
 			request.user = AnonymousUser()
@@ -55,7 +64,7 @@ class TokenAuthMiddleware:
 			# Already authenticated
 			return self.get_response(request)
 
-		auth = request.META.get('HTTP_AUTHORIZATION')
+		auth = self._get_authorization_header(request)
 
 		if auth is None:
 			# No auth header sent
