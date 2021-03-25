@@ -367,7 +367,11 @@ class ModelView(View):
 		try:
 			#### START TRANSACTION
 			with transaction.atomic(), history.atomic(source='http', user=request.user, uuid=request.request_id):
-				if not kwargs.pop('unauthenticated', False) and not request.user.is_authenticated:
+				is_unauthenticated_endpoint = kwargs.pop('unauthenticated', False)
+				user_is_authenticated = request.user.is_authenticated
+
+				# To use this endpoint, the endpoint either mustn't require authentication, or the user must be authenticated
+				if not is_unauthenticated_endpoint and not user_is_authenticated:
 					raise BinderNotAuthenticated()
 
 				if 'method' in kwargs:
