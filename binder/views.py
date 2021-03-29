@@ -2640,7 +2640,7 @@ class ModelView(View):
 
 
 	def multi_put(self, request):
-		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
+		logger.info('ACTIVATING THE MULTI-PUT!!!!!')
 
 		# Hack to communicate to _store() that we're not interested in
 		# the new data (for perf reasons).
