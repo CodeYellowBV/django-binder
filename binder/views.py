@@ -15,7 +15,7 @@ import django
 from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
-from django.http.request import RawPostDataException
+from django.http.request import RawPostDataException, QueryDict
 from django.db import models, connections
 from django.db.models import Q, F
 from django.db.models.lookups import Transform
@@ -1360,7 +1360,8 @@ class ModelView(View):
 	def _abort_when_standalone_validation(self, request):
 		"""Raise a `BinderSkipSave` exception when this is a standalone request."""
 		if self.allow_standalone_validation:
-			if 'validate' in request.GET:
+			params = QueryDict(request.body)
+			if 'validate' in params:
 				raise BinderSkipSave
 		else:
 			raise BinderException('Standalone validation not enabled. You must enable this feature explicitly.')
