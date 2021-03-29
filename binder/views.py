@@ -1364,7 +1364,7 @@ class ModelView(View):
 			if 'validate' in params:
 				raise BinderSkipSave
 		else:
-			raise BinderException('Standalone validation not enabled. You must enable this feature explicitly.')
+			raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
 
 
 
