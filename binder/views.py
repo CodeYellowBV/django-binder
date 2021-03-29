@@ -25,7 +25,11 @@ from django.db.models.expressions import BaseExpression, Value, CombinedExpressi
 from django.db.models.fields.reverse_related import ForeignObjectRel
 
 
-from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
+from .exceptions import (
+	BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded,
+	BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound,
+	BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI, BinderSkipSave
+)
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField
@@ -262,6 +266,9 @@ class ModelView(View):
 	#
 	# NOTE: custom _store__foo() methods will still be called for unupdatable fields.
 	unupdatable_fields = []
+
+	# Allow validation without saving.
+	allow_standalone_validation = False
 
 	# Fields to use for ?search=foo. Empty tuple for disabled search.
 	# NOTE: only string fields and 'id' are supported.
@@ -1349,6 +1356,17 @@ class ModelView(View):
 		})
 
 
+
+	def _abort_when_standalone_validation(self, request):
+		"""Raise a `BinderSkipSave` exception when this is a standalone request."""
+		if self.allow_standalone_validation:
+			if 'validate' in request.GET:
+				raise BinderSkipSave
+		else:
+			raise BinderException('Standalone validation not enabled. You must enable this feature explicitly.')
+
+
+
 	# Deserialize JSON to Django Model objects.
 	# obj: Model object to update (for PUT), newly created object (for POST)
 	# values: Python dict of {field name: value} (parsed JSON)
@@ -2060,13 +2078,15 @@ class ModelView(View):
 
 		data, deletions = self._multi_put_parse_request(request)
 		objects = self._multi_put_collect_objects(data)
-		objects, overrides = self._multi_put_override_superclass(objects)
+		objects, overrides = self._multi_put_override_superclass(objects) # model inheritance
 		objects = self._multi_put_convert_backref_to_forwardref(objects)
 		dependencies = self._multi_put_calculate_dependencies(objects)
 		ordered_objects = self._multi_put_order_dependencies(dependencies)
-		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request)
-		self._multi_put_id_map_add_overrides(new_id_map, overrides)
-		new_id_map = self._multi_put_deletions(deletions, new_id_map, request)
+		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request) # may raise validation errors
+		self._multi_put_id_map_add_overrides(new_id_map, overrides) # model inheritance
+		new_id_map = self._multi_put_deletions(deletions, new_id_map, request) # may raise validation errors
+
+		self._abort_when_standalone_validation(request)
 
 		output = defaultdict(list)
 		for (model, oid), nid in new_id_map.items():
@@ -2102,6 +2122,8 @@ class ModelView(View):
 
 		data = self._store(obj, values, request)
 
+		self._abort_when_standalone_validation(request)
+
 		new = dict(data)
 		new.pop('_meta', None)
 
@@ -2131,6 +2153,8 @@ class ModelView(View):
 		values = self._get_request_values(request)
 
 		data = self._store(self.model(), values, request)
+
+		self._abort_when_standalone_validation(request)
 
 		new = dict(data)
 		new.pop('_meta', None)
@@ -2169,6 +2193,9 @@ class ModelView(View):
 			raise BinderNotFound()
 
 		self.delete_obj(obj, undelete, request)
+
+		self._abort_when_standalone_validation(request)
+
 		logger.info('{}DELETEd {} #{}'.format('UN' if undelete else '', self._model_name(), pk))
 
 		return HttpResponse(status=204)  # No content

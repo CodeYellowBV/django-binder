@@ -67,7 +67,7 @@ Ordering is a simple matter of enumerating the fields in the `order_by` query pa
 The default sort order is ascending.  If you want to sort in descending order, simply prefix the attribute name with a minus sign.  This honors the scoping, so `api/animal?order_by=-name,id` will sort by `name` in descending order and by `id` in ascending order.
 
 
-### Saving a model
+### Saving or updating a model
 
 Creating a new model is possible with `POST api/animal/`, and updating a model with `PUT api/animal/`. Both requests accept a JSON body, like this:
 
@@ -160,6 +160,15 @@ If this request succeeds, you'll get back a mapping of the fake ids and the real
 ```
 
 It is also possible to update existing models with multi PUT. If you use a "real" id instead of a fake one, the model will be updated instead of created.
+
+
+#### Standalone Validation (without saving models)
+
+Sometimes you want to validate the model that you are going to save without actually saving it. This is useful, for example, when you want to inform the user of validation errors on the frontend, without having to implement the validation logic again. You may check for validation errors by sending a `POST`, `PUT` or `PATCH` request with an additional query parameter `validate`.
+
+Currently this is implemented by raising an `BinderValidateOnly` exception, which makes sure that the atomic database transaction is aborted. Ideally, you would only want to call the validation logic on the models, so only calling validation for fields and validation for model (`clean()`). But for now, we do it this way, at the cost of a performance penalty.
+
+It is important to realize that in this way, the normal `save()` function is called on a model, so it is possible that possible side effects are triggered, when these are implemented directly in `save()`, as opposed to in a signal method, which would be preferable. In other words, we cannot guarantee that the request will be idempotent. Therefore, the validation only feature is disabled by default and must be enabled by setting `allow_standalone_validation=True` on the view.
 
 ### Uploading files
 
