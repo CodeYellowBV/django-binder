@@ -1359,12 +1359,12 @@ class ModelView(View):
 
 	def _abort_when_standalone_validation(self, request):
 		"""Raise a `BinderSkipSave` exception when this is a standalone request."""
-		if self.allow_standalone_validation:
-			params = QueryDict(request.body)
-			if 'validate' in params:
+		if 'validate' in params:
+			if self.allow_standalone_validation:
+				params = QueryDict(request.body)
 				raise BinderSkipSave
-		else:
-			raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
+			else:
+				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
 
 
 
