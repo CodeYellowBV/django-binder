@@ -17,8 +17,8 @@ from django.views.generic import View
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.core.files.base import File, ContentFile
-from django.http import HttpResponse,  HttpResponseForbidden, FileResponse
-from django.http.request import RawPostDataException
+from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden, FileResponse
+from django.http.request import RawPostDataException, QueryDict
 from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
 from django.db.models import Q, F, Count, Case, When
@@ -212,7 +212,7 @@ def get_annotations(model, request=None, annotations=None):
 		if isinstance(expr, F):
 			field = expr._output_field_or_none
 		elif isinstance(expr, BaseExpression):
-			field = expr.field.clone()
+			field = field.clone()
 			field.name = attr
 			field.model = model
 		else:
@@ -423,7 +423,7 @@ class ModelView(View):
 	# for the information of the front-end developer.
 	comment = None
 
-	# If True, the (first part of the) request body will be logged at level=debug.
+	# If True, the (first part of) the request body will be logged at level=debug.
 	# Set this to False for endpoints that receive passwords etc.
 	log_request_body = True
 
@@ -1786,7 +1786,8 @@ class ModelView(View):
 	def _abort_when_standalone_validation(self, request):
 		"""Raise a `BinderSkipSave` exception when this is a standalone request."""
 		if self.allow_standalone_validation:
-			if 'validate' in request.GET:
+			params = QueryDict(request.body)
+			if 'validate' in params:
 				raise BinderSkipSave
 		else:
 			raise BinderException('Standalone validation not enabled. You must enable this feature explicitly.')
