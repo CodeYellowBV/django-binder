@@ -48,13 +48,11 @@ def jsondumps(o, default=default, indent=None):
 	return json.dumps(o, default=default, indent=indent)
 
 
-
 def jsonloads(data):
 	try:
-		return json.loads(data.decode())
+		return json.loads(data)
 	except ValueError as e:
 		raise BinderRequestError('JSON parse error: {}.'.format(str(e)))
-
 
 
 def JsonResponse(data):

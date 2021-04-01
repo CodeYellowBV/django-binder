@@ -2,6 +2,7 @@ import json
 import mimetypes
 
 from django.test import TestCase, Client
+from django.test.client import encode_multipart
 from django.core.files import File
 from django.contrib.auth.models import User
 
@@ -157,6 +158,48 @@ class FileUploadTest(TestCase):
 		self.assertEqual(response.status_code, 200)
 
 		emmen.refresh_from_db()
+		content_type = mimetypes.guess_type(emmen.floor_plan.path)[0]
+		self.assertEqual(content_type, 'image/jpeg')
+		self.assertEqual(emmen.floor_plan.width, 500)
+		self.assertEqual(emmen.floor_plan.height, 500)
+
+	def test_upload_file_in_post(self):
+		with temp_imagefile(500, 500, 'jpeg') as uploaded_file:
+			response = self.client.post('/zoo/', data={
+				'data': json.dumps({
+					'name': 'Wildlands Adventure Zoo Emmen',
+					'floor_plan': None,
+				}),
+				'file:floor_plan': uploaded_file,
+			})
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+
+		emmen = Zoo.objects.get(pk=data['id'])
+		content_type = mimetypes.guess_type(emmen.floor_plan.path)[0]
+		self.assertEqual(content_type, 'image/jpeg')
+		self.assertEqual(emmen.floor_plan.width, 500)
+		self.assertEqual(emmen.floor_plan.height, 500)
+
+	def test_upload_file_in_multiput(self):
+		with temp_imagefile(500, 500, 'jpeg') as uploaded_file:
+			boundary = 'my-boundary'
+			content_type = 'multipart/form-data; boundary=' + boundary
+			data = encode_multipart(boundary, {
+				'data': json.dumps({
+					'data': [{
+						'id': -1,
+						'name': 'Wildlands Adventure Zoo Emmen',
+						'floor_plan': None,
+					}],
+				}),
+				'file:data.0.floor_plan': uploaded_file,
+			})
+			response = self.client.put('/zoo/', content_type=content_type, data=data)
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+
+		emmen = Zoo.objects.get(pk=dict(data['idmap']['zoo'])[-1])
 		content_type = mimetypes.guess_type(emmen.floor_plan.path)[0]
 		self.assertEqual(content_type, 'image/jpeg')
 		self.assertEqual(emmen.floor_plan.width, 500)

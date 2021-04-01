@@ -16,6 +16,7 @@ from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
 from django.http.request import RawPostDataException
+from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
 from django.db.models import Q, F
 from django.db.models.lookups import Transform
@@ -63,6 +64,32 @@ def get_default_annotations(model):
 				annotations.add(attr)
 
 	return annotations
+
+
+def split_path(path):
+	path = iter(path)
+	chars = []
+	for char in path:
+		if char == '.':
+			yield ''.join(chars)
+			chars.clear()
+			continue
+		if char == '\\':
+			char = next(path, '')
+		chars.append(char)
+	yield ''.join(chars)
+
+
+def join_path(keys):
+	chars = []
+	for i, key in enumerate(keys):
+		if i != 0:
+			chars.append('.')
+		for char in key:
+			if char in '\\.':
+				char = '\\' + char
+			chars.append(char)
+	return ''.join(chars)
 
 
 # Haha kill me now
@@ -1541,7 +1568,6 @@ class ModelView(View):
 			'id', 'pk', 'deleted', '_meta',
 			*self.unwritable_fields,
 			*self.shown_properties,
-			*self.file_fields,
 			*self.annotations(request),
 		]:
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
@@ -1726,7 +1752,7 @@ class ModelView(View):
 
 	# Put data and with on one big pile, that's easier for us
 	def _multi_put_parse_request(self, request):
-		body = jsonloads(request.body)
+		body = self._get_request_values(request)
 
 		data = body.get('with', {})
 		if not isinstance(data, dict):
@@ -2084,7 +2110,65 @@ class ModelView(View):
 		return JsonResponse({'idmap': output})
 
 	def _get_request_values(self, request):
-		return jsonloads(request.body)
+		# So normally we just parse json here but for multipart form data we have some special logic to inject files
+		# The values then would look a bit like this:
+		#
+		# data={"foo": 1, "bar": null, "baz": [1, 2, null]}
+		# file:bar=<FILE>
+		# file:baz.2=<FILE>
+		#
+		# Where the output will be the data but with the null values replaced by the specified files.
+		# The paths that the files use as key have to be in the data and have value null.
+		# This is because we do not want to alter the structure of the data because that gets messy with things like array indexes etc.
+
+		if request.content_type == 'multipart/form-data':
+			# Django only parses multipart automatically on POST, so for PUT/PATCH/DELETE etc we do it manually
+			if request.method == 'POST':
+				fields = request.POST
+				files = request.FILES
+			else:
+				parser = MultiPartParser(request.META, request, request.upload_handlers)
+				fields, files = parser.parse()
+			try:
+				data = fields['data']
+			except KeyError:
+				raise BinderRequestError('data field is required in multipart body')
+		else:
+			data = request.body
+			files = {}
+
+		data = jsonloads(data)
+
+		for path, value in files.items():
+			if not path.startswith('file:'):
+				continue
+			target = data
+			keys = list(split_path(path[5:]))
+			for i, key in enumerate(keys):
+				if isinstance(target, list):
+					try:
+						key = int(key)
+					except ValueError:
+						raise BinderRequestError(
+							'expected integer key at path: ' + join_path(keys[:i + 1])
+						)
+				if not (
+					(isinstance(target, dict) and key in target) or
+					(isinstance(target, list) and 0 <= key < len(target))
+				):
+					raise BinderRequestError(
+						'unexpected key at path: ' + join_path(keys[:i + 1])
+					)
+				if i != len(keys) - 1:
+					target = target[key]
+				elif target[key] is not None:
+					raise BinderRequestError(
+						'expected null at path: ' + join_path(keys)
+					)
+				else:
+					target[key] = value
+
+		return data
 
 	def put(self, request, pk=None):
 		if pk is None:
