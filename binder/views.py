@@ -14,6 +14,7 @@ from inspect import getmro
 import django
 from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
+from django.core.files.base import File, ContentFile
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
 from django.http.request import RawPostDataException
 from django.http.multipartparser import MultiPartParser
@@ -29,7 +30,7 @@ from django.db.models.fields.reverse_related import ForeignObjectRel
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat
-from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField
+from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField, BinderImageField
 from .json import JsonResponse, jsonloads
 
 
@@ -508,12 +509,11 @@ class ModelView(View):
 
 			data = {}
 			for f in fields:
-				if isinstance(f, models.fields.files.FileField):
+				if isinstance(f, models.FileField):
 					file = getattr(obj, f.attname)
-					if file:
+					if file.name:
 						# {router-view-instance}
 						data[f.name] = self.router.model_route(self.model, obj.id, f)
-
 						# {duplicate-binder-file-field-hash-code}
 						if isinstance(f, BinderFileField):
 							data[f.name] += '?h={}&content_type={}&filename={}'.format(
@@ -1449,7 +1449,10 @@ class ModelView(View):
 
 		# Skip re-fetch and serialization via get_objs if we're in
 		# multi-put (data is discarded!).
-		if getattr(request, '_is_multi_put', False):
+		if (
+			getattr(request, '_is_multi_put', False) or
+			getattr(request, '_is_file_upload', False)
+		):
 			return None
 
 		# Permission checks are done at this point, so we can avoid get_queryset()
@@ -1600,6 +1603,7 @@ class ModelView(View):
 							# Hack, set the id directly. This does the actual check, and throws the BinderError in
 							# the same way the old case has.
 							setattr(obj, f.attname, value)
+
 				elif isinstance(f, models.IntegerField):
 					if value is None or value == '':
 						value = None
@@ -1620,6 +1624,7 @@ class ModelView(View):
 								}
 							})
 					setattr(obj, f.attname, value)
+
 				elif isinstance(f, models.TextField):
 					# Django doesn't enforce max_length on TextFields, so we do.
 					if f.max_length is not None:
@@ -1640,6 +1645,97 @@ class ModelView(View):
 								}
 							})
 					setattr(obj, f.attname, value)
+
+				elif isinstance(f, models.FileField):
+					if not isinstance(value, File) and value is not None:
+						raise BinderFieldTypeError(self.model.__name__, field)
+
+					if value is not None:
+						if value.size > self.max_upload_size * 10**6:
+							raise BinderFileSizeExceeded(self.max_upload_size)
+
+						if getattr(f, 'allowed_extensions', None) is not None:
+							extension = None if '.' not in value.name else value.name.split('.')[-1]
+
+							if extension not in f.allowed_extensions:
+								raise BinderFileTypeIncorrect([{'extension': t} for t in f.allowed_extensions])
+
+						if isinstance(f, (models.ImageField, BinderImageField)):
+							try:
+								img = Image.open(value)
+							except Exception:
+								raise BinderImageError('Could not parse the file as an image.')
+
+							format = img.format.lower()
+							if not format in ('png', 'gif', 'jpeg'):
+								raise BinderFileTypeIncorrect([{'extension': t, 'mimetype': 'image/' + t} for t in ['jpeg', 'png', 'gif']])
+
+							width, height = img.size
+							if format == 'jpeg':
+								img2 = image_transpose_exif(img)
+
+								if img2 != img:
+									value.seek(0)  # Do not append to the existing file!
+									value.truncate()
+									img2.save(value, 'jpeg')
+									img = img2
+
+							# Determine resize threshold
+							try:
+								max_size = self.image_resize_threshold[field]
+							except TypeError:
+								max_size = self.image_resize_threshold
+
+							try:
+								max_width, max_height = max_size
+							except (TypeError, ValueError):
+								max_width, max_height = max_size, max_size
+
+							try:
+								format_override = self.image_format_override.get(field)
+							except AttributeError:
+								format_override = self.image_format_override
+
+							changes = False
+
+							# FIXME: hardcoded max
+							# Flat out refuse images exceeding this size, to prevent DoS.
+							width_limit, height_limit = max(max_width, 4096), max(max_height, 4096)
+							if width > width_limit or height > height_limit:
+								raise BinderImageSizeExceeded(width_limit, height_limit)
+
+							# Resize images that are too large.
+							if width > max_width or height > max_height:
+								img.thumbnail((max_width, max_height), Image.ANTIALIAS)
+								logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
+								if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
+									img = img.convert("RGB")
+								if format != 'jpeg':
+									format = 'png'
+								changes = True
+
+							if format_override and format != format_override:
+								format = format_override
+								changes = True
+
+							name, ext = os.path.splitext(value.name)
+							if ext != '.' + format and not (ext == '.jpg' and format == 'jpeg'):
+								ext = '.' + format
+								changes = True
+
+							if changes:
+								filename = name + ext
+								value = ContentFile(b'', name=filename)
+								img.save(value, format)
+
+					old_value = getattr(obj, f.attname)
+					if old_value.name:
+						@transaction.on_commit
+						def delete_old_file():
+							old_value.storage.delete(old_value.name)
+
+					setattr(obj, f.attname, value)
+
 				else:
 					try:
 						f.to_python(value)
@@ -2347,146 +2443,40 @@ class ModelView(View):
 			return resp
 
 		if request.method == 'POST':
-			self._require_model_perm('change', request)
-
 			try:
 				# Take an arbitrary uploaded file
 				file = next(request.FILES.values())
 			except StopIteration:
 				raise BinderRequestError('File POST should use multipart/form-data (with an arbitrary key for the file data).')
 
-			try:
-				if file.size > self.max_upload_size * 10**6:
-					raise BinderFileSizeExceeded(self.max_upload_size)
+			# Hack to communicate to _store() that we're not interested in
+			# the new data (for perf reasons).
+			request._is_file_upload = True
+			self._store(obj, {file_field_name: file}, request, pk=pk)
 
-				field = self.model._meta.get_field(file_field_name)
+			field = self.model._meta.get_field(file_field_name)
+			path = self.router.model_route(self.model, obj.id, field)
+			# {duplicate-binder-file-field-hash-code}
+			if isinstance(field, BinderFileField):
+				file_field = getattr(obj, file_field_name)
+				path += '?h={}&content_type={}&filename={}'.format(
+					file_field.content_hash,
+					file_field.content_type or '',
+					os.path.basename(file_field.name),
+				)
 
-				if getattr(field, 'allowed_extensions', None) is not None:
-					extension = None if '.' not in file.name else file.name.split('.')[-1]
-
-					if extension not in field.allowed_extensions:
-						raise BinderFileTypeIncorrect([{'extension': t} for t in field.allowed_extensions])
-
-				if isinstance(field, models.fields.files.ImageField):
-					try:
-						img = Image.open(file)
-					except Exception:
-						raise BinderImageError('Could not parse the file as an image.')
-
-					format = img.format.lower()
-					if not format in ('png', 'gif', 'jpeg'):
-						raise BinderFileTypeIncorrect([{'extension': t, 'mimetype': 'image/' + t} for t in ['jpeg', 'png', 'gif']])
-
-					width, height = img.size
-					if format == 'jpeg':
-						img2 = image_transpose_exif(img)
-
-						if img2 != img:
-							file.seek(0)  # Do not append to the existing file!
-							file.truncate()
-							img2.save(file, 'jpeg')
-							img = img2
-
-					# Determine resize threshold
-					try:
-						max_size = self.image_resize_threshold[file_field_name]
-					except TypeError:
-						max_size = self.image_resize_threshold
-
-					try:
-						max_width, max_height = max_size
-					except (TypeError, ValueError):
-						max_width, max_height = max_size, max_size
-
-					try:
-						format_override = self.image_format_override.get(file_field_name)
-					except AttributeError:
-						format_override = self.image_format_override
-
-					changes = False
-
-					# FIXME: hardcoded max
-					# Flat out refuse images exceeding this size, to prevent DoS.
-					width_limit, height_limit = max(max_width, 4096), max(max_height, 4096)
-					if width > width_limit or height > height_limit:
-						raise BinderImageSizeExceeded(width_limit, height_limit)
-
-					# Resize images that are too large.
-					if width > max_width or height > max_height:
-						img.thumbnail((max_width, max_height), Image.ANTIALIAS)
-						logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
-						if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
-							img = img.convert("RGB")
-						if format != 'jpeg':
-							format = 'png'
-						changes = True
-
-					if format_override and format != format_override:
-						format = format_override
-						changes = True
-
-					filename = '{}.{}'.format(os.path.basename(file.name), format)
-
-					if changes:
-						file = io.BytesIO()
-						img.save(file, format)
-				else:
-					filename = file.name
-
-				# FIXME: duplicate code
-				if file_field:
-					try:
-						old_hash = hashlib.sha256()
-						for c in file_field.file.chunks():
-							old_hash.update(c)
-						old_hash = old_hash.hexdigest()
-					except FileNotFoundError:
-						logger.warning('Old file {} missing!'.format(file_field))
-						old_hash = None
-				else:
-					old_hash = None
-
-				file_field.delete(save=False)
-				# This triggers a save on obj
-				file_field.save(filename, django.core.files.File(file))
-
-				# FIXME: duplicate code
-				new_hash = hashlib.sha256()
-				for c in file_field.file.chunks():
-					new_hash.update(c)
-				new_hash = new_hash.hexdigest()
-
-				logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
-				path = self.router.model_route(self.model, obj.id, field)
-
-				# {duplicate-binder-file-field-hash-code}
-				if isinstance(field, BinderFileField):
-					path += '?h={}&content_type={}&filename={}'.format(
-						file_field.content_hash,
-						file_field.content_type or '',
-						os.path.basename(file_field.name),
-					)
-
-				return JsonResponse( {"data": {file_field_name: path}} )
-
-			except ValidationError as ve:
-				raise self.binder_validation_error(obj, ve, pk=pk)
+			return JsonResponse({'data': {file_field_name: path}})
 
 		if request.method == 'DELETE':
-			self._require_model_perm('change', request)
 			if not file_field:
 				raise BinderIsDeleted()
 
-			# FIXME: duplicate code
-			old_hash = hashlib.sha256()
-			for c in file_field.file.chunks():
-				old_hash.update(c)
-			old_hash = old_hash.hexdigest()
+			# Hack to communicate to _store() that we're not interested in
+			# the new data (for perf reasons).
+			request._is_file_upload = True
+			self._store(obj, {file_field_name: None}, request, pk=pk)
 
-			file_field.delete()
-
-			logger.info('DELETEd {}[{}].{}: {}'.format(self._model_name(), pk, file_field_name, old_hash))
-			return JsonResponse( {"data": {file_field_name: None}} )
+			return JsonResponse({'data': {file_field_name: None}})
 
 
 
