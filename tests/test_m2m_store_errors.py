@@ -49,6 +49,12 @@ class M2MStoreErrorsTest(TestCase):
 		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 400)
 
+	def assert_validation_error_as_response(self, response):
+		"""Assert that the backend sends us the validation error."""
+		self.assertEqual(jsonloads(response.content)['code'], 'ValidationError')
+		self.assertIn('Very special validation check that we need in `tests.M2MStoreErrorsTest`.', str(response.content))
+		self.assertEqual(response.status_code, 400)
+
 	def test_saving_m2m_with_model_validation_error(self):
 		"""Forward m2m field saving should not crash when there are model validation errors."""
 		model_data = {"data": [
@@ -63,7 +69,7 @@ class M2MStoreErrorsTest(TestCase):
 		}
 
 		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
-		self.assertEqual(response.status_code, 400)
+		self.assert_validation_error_as_response(response)
 
 	def test_saving_reverse_m2m_with_model_validation_error(self):
 		"""Reverse m2m field saving should not crash when there are model validation errors."""
@@ -78,7 +84,7 @@ class M2MStoreErrorsTest(TestCase):
 		}
 
 		response = self.client.put('/contact_person/', data=json.dumps(model_data), content_type='application/json')
-		self.assertEqual(response.status_code, 400)
+		self.assert_validation_error_as_response(response)
 
 	def test_saving_reverse_fk_with_validation_error(self):
 		"""Reverse foreign key field saving should not crash when there are model validation errors."""
@@ -96,7 +102,7 @@ class M2MStoreErrorsTest(TestCase):
 		}
 
 		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
-		self.assertEqual(response.status_code, 400)
+		self.assert_validation_error_as_response(response)
 
 	def test_saving_o2o_with_validation_error(self):
 		"""Reverse o2o field saving should not crash when there are model validation errors."""
@@ -114,4 +120,4 @@ class M2MStoreErrorsTest(TestCase):
 		}
 
 		response = self.client.put('/contact_person/', data=json.dumps(model_data), content_type='application/json')
-		self.assertEqual(response.status_code, 400)
+		self.assert_validation_error_as_response(response)
