@@ -17,7 +17,7 @@ There are two ways to run the tests:
 
 The tests are set up in such a way that there is no need to keep migration files. The setup procedure in `tests/__init__.py` handles the preparation of the database by directly calling some build-in Django commands.
 
-Modify the `test_suite` parameter in `setup.py` to temporarily run a specific test.
+To only run a selection of the tests, use the `-s` flag like `./setup.py test -s tests.test_some_specific_test`.
 
 ## MySQL support
 
