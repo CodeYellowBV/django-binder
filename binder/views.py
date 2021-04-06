@@ -1396,10 +1396,7 @@ class ModelView(View):
 
 		try:
 			obj.save()
-			if obj.pk is None:
-				# Something went wrong while creating/updating the object, and no validation
-				# errors were raised, something must be wrong...
-				raise RuntimeError('Error while saving object')
+			assert(obj.pk is not None) # At this point, the object must have been created.
 		except ValidationError as ve:
 			validation_errors.append(self.binder_validation_error(obj, ve, pk=pk))
 
