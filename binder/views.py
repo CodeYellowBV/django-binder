@@ -1400,9 +1400,16 @@ class ModelView(View):
 
 		try:
 			obj.save()
+			assert(obj.pk is not None) # At this point, the object must have been created.
 		except ValidationError as ve:
 			validation_errors.append(self.binder_validation_error(obj, ve, pk=pk))
 
+		# When there are already validation errors, we quit (see T30296).
+		# This means we are not yet getting validation information about related fields which
+		# are checked in `store_m2m_field`. These additional validation errors are obtained
+		# when the model validation does not longer complain.
+		if validation_errors:
+			raise sum(validation_errors, None)
 
 		for field, value in deferred_m2ms.items():
 			try:
@@ -1507,9 +1514,7 @@ class ModelView(View):
 				return
 			getattr(obj, field).set(value)
 		elif any(f.name == field for f in self.model._meta.many_to_many):
-			# Only try saving an m2m field if the base model field save was succesfull (checked by looking if it has id)
-			if obj.id:
-				getattr(obj, field).set(value)
+			getattr(obj, field).set(value)
 		else:
 			setattr(obj, field, value)
 

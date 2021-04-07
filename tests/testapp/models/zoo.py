@@ -20,7 +20,10 @@ class Zoo(BinderModel):
 	name = models.TextField()
 	founding_date = models.DateField(null=True, blank=True)
 	floor_plan = models.ImageField(upload_to='floor-plans', null=True, blank=True)
+	# It is important that this m2m relationship is defined on this model, one of the tests depends on this fact
 	contacts = models.ManyToManyField('ContactPerson', blank=True, related_name='zoos')
+	# We assume that a person can only be the director of one zoo, one of the tests depends on this fact
+	director = models.OneToOneField('ContactPerson', on_delete=models.SET_NULL, blank=True, null=True, related_name='managing_zoo')
 	most_popular_animals = models.ManyToManyField('Animal', blank=True, related_name='+')
 	opening_time = models.TimeField(default=datetime.time(9, 0, 0))
 
@@ -41,6 +44,12 @@ class Zoo(BinderModel):
 
 
 	def clean(self):
+		if self.name == 'very_special_forbidden_zoo_name':
+			raise ValidationError(
+				code='invalid',
+				message='Very special validation check that we need in `tests.M2MStoreErrorsTest`.'
+			)
+
 		errors = {}
 
 		if self.floor_plan and self.name == 'Nowhere':
