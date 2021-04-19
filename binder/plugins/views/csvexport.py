@@ -155,7 +155,7 @@ class CsvExportView:
 					transform_function = col_definition[2]
 					datum = transform_function(datum, row, key_mapping)
 				if type(datum) == list:
-					return self.csv_settings.multi_value_delimiter.join(datum)
+					datum = self.csv_settings.multi_value_delimiter.join(datum)
 				data.append(datum)
 			writer.writerow(data)
 
