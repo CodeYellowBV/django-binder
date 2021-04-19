@@ -113,8 +113,6 @@ class CsvExportView:
 			if '.' not in key:
 				if key not in data:
 					raise Exception("{} not found in data: {}".format(key, data))
-				if type(data[key]) == list:
-					return self.csv_settings.multi_value_delimiter.join(data[key])
 				return data[key]
 			else:
 				"""
@@ -156,6 +154,8 @@ class CsvExportView:
 				if len(col_definition) >= 3:
 					transform_function = col_definition[2]
 					datum = transform_function(datum, row, key_mapping)
+				if type(datum) == list:
+					return self.csv_settings.multi_value_delimiter.join(data[key])
 				data.append(datum)
 			writer.writerow(data)
 
