@@ -369,7 +369,15 @@ class ModelView(View):
 		try:
 			#### START TRANSACTION
 			with ExitStack() as stack, history.atomic(source='http', user=request.user, uuid=request.request_id):
-				for db in django.conf.settings.get('TRANSACTION_DATABASES', ['default']):
+				transaction_dbs = ['default']
+
+				# Check if the TRANSACTION_DATABASES is set in the settings.py, and if so, use that instead
+				try:
+					transaction_dbs = django.conf.settings.TRANSACTION_DATABASES
+				except AttributeError:
+					pass
+
+				for db in transaction_dbs:
 					stack.enter_context(transaction.atomic(using=db))
 				is_unauthenticated_endpoint = kwargs.pop('unauthenticated', False)
 				user_is_authenticated = request.user.is_authenticated
