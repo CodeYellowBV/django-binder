@@ -8,6 +8,8 @@ import datetime
 import mimetypes
 import functools
 from collections import defaultdict, namedtuple
+from contextlib import ExitStack
+
 from PIL import Image
 from inspect import getmro
 
@@ -366,7 +368,9 @@ class ModelView(View):
 		response = None
 		try:
 			#### START TRANSACTION
-			with transaction.atomic(), history.atomic(source='http', user=request.user, uuid=request.request_id):
+			with ExitStack() as stack, history.atomic(source='http', user=request.user, uuid=request.request_id):
+				for db in django.conf.settings.get('TRANSACTION_DATABASES', ['default']):
+					stack.enter_context(transaction.atomic(using=db))
 				is_unauthenticated_endpoint = kwargs.pop('unauthenticated', False)
 				user_is_authenticated = request.user.is_authenticated
 
