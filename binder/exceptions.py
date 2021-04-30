@@ -235,3 +235,13 @@ class BinderValidationError(BinderException):
 			else:
 				errors[model] = other.errors[model]
 		return BinderValidationError(errors)
+
+
+class BinderSkipSave(BinderException):
+	"""Used to abort the database transaction when performing a non-save validation request."""
+	http_code = 200
+	code = 'SkipSave'
+
+	def __init__(self):
+		super().__init__()
+		self.fields['message'] = 'No validation errors were encountered.'
