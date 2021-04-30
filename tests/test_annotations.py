@@ -1,8 +1,9 @@
+from tests.test_order_by import CustomOrdering
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
 from binder.json import jsonloads
-from .testapp.models import Animal, Caretaker, Zoo
+from .testapp.models import Animal, Caretaker, Zoo, Costume
 
 
 class AnnotationTestCase(TestCase):
@@ -160,6 +161,44 @@ class AnnotationTestCase(TestCase):
 		self.assertEqual(data['data']['name'], 'Harambe')
 		self.assertEqual(data['data']['prefixed_name'], 'Lady Harambe')
 
+	def test_context_annotation_sorting(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+		harambe = Animal(zoo=zoo, name='Harambe', age=4)
+		harambe.save()
+		bokito = Animal(zoo=zoo, name='Bokito', age=3)
+		bokito.save()
+
+		with CustomOrdering(Animal, 'age_product'):
+			res = self.client.get('/animal/?factor=2')
+			self.assertEqual(res.status_code, 200)
+			returned_data = jsonloads(res.content)
+
+		data = [x['name'] for x in returned_data['data']]
+		self.assertEqual(['Bokito', 'Harambe'], data)
+
+		with CustomOrdering(Animal, 'age_product'):
+			# This time the factor is negative, which should give the reverse effect
+			res = self.client.get('/animal/?factor=-2')
+			self.assertEqual(res.status_code, 200)
+			returned_data = jsonloads(res.content)
+
+		data = [x['name'] for x in returned_data['data']]
+		self.assertEqual(['Harambe', 'Bokito'], data)
+
+	def test_context_aware_relation_error(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+		harambe = Animal(zoo=zoo, name='Harambe', age=4)
+		harambe.save()
+		bokito = Animal(zoo=zoo, name='Bokito', age=3)
+		bokito.save()
+		harambe_costume = Costume(animal=harambe)
+		bokito_costume = Costume(animal=bokito)
+
+		with CustomOrdering(Costume, 'animal.age_product'):
+			res = self.client.get('/animal/?factor=2')
+			self.assertEqual(res.status_code, 418)
 
 class IncludeAnnotationsTest(TestCase):
 
