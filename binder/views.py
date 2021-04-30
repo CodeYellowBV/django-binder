@@ -29,7 +29,7 @@ from django.db.models.fields.reverse_related import ForeignObjectRel
 
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
-from .orderable_agg import OrderableArrayAgg, GroupConcat
+from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField
 from .json import JsonResponse, jsonloads
 
@@ -317,7 +317,11 @@ class ModelView(View):
 
 	@property
 	def AggStrategy(self):
-		return GroupConcat if connections[self.model.objects.db].vendor == 'mysql' else OrderableArrayAgg
+		if connections[self.model.objects.db].vendor == 'mysql':
+			return GroupConcat
+		if connections[self.model.objects.db].vendor == 'microsoft':
+			return StringAgg
+		return OrderableArrayAgg
 
 
 	def annotations(self, request, include_annotations=None):
@@ -934,10 +938,6 @@ class ModelView(View):
 
 				if field_alias in annotations:
 					value = record[field_alias]
-					if Agg == GroupConcat:
-						# Stupid assumption that PKs are always integers.
-						# Without this, the result types won't be right...
-						value = [int(v) for v in value]
 
 					# Make the values distinct.  We can't do this in
 					# the Agg() call, because then we get an error
