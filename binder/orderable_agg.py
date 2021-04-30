@@ -93,7 +93,7 @@ class GroupConcat(OrderableAggMixin, Aggregate):
 	def convert_value(self, value, expression, connection):
 		if not value:
 			return []
-		return value.split(',')
+		return [int(v) for v in value.split(',')]
 
 
 class StringAgg(OrderableAggMixin, Aggregate):
@@ -130,4 +130,4 @@ class StringAgg(OrderableAggMixin, Aggregate):
 	def convert_value(self, value, expression, connection):
 		if not value:
 			return []
-		return value.split(',')
+		return [int(v) for v in value.split(',')]
