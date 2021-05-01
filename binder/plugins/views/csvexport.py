@@ -20,7 +20,7 @@ class CsvExportView:
 		"""
 		This is a fake struct which contains the definition of the CSV Export
 		"""
-		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ', extra_permission=None):
+		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ', extra_permission=None, extra_params={}):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
@@ -38,6 +38,7 @@ class CsvExportView:
 			self.default_file_name = default_file_name
 			self.multi_value_delimiter = multi_value_delimiter
 			self.extra_permission = extra_permission
+			self.extra_params = extra_params
 
 	@list_route(name='download', methods=['GET'])
 	def download(self, request):
@@ -61,6 +62,8 @@ class CsvExportView:
 		request.GET['page'] = 1
 		request.GET['limit'] = 10000
 		request.GET['with'] = ",".join(self.csv_settings.withs)
+		for key, value in self.csv_settings.extra_params.items():
+			request.GET[key] = value
 		request.GET._mutable = mutable
 
 		parent_result = self.get(request)
@@ -110,8 +113,6 @@ class CsvExportView:
 			if '.' not in key:
 				if key not in data:
 					raise Exception("{} not found in data: {}".format(key, data))
-				if type(data[key]) == list:
-					return self.csv_settings.multi_value_delimiter.join(data[key])
 				return data[key]
 			else:
 				"""
@@ -153,6 +154,8 @@ class CsvExportView:
 				if len(col_definition) >= 3:
 					transform_function = col_definition[2]
 					datum = transform_function(datum, row, key_mapping)
+				if type(datum) == list:
+					datum = self.csv_settings.multi_value_delimiter.join(datum)
 				data.append(datum)
 			writer.writerow(data)
 
