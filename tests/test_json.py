@@ -4,6 +4,7 @@ from datetime import datetime, date, timezone
 from uuid import UUID
 from decimal import Decimal
 from django.test import TestCase
+from psycopg2.extras import DateTimeTZRange
 
 import binder.json as binder_json
 
@@ -72,3 +73,8 @@ class JsonTest(TestCase):
 	def test_decimals_dump_correctly(self):
 		u = Decimal('1.1')
 		self.assertEqual('["1.1"]', binder_json.jsondumps([u]))
+
+	def test_json_datetimerange_dump_correctly(self):
+		t = datetime(2016, 1, 1, 1, 2, 3, 313337, tzinfo=timezone.utc)
+		d = DateTimeTZRange(t, t)
+		self.assertEqual('["2016-01-01T01:02:03.313337+0000", "2016-01-01T01:02:03.313337+0000"]', binder_json.jsondumps([d]))
