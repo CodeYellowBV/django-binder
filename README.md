@@ -12,6 +12,12 @@ Code Yellow backend framework for SPA webapps with REST-like API.
 There are two ways to run the tests:
 - Run directly `./setup.py test` (requires you to have python3 and postgres installed)
 - Run with docker `docker-compose run binder ./setup.py test`
+  - Access the test database directly by with `docker-compose run db psql -h db -U postgres`.
+  - It may be possible to recreate the test database (for example when you added/changed models). One way of achieving this is to just remove all the docker images that were build `docker-compose rm`. The database will be created during the setup in `tests/__init__.py`.
+
+The tests are set up in such a way that there is no need to keep migration files. The setup procedure in `tests/__init__.py` handles the preparation of the database by directly calling some build-in Django commands.
+
+To only run a selection of the tests, use the `-s` flag like `./setup.py test -s tests.test_some_specific_test`.
 
 ## MySQL support
 

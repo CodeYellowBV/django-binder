@@ -47,14 +47,25 @@ class TokenAuthMiddleware:
 	def __init__(self, get_response):
 		self.get_response = get_response
 
-	def _get_authorization_header(self, request):
+	def _get_authorization_token(self, request):
 		"""
-		Separate function for getting the authorization header. This allows for overwriting the function in a project
+		Separate function for getting the authorization token. This allows for overwriting the function in a project
 		to allow for custom authorization headers.
 
 		For example: Some external services allow for callback requests which allow keys to be set but not headers
 		"""
-		return request.META.get('HTTP_AUTHORIZATION')
+		auth = request.META.get('HTTP_AUTHORIZATION')
+
+		if auth is None:
+			# No auth header sent
+			return None
+
+		if not auth.startswith('Token '):
+			# Auth header of wrong type
+			return None
+
+		token = auth[6:]
+		return token
 
 	def __call__(self, request):
 		if not hasattr(request, 'user'):
@@ -64,17 +75,11 @@ class TokenAuthMiddleware:
 			# Already authenticated
 			return self.get_response(request)
 
-		auth = self._get_authorization_header(request)
+		token = self._get_authorization_token(request)
 
-		if auth is None:
-			# No auth header sent
+		if token is None:
 			return self.get_response(request)
 
-		if not auth.startswith('Token '):
-			# Auth header of wrong type
-			return self.get_response(request)
-
-		token = auth[6:]
 		try:
 			token = Token.objects.get(token=token)
 		except Token.DoesNotExist:
@@ -101,7 +106,11 @@ class TokenAuthMiddleware:
 		# request was not forged.
 		#
 		# Before django.views.decorators.csrf.csrf_exempt was used, but
-		# somehow this still looks for the existance of a cookie...
+		# somehow this still looks for the existence of a cookie...
 		request._dont_enforce_csrf_checks = True
+
+		# Add parameter to request to indicate it is token authenticated
+		# This could be used to allow for token authenticated requests in a two factor auth system
+		request._is_token_authenticated = True
 
 		return self.get_response(request)
