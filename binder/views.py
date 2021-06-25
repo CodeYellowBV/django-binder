@@ -520,6 +520,10 @@ class ModelView(View):
 
 		response = None
 		try:
+			# only allow standalone validation if you know what you are doing
+			if 'validate' in request.GET and request.GET['validate'] == 'true' and not self.allow_standalone_validation:
+				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
+
 			#### START TRANSACTION
 			with ExitStack() as stack, history.atomic(source='http', user=request.user, uuid=request.request_id):
 				transaction_dbs = ['default']
@@ -1785,11 +1789,12 @@ class ModelView(View):
 
 	def _abort_when_standalone_validation(self, request):
 		"""Raise a `BinderSkipSave` exception when this is a standalone request."""
-		if 'validate' in params:
+		if 'validate' in request.GET and request.GET['validate'] == 'true':
 			if self.allow_standalone_validation:
 				params = QueryDict(request.body)
 				raise BinderSkipSave
 			else:
+				print('validate not enabled')
 				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
 
 
@@ -2777,6 +2782,9 @@ class ModelView(View):
 
 		if hasattr(obj, 'deleted') and obj.deleted:
 			raise BinderIsDeleted()
+
+
+		logger.info('storing')
 
 		data = self._store(obj, values, request)
 
