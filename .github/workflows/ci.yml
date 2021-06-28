@@ -27,8 +27,13 @@ jobs:
 
       mysql:
         image: mysql
+        options: >-
+          --health-cmd "mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
         ports:
-          - 3306:3306
+          - 33306:3306
 
     steps:
       - name: Checkout code
