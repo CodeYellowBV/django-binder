@@ -58,7 +58,7 @@ jobs:
       - name: Prepare postgres database
         run: |
           sudo apt-get install postgresql-client
-          psql -c 'CREATE DATABASE "binder-test";' -U postgres
+          psql -c 'CREATE DATABASE "binder-test";' -h localhost -U postgres
         if: matrix.database-engine == 'postgres'
 
       - name: Prepare mysql database
