@@ -43,23 +43,22 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.python-version }}-venv-${{ hashFiles('setup.py') }}
 
       - name: Install package
-        run:
-          - python -m venv .venv
-          - .venv/bin/pip install -q psycopg2 Pillow django-request-id requests flake8 codecov coverage django==${{ matrix.django-version }}
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -q psycopg2 Pillow django-request-id requests flake8 codecov coverage django==${{ matrix.django-version }}
         if: steps.cache-venv.outputs.cache-hit != 'true'
 
       - name: Run linting
         run: .venv/bin/flake8 binder
 
       - name: Prepare postgres
-        run:
-          - psql -c 'CREATE DATABASE "binder-test";' -U postgres
+        run: psql -c 'CREATE DATABASE "binder-test";' -U postgres
         if: matrix.database-engine == 'postgres'
 
       - name: Prepare mysql
-        run:
-          - msql -e 'CREATE DATABASE `binder-test`;'
-          - mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql mysql
+        run: |
+          msql -e 'CREATE DATABASE `binder-test`;'
+          mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql mysql
         if: matrix.database-engine == 'mysql'
 
       - name: Run tests
