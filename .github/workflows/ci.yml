@@ -10,7 +10,7 @@ jobs:
       matrix:
         python-version: ["3.7", "3.8"]
         django-version: ["2.1.1", "3.1.4"]
-        database-engine: ["postgres", "mysql"]
+        database-engine: ["postgres"]
 
     services:
       postgres:
@@ -57,7 +57,7 @@ jobs:
 
       - name: Prepare postgres database
         run: |
-          sudo apt-get install postgres-client
+          sudo apt-get install postgresql-client
           psql -c 'CREATE DATABASE "binder-test";' -h postgres -U postgres
         if: matrix.database-engine == 'postgres'
 
