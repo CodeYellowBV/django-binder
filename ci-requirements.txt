@@ -5,4 +5,4 @@ django-request-id
 requests
 flake8
 codecov
-coveragee
+coverage

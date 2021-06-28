@@ -56,8 +56,7 @@ jobs:
       - name: Install requirements
         run: |
           python -m venv .venv
-          .venv/bin/pip install -qr ci-requirements.txt
-          .venv/bin/pip install -q django==${{ matrix.django-version }}
+          .venv/bin/pip install -qr ci-requirements.txt django==${{ matrix.django-version }}
         if: steps.cache-venv.outputs.cache-hit != 'true'
 
       - name: Run linting
