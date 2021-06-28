@@ -25,6 +25,7 @@ else:
 		'ENGINE': 'django.db.backends.postgresql_psycopg2',
 		'NAME': 'binder-test',
 		'HOST': 'localhost',
+		'USER': 'postgres',
 	}
 
 settings.configure(**{
