@@ -27,6 +27,8 @@ jobs:
 
       mysql:
         image: mysql
+        env:
+          MYSQL_ROOT_PASSWORD: password
         options: >-
           --health-cmd "mysqladmin ping"
           --health-interval 10s
