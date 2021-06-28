@@ -58,14 +58,14 @@ jobs:
       - name: Prepare postgres database
         run: |
           sudo apt-get install postgresql-client
-          psql -c 'CREATE DATABASE "binder-test";' -h postgres -U postgres
+          psql -c 'CREATE DATABASE "binder-test";' -U postgres
         if: matrix.database-engine == 'postgres'
 
       - name: Prepare mysql database
         run: |
           sudo apt-get install mariadb-client
-          mysql -e 'CREATE DATABASE `binder-test`; -h mysql'
-          mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql -h mysql mysql
+          mysql -e 'CREATE DATABASE `binder-test`;'
+          mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql mysql
         if: matrix.database-engine == 'mysql'
 
       - name: Run tests
