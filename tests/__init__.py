@@ -30,6 +30,7 @@ else:
 
 settings.configure(**{
 	'DEBUG': True,
+	'SECRET_KEY': 'testy mctestface',
 	'ALLOWED_HOSTS': ['*'],
 	'DATABASES': {
 		'default': db_settings,
