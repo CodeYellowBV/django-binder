@@ -46,7 +46,7 @@ jobs:
           path: ./.venv/
           key: ${{ runner.os }}-${{ matrix.python-version }}-venv-${{ hashFiles('setup.py') }}
 
-      - name: Install package
+      - name: Install requirements
         run: |
           python -m venv .venv
           .venv/bin/pip install -q psycopg2 Pillow django-request-id requests flake8 codecov coverage django==${{ matrix.django-version }}
@@ -55,7 +55,7 @@ jobs:
       - name: Run linting
         run: .venv/bin/flake8 binder
 
-      - name: Prepare postgres database
+    - name: Prepare postgres database
         run: |
           sudo apt-get install postgresql-client
           psql -c 'CREATE DATABASE "binder-test";' -h localhost -U postgres

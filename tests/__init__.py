@@ -19,12 +19,12 @@ elif os.environ.get('BINDER_TEST_MYSQL', '0') == '1':
 		'ENGINE': 'django.db.backends.mysql',
 		'NAME': 'binder-test',
 		'TIME_ZONE': 'UTC',
-		'HOST': 'localhost',
 	}
 else:
 	db_settings = {
 		'ENGINE': 'django.db.backends.postgresql_psycopg2',
 		'NAME': 'binder-test',
+		'HOST': 'localhost',
 	}
 
 settings.configure(**{
