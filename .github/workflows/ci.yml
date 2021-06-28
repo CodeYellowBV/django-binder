@@ -52,13 +52,13 @@ jobs:
         run: .venv/bin/flake8 binder
 
       - name: Prepare postgres
-        run: psql -c 'CREATE DATABASE "binder-test";' -U postgres
+        run: psql -c 'CREATE DATABASE "binder-test";' -h postgres -U postgres
         if: matrix.database-engine == 'postgres'
 
       - name: Prepare mysql
         run: |
-          mysql -e 'CREATE DATABASE `binder-test`;'
-          mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql mysql
+          mysql -e 'CREATE DATABASE `binder-test`; -h mysql'
+          mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql -h mysql mysql
         if: matrix.database-engine == 'mysql'
 
       - name: Run tests
