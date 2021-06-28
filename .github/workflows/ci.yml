@@ -62,8 +62,8 @@ jobs:
 
       - name: Prepare mysql database
         run: |
-          mysql -h 127.0.0.1 -e 'CREATE DATABASE `binder-test`;'
-          mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql -h localhost mysql
+          mysql --protocol=TCP -h localhost -e 'CREATE DATABASE `binder-test`;'
+          mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql --protocol=TCP -h localhost mysql
         if: matrix.database-engine == 'mysql'
 
       - name: Run tests
