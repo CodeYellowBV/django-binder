@@ -56,7 +56,7 @@ jobs:
       - name: Install requirements
         run: |
           python -m venv .venv
-          .venv/bin/pip install -q psycopg2 Pillow django-request-id requests flake8 codecov coverage django==${{ matrix.django-version }}
+          .venv/bin/pip install -q psycopg2 mysqlclient Pillow django-request-id requests flake8 codecov coverage django==${{ matrix.django-version }}
         if: steps.cache-venv.outputs.cache-hit != 'true'
 
       - name: Run linting

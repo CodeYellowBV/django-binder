@@ -19,6 +19,8 @@ elif os.environ.get('BINDER_TEST_MYSQL', '0') == '1':
 		'ENGINE': 'django.db.backends.mysql',
 		'NAME': 'binder-test',
 		'TIME_ZONE': 'UTC',
+		'USER': 'root',
+		'PASSWORD': 'rootpassword',
 	}
 else:
 	db_settings = {
