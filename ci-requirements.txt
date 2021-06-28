@@ -1,0 +1,8 @@
+psycopg2
+mysqlclient
+Pillow
+django-request-id
+requests
+flake8
+codecov
+coveragee
