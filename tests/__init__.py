@@ -5,7 +5,7 @@ import os
 
 if (
 	os.path.exists('/.dockerenv') and
-	'CY_RUNNING_INSIDE_TRAVIS' not in os.environ
+	'CY_RUNNING_INSIDE_CI' not in os.environ
 ):
 	db_settings = {
 		'ENGINE': 'django.db.backends.postgresql',

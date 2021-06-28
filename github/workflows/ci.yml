@@ -1,0 +1,71 @@
+name: Continuous Integration
+
+on: 'push'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8"]
+        django-version: ["2.1.1", "3.1.4"]
+        database-engine: ["postgres", "mysql"]
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mysql:
+        image: mysql
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Retrieve cached venv
+        id: cache-venv
+        with:
+          path: ./.venv/
+          key: ${{ runner.os }}-${{ matrix.python-version }}-venv-${{ hashFiles('setup.py') }}
+
+      - name: Install package
+        run:
+          - python -m venv .venv
+          - .venv/bin/pip install -q psycopg2 Pillow django-request-id requests flake8 codecov coverage django==${{ matrix.django-version }}
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+
+      - name: Run linting
+        run: .venv/bin/flake8 binder
+
+      - name: Prepare postgres
+        run:
+          - psql -c 'CREATE DATABASE "binder-test";' -U postgres
+        if: matrix.database-engine == 'postgres'
+
+      - name: Prepare mysql
+        run:
+          - msql -e 'CREATE DATABASE `binder-test`;'
+          - mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql mysql
+        if: matrix.database-engine == 'mysql'
+
+      - name: Run tests
+        run: .venv/bin/coverage run --include="binder/*" setup.py test
+        env:
+          CY_RUNNING_INSIDE_CI: 1
+          BINDER_TEST_MYSQL: ${{ matrix.database-engine == 'mysql' && 1 || 0 }}
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v1
