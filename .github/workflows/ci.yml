@@ -5,7 +5,6 @@ on: push
 jobs:
   check:
     runs-on: ubuntu-latest
-    container: python:${{ matrix.python-version }}
 
     strategy:
       matrix:
@@ -23,13 +22,20 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+        ports: 5432:5432
 
       mysql:
         image: mysql
+        ports: 3306:3306
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Setup python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Retrieve cached venv
         uses: actions/cache@v1
@@ -47,23 +53,15 @@ jobs:
       - name: Run linting
         run: .venv/bin/flake8 binder
 
-      - name: Install postgres client
-        run: |
-          sudo apt-get install postgres-client
-        if: matrix.database-engine == 'postgres'
-
       - name: Prepare postgres database
         run: |
+          sudo apt-get install postgres-client
           psql -c 'CREATE DATABASE "binder-test";' -h postgres -U postgres
         if: matrix.database-engine == 'postgres'
 
-      - name: Install mysql client
-        run: |
-          sudo apt-get install mariadb-client
-        if: matrix.database-engine == 'mysql'
-
       - name: Prepare mysql database
         run: |
+          sudo apt-get install mariadb-client
           mysql -e 'CREATE DATABASE `binder-test`; -h mysql'
           mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql -h mysql mysql
         if: matrix.database-engine == 'mysql'
@@ -74,7 +72,6 @@ jobs:
         env:
           BINDER_TEST_MYSQL: ${{ matrix.database-engine == 'mysql' && 1 || 0 }}
           CY_RUNNING_INSIDE_CI: 1
-          CY_DB_HOST: ${{ matrix.database-engine }}
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v1

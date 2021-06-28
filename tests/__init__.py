@@ -20,43 +20,11 @@ elif os.environ.get('BINDER_TEST_MYSQL', '0') == '1':
 		'NAME': 'binder-test',
 		'TIME_ZONE': 'UTC',
 	}
-	try:
-		db_settings['HOST'] = os.environ['CY_DB_HOST']
-	except KeyError:
-		pass
-	try:
-		db_settings['PORT'] = os.environ['CY_DB_PORT']
-	except KeyError:
-		pass
-	try:
-		db_settings['USER'] = os.environ['CY_DB_USER']
-	except KeyError:
-		pass
-	try:
-		db_settings['PASSWORD'] = os.environ['CY_DB_PASSWORD']
-	except KeyError:
-		pass
 else:
 	db_settings = {
 		'ENGINE': 'django.db.backends.postgresql_psycopg2',
 		'NAME': 'binder-test',
 	}
-	try:
-		db_settings['HOST'] = os.environ['CY_DB_HOST']
-	except KeyError:
-		pass
-	try:
-		db_settings['PORT'] = os.environ['CY_DB_PORT']
-	except KeyError:
-		pass
-	try:
-		db_settings['USER'] = os.environ['CY_DB_USER']
-	except KeyError:
-		pass
-	try:
-		db_settings['PASSWORD'] = os.environ['CY_DB_PASSWORD']
-	except KeyError:
-		pass
 
 settings.configure(**{
 	'DEBUG': True,
