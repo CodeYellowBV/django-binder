@@ -55,7 +55,7 @@ jobs:
       - name: Run linting
         run: .venv/bin/flake8 binder
 
-    - name: Prepare postgres database
+      - name: Prepare postgres database
         run: |
           sudo apt-get install postgresql-client
           psql -c 'CREATE DATABASE "binder-test";' -h localhost -U postgres
