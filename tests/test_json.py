@@ -96,20 +96,26 @@ class JsonTest(TestCase):
 		d = DateTimeTZRange(empty=True)
 		self.assertEqual('[null]', binder_json.jsondumps(d))
 
-	def test_error_bounds_datetimerange_not_default_1(self):
+	def test_error_bounds_datetimerange_not_default_1_exception(self):
 		t = datetime(2016, 1, 1, 1, 2, 3, 313337, tzinfo=timezone.utc)
 		d = DateTimeTZRange(t, t, bounds='()')
 		with self.assertRaises(BinderNotImplimented):
 			binder_json.jsondumps(d)
 
-	def test_error_bounds_datetimerange_not_default_2(self):
+	def test_error_bounds_datetimerange_not_default_2_exception(self):
 		t = datetime(2016, 1, 1, 1, 2, 3, 313337, tzinfo=timezone.utc)
 		d = DateTimeTZRange(t, t, bounds='[]')
 		with self.assertRaises(BinderNotImplimented):
 			binder_json.jsondumps(d)
 
-	def test_error_bounds_datetimerange_not_default_3(self):
+	def test_error_bounds_datetimerange_not_default_3_exception(self):
 		t = datetime(2016, 1, 1, 1, 2, 3, 313337, tzinfo=timezone.utc)
 		d = DateTimeTZRange(t, t, bounds='(]')
 		with self.assertRaises(BinderNotImplimented):
 			binder_json.jsondumps(d)
+
+	def test_json_datetimerange_dump_correctly_both_bounds_default_bound_param(self):
+		t = datetime(2016, 1, 1, 1, 2, 3, 313337, tzinfo=timezone.utc)
+		d = DateTimeTZRange(t, t, bounds='[)')
+		self.assertEqual('["2016-01-01T01:02:03.313337+0000", "2016-01-01T01:02:03.313337+0000"]',
+						 binder_json.jsondumps(d))
