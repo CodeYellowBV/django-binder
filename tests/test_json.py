@@ -7,6 +7,7 @@ from django.test import TestCase
 from psycopg2.extras import DateTimeTZRange
 
 import binder.json as binder_json
+from binder.exceptions import BinderNotImplimented
 
 
 class JsonTest(TestCase):
@@ -95,3 +96,8 @@ class JsonTest(TestCase):
 		d = DateTimeTZRange(empty=True)
 		self.assertEqual('[null]', binder_json.jsondumps(d))
 
+	def test_error_bounds_datetimerange_not_implimented(self):
+		t = datetime(2016, 1, 1, 1, 2, 3, 313337, tzinfo=timezone.utc)
+		d = DateTimeTZRange(t, t, bounds='()')
+		with self.assertRaises(BinderNotImplimented):
+			binder_json.jsondumps(d)

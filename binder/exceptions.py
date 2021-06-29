@@ -191,6 +191,13 @@ class BinderIsNotDeleted(BinderException):
 	code = 'IsNotDeleted'
 
 
+class BinderNotImplimented(BinderException):
+	http_code = 501
+	code = 'NotImplimented'
+	def __init__(self, message):
+		super().__init__()
+		self.fields['message'] = message
+
 
 class BinderValidationError(BinderException):
 	http_code = 400

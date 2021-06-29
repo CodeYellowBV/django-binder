@@ -7,12 +7,20 @@ from django.http import HttpResponse
 from psycopg2.extras import DateTimeTZRange
 
 
-from .exceptions import BinderRequestError
+from .exceptions import BinderRequestError, BinderNotImplimented
 
 
 def serialize_datetimeTZRange(v):
+	print('\n')
+	print(v.lower_inc)
+	print(v.upper_inc)
 	if v.isempty:
 		return [None]
+
+	# check that not default bounds are not used in teh configuration of the field, if so raise a not implimented exception
+	if not(v.lower_inc is True or v.lower_inf) or not(v.upper_inc is False):
+		raise BinderNotImplimented(message='The exclusive bounds parameters of DateTimeTZRange are currently not supported')
+
 
 	lower = None
 	upper = None
