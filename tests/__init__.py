@@ -29,6 +29,7 @@ else:
 settings.configure(**{
 	'DEBUG': True,
 	'ALLOWED_HOSTS': ['*'],
+	'SECRET_KEY': 'test_secret',
 	'DATABASES': {
 		'default': db_settings,
 	},
