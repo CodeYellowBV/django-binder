@@ -7,3 +7,6 @@ class CaretakerView(ModelView):
 	unwritable_fields = ['last_seen']
 	unupdatable_fields = ['first_seen']
 	model = Caretaker
+
+	# see `test_model_validation.py`
+	allow_standalone_validation = True
