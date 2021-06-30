@@ -238,7 +238,9 @@ class BinderValidationError(BinderException):
 
 
 class BinderSkipSave(BinderException):
-	"""Used to abort the database transaction when non-save validation was successfull."""
+	"""Used to abort the database transaction when validation was successfull.
+	Validation is possible when saving (post, put, multi-put) or deleting models."""
+
 	http_code = 200
 	code = 'SkipSave'
 

@@ -1788,13 +1788,12 @@ class ModelView(View):
 
 
 	def _abort_when_standalone_validation(self, request):
-		"""Raise a `BinderSkipSave` exception when this is a standalone request."""
+		"""Raise a `BinderSkipSave` exception when this is a validation request."""
 		if 'validate' in request.GET and request.GET['validate'] == 'true':
 			if self.allow_standalone_validation:
 				params = QueryDict(request.body)
 				raise BinderSkipSave
 			else:
-				print('validate not enabled')
 				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
 
 
@@ -2782,9 +2781,6 @@ class ModelView(View):
 
 		if hasattr(obj, 'deleted') and obj.deleted:
 			raise BinderIsDeleted()
-
-
-		logger.info('storing')
 
 		data = self._store(obj, values, request)
 
