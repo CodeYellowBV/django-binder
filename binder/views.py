@@ -1384,7 +1384,8 @@ class ModelView(View):
 				params = QueryDict(request.body)
 				raise BinderSkipSave
 			else:
-				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
+				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly ' \
+					'by setting the `allow_standalone_validation` property on this view (see documentation).')
 
 
 
