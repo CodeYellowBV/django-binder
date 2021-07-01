@@ -52,6 +52,9 @@ class OrderableAggMixin:
 
 
 class OrderableArrayAgg(OrderableAggMixin, Aggregate):
+	"""
+	Normal postgres way to do it: use array agg
+	"""
 	function = 'ARRAY_AGG'
 	template = '%(function)s(%(distinct)s%(expressions)s %(ordering)s)'
 
@@ -69,6 +72,9 @@ class OrderableArrayAgg(OrderableAggMixin, Aggregate):
 
 
 class GroupConcat(OrderableAggMixin, Aggregate):
+	"""
+	MSSQL doesn't support array agg, but it does support group concat
+	"""
 	function = 'GROUP_CONCAT'
 	template = '%(function)s(%(distinct)s%(expressions)s %(ordering)s SEPARATOR \',\')'
 
@@ -87,4 +93,41 @@ class GroupConcat(OrderableAggMixin, Aggregate):
 	def convert_value(self, value, expression, connection):
 		if not value:
 			return []
-		return value.split(',')
+		return [int(v) for v in value.split(',')]
+
+
+class StringAgg(OrderableAggMixin, Aggregate):
+	"""
+	MSSQL uses a third strategy: STring agg, which is like group_concat, but different. Also mssqls ordering strategy
+	is very different than the rest of the strategies
+	"""
+
+	function = 'STRING_AGG'
+	template = '%(function)s(%(distinct)s%(expressions)s, \',\') %(mssql_ordering)s'
+
+	@property
+	def output_field(self):
+		return TextField(self.source_expressions[0].output_field)
+
+	def __init__(self, expression, distinct=False, **extra):
+
+		super().__init__(expression, distinct='DISTINCT ' if distinct else '', **extra)
+
+	def as_sql(self, compiler, connection):
+		if self.ordering:
+			raw_order_by = 'ORDER BY ' + ', '.join((
+				ordering_element.as_sql(compiler, connection)[0]
+				for ordering_element in self.ordering
+			))
+			self.extra['mssql_ordering'] = f'WITHIN GROUP ( {raw_order_by} )'
+		else:
+			self.extra['mssql_ordering'] = ''
+		return super().as_sql(compiler, connection)
+
+	def get_source_expressions(self):
+		return self.source_expressions
+
+	def convert_value(self, value, expression, connection):
+		if not value:
+			return []
+		return [int(v) for v in value.split(',')]

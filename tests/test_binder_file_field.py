@@ -75,25 +75,26 @@ class BinderFileFieldTest(TestCase):
 		response = self.client.post('/zoo/%s/binder_picture/' % zoo.id, data={
 			'file': ContentFile(CONTENT, name=filename),
 		})
-		self.assertEqual(response.status_code, 200)
-		content = jsonloads(response.content)
 
-		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
-		zoo.refresh_from_db()
-		filename = basename(zoo.binder_picture.name) # Without folders foo/bar/
+		self.assertEqual(response.status_code, 400)
 
-		self.assertEqual(
-			content['data']['binder_picture'],
-			'/zoo/{}/binder_picture/?h={}&content_type=&filename={}'.format(zoo.pk, HASH, filename),
-		)
-
-		response = self.client.get('/zoo/{}/'.format(zoo.pk))
-		self.assertEqual(response.status_code, 200)
-		data = jsonloads(response.content)
-		self.assertEqual(
-			data['data']['binder_picture'],
-			'/zoo/{}/binder_picture/?h={}&content_type=&filename={}'.format(zoo.pk, HASH, filename),
-		)
+		# # Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+		# zoo.refresh_from_db()
+		# filename = basename(zoo.binder_picture.name) # Without folders foo/bar/
+		#
+		# self.assertEqual(
+		# 	content['data']['binder_picture'],
+		# 	'/zoo/{}/binder_picture/?h={}&content_type=&filename={}'.format(zoo.pk, HASH, filename),
+		# )
+		#
+		# response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		#
+		# self.assertEqual(response.status_code, 200)
+		# data = jsonloads(response.content)
+		# self.assertEqual(
+		# 	data['data']['binder_picture'],
+		# 	'/zoo/{}/binder_picture/?h={}&content_type=&filename={}'.format(zoo.pk, HASH, filename),
+		# )
 
 	def test_post_with_long_filename(self):
 		filename = 'this_is_an_extremely_long_filename_which_should_be_over_200_chars_but_under_400_and_im_running_out_of_things_to_say_and_i_guess_we_just_keep_going_and_im_now_in_poznan_working_onsite_perhaps_thats_interesting_and_just_ordered_pizza_for_lunch.jpg'
@@ -248,3 +249,52 @@ class BinderFileFieldBlankNotNullableTest(TestCase):
 		zoo.refresh_from_db()
 		self.assertEqual('', zoo.django_picture_not_null)
 		self.assertEqual('', zoo.binder_picture_not_null)
+
+class BinderFileFieldAllowedExtensionTest(TestCase):
+	def setUp(self):
+		super().setUp()
+		u = User(username='testuser', is_active=True, is_superuser=True)
+		u.set_password('test')
+		u.save()
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
+
+	def test_post_allowed_extension_fail(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
+			'file': ContentFile(CONTENT, name='foobar.jpg'),
+		})
+		self.assertEqual(response.status_code, 400)
+	
+	def test_post_allowed_extension_success(self):
+		filename = 'foobar.png'
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
+			'file': ContentFile(CONTENT, name=filename),
+		})
+		self.assertEqual(response.status_code, 200)
+		content = jsonloads(response.content)
+
+		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+		zoo.refresh_from_db()
+		filename = basename(zoo.binder_picture_custom_extensions.name) # Without folders foo/bar/
+
+
+
+		self.assertEqual(
+			content['data']['binder_picture_custom_extensions'],
+			'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=image/png&filename={}'.format(zoo.pk, HASH, filename),
+		)
+
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+		self.assertEqual(
+			data['data']['binder_picture_custom_extensions'],
+			'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=image/png&filename={}'.format(zoo.pk, HASH, filename),
+		)

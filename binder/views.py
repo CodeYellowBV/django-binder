@@ -8,6 +8,8 @@ import datetime
 import mimetypes
 import functools
 from collections import defaultdict, namedtuple
+from contextlib import ExitStack
+
 from PIL import Image
 from inspect import getmro
 import base64
@@ -28,7 +30,7 @@ from django.db.models.fields.reverse_related import ForeignObjectRel
 
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
-from .orderable_agg import OrderableArrayAgg, GroupConcat
+from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField
 from .json import JsonResponse, jsonloads
 
@@ -316,7 +318,11 @@ class ModelView(View):
 
 	@property
 	def AggStrategy(self):
-		return GroupConcat if connections[self.model.objects.db].vendor == 'mysql' else OrderableArrayAgg
+		if connections[self.model.objects.db].vendor == 'mysql':
+			return GroupConcat
+		if connections[self.model.objects.db].vendor == 'microsoft':
+			return StringAgg
+		return OrderableArrayAgg
 
 
 	def annotations(self, request, include_annotations=None):
@@ -367,8 +373,22 @@ class ModelView(View):
 		response = None
 		try:
 			#### START TRANSACTION
-			with transaction.atomic(), history.atomic(source='http', user=request.user, uuid=request.request_id):
-				if not kwargs.pop('unauthenticated', False) and not request.user.is_authenticated:
+			with ExitStack() as stack, history.atomic(source='http', user=request.user, uuid=request.request_id):
+				transaction_dbs = ['default']
+
+				# Check if the TRANSACTION_DATABASES is set in the settings.py, and if so, use that instead
+				try:
+					transaction_dbs = django.conf.settings.TRANSACTION_DATABASES
+				except AttributeError:
+					pass
+
+				for db in transaction_dbs:
+					stack.enter_context(transaction.atomic(using=db))
+				is_unauthenticated_endpoint = kwargs.pop('unauthenticated', False)
+				user_is_authenticated = request.user.is_authenticated
+
+				# To use this endpoint, the endpoint either mustn't require authentication, or the user must be authenticated
+				if not is_unauthenticated_endpoint and not user_is_authenticated:
 					raise BinderNotAuthenticated()
 
 				if 'method' in kwargs:
@@ -919,10 +939,6 @@ class ModelView(View):
 
 				if field_alias in annotations:
 					value = record[field_alias]
-					if Agg == GroupConcat:
-						# Stupid assumption that PKs are always integers.
-						# Without this, the result types won't be right...
-						value = [int(v) for v in value]
 
 					# Make the values distinct.  We can't do this in
 					# the Agg() call, because then we get an error
@@ -1397,9 +1413,16 @@ class ModelView(View):
 
 		try:
 			obj.save()
+			assert(obj.pk is not None) # At this point, the object must have been created.
 		except ValidationError as ve:
 			validation_errors.append(self.binder_validation_error(obj, ve, pk=pk))
 
+		# When there are already validation errors, we quit (see T30296).
+		# This means we are not yet getting validation information about related fields which
+		# are checked in `store_m2m_field`. These additional validation errors are obtained
+		# when the model validation does not longer complain.
+		if validation_errors:
+			raise sum(validation_errors, None)
 
 		for field, value in deferred_m2ms.items():
 			try:
@@ -1504,9 +1527,7 @@ class ModelView(View):
 				return
 			getattr(obj, field).set(value)
 		elif any(f.name == field for f in self.model._meta.many_to_many):
-			# Only try saving an m2m field if the base model field save was succesfull (checked by looking if it has id)
-			if obj.id:
-				getattr(obj, field).set(value)
+			getattr(obj, field).set(value)
 		else:
 			setattr(obj, field, value)
 
@@ -2075,7 +2096,8 @@ class ModelView(View):
 
 		return JsonResponse({'idmap': output})
 
-
+	def _get_request_values(self, request):
+		return jsonloads(request.body)
 
 	def put(self, request, pk=None):
 		if pk is None:
@@ -2083,7 +2105,7 @@ class ModelView(View):
 
 		self._require_model_perm('change', request, pk)
 
-		values = jsonloads(request.body)
+		values = self._get_request_values(request)
 
 		try:
 			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
@@ -2128,7 +2150,7 @@ class ModelView(View):
 		if pk is not None:
 			return self.delete(request, pk, undelete=True)
 
-		values = jsonloads(request.body)
+		values = self._get_request_values(request)
 
 		data = self._store(self.model(), values, request)
 
@@ -2281,6 +2303,13 @@ class ModelView(View):
 					raise BinderFileSizeExceeded(self.max_upload_size)
 
 				field = self.model._meta.get_field(file_field_name)
+
+				if getattr(field, 'allowed_extensions', None) is not None:
+					extension = None if '.' not in file.name else file.name.split('.')[-1]
+
+					if extension not in field.allowed_extensions:
+						raise BinderFileTypeIncorrect([{'extension': t} for t in field.allowed_extensions])
+
 				if isinstance(field, models.fields.files.ImageField):
 					try:
 						img = Image.open(file)
