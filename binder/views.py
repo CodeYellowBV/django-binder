@@ -2277,8 +2277,7 @@ class ModelView(View):
 
 			elif 'encode' in request.GET:
 				# print(resp)
-				# raise BinderRequestError(resp)
-			
+				# raise BinderRequestError(resp)			
 				with open(file_field.path, 'rb') as file_data:
 					header = bytes(f"data:{guess};base64,", encoding='utf-8')
 					data = file_data.read()
