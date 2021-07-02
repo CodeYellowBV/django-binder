@@ -36,6 +36,19 @@ if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
 			self.assertEqual(1, len(result['data']))
 			self.assertEqual('Burgers Zoo', result['data'][0]['name'])
 
+			response = self.client.get('/zoo/', data={'.opening_time': '09:00:00.000+00:00'})
+			self.assertEqual(response.status_code, 200)
+
+			result = jsonloads(response.content)
+			self.assertEqual(1, len(result['data']))
+			self.assertEqual('Artis', result['data'][0]['name'])
+
+			response = self.client.get('/zoo/', data={'.opening_time': '11:00:00.000000+0000'})
+
+			result = jsonloads(response.content)
+			self.assertEqual(1, len(result['data']))
+			self.assertEqual('Burgers Zoo', result['data'][0]['name'])
+
 
 		def test_time_filter_gte_match(self):
 			response = self.client.get('/zoo/', data={'.opening_time:gte': '09:00:00Z', 'order_by': 'opening_time'})
