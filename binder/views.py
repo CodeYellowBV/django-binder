@@ -68,6 +68,11 @@ def get_default_annotations(model):
 
 
 def split_path(path):
+	"""
+	This function splits a dot seperated path into a list of keys.
+	The advantage of this function over a simple path.split('.') is that it
+	handles backslash escaping so that keys can contain dot characters.
+	"""
 	path = iter(path)
 	chars = []
 	for char in path:
@@ -82,6 +87,11 @@ def split_path(path):
 
 
 def join_path(keys):
+	"""
+	This function joins a list of keys into a dot seperated path.
+	The advantage of this function over a simple '.'.join(keys) is that it
+	handles backslash escaping so that keys can contain dot characters.
+	"""
 	chars = []
 	for i, key in enumerate(keys):
 		if i != 0:
@@ -511,7 +521,7 @@ class ModelView(View):
 			for f in fields:
 				if isinstance(f, models.FileField):
 					file = getattr(obj, f.attname)
-					if file.name:
+					if file:
 						# {router-view-instance}
 						data[f.name] = self.router.model_route(self.model, obj.id, f)
 						# {duplicate-binder-file-field-hash-code}
@@ -1450,8 +1460,8 @@ class ModelView(View):
 		# Skip re-fetch and serialization via get_objs if we're in
 		# multi-put (data is discarded!).
 		if (
-			getattr(request, '_is_multi_put', False) or
-			getattr(request, '_is_file_upload', False)
+			getattr(request, '_is_multi_put', False) or  # Multi put handles its own return data
+			getattr(request, '_is_file_upload', False)  # Dispatch file field handles its own return data
 		):
 			return None
 
