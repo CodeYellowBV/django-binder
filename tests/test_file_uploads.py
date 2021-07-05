@@ -204,3 +204,85 @@ class FileUploadTest(TestCase):
 		self.assertEqual(content_type, 'image/jpeg')
 		self.assertEqual(emmen.floor_plan.width, 500)
 		self.assertEqual(emmen.floor_plan.height, 500)
+
+	def test_upload_no_data(self):
+		boundary = 'my-boundary'
+		content_type = 'multipart/form-data; boundary=' + boundary
+		data = encode_multipart(boundary, {})
+		response = self.client.put('/zoo/', content_type=content_type, data=data)
+		self.assertEqual(response.status_code, 418)
+		data = jsonloads(response.content)
+		self.assertEqual(data['code'], 'RequestError')
+		self.assertEqual(data['message'], 'data field is required in multipart body')
+
+	def test_upload_invalid_data(self):
+		boundary = 'my-boundary'
+		content_type = 'multipart/form-data; boundary=' + boundary
+		data = encode_multipart(boundary, {
+			'data': 'not valid json',
+		})
+		response = self.client.put('/zoo/', content_type=content_type, data=data)
+		self.assertEqual(response.status_code, 418)
+		data = jsonloads(response.content)
+		self.assertEqual(data['code'], 'RequestError')
+		self.assertEqual(data['message'], 'JSON parse error: Expecting value: line 1 column 1 (char 0).')
+
+	def test_upload_non_existing_file_path(self):
+		with temp_imagefile(500, 500, 'jpeg') as uploaded_file:
+			boundary = 'my-boundary'
+			content_type = 'multipart/form-data; boundary=' + boundary
+			data = encode_multipart(boundary, {
+				'data': json.dumps({
+					'data': [{
+						'id': -1,
+						'name': 'Wildlands Adventure Zoo Emmen',
+						'floor_plan': None,
+					}],
+				}),
+				'file:data.1.floor_plan': uploaded_file,
+			})
+			response = self.client.put('/zoo/', content_type=content_type, data=data)
+		self.assertEqual(response.status_code, 418)
+		data = jsonloads(response.content)
+		self.assertEqual(data['code'], 'RequestError')
+		self.assertEqual(data['message'], 'unexpected key at path: data.1')
+
+	def test_upload_non_integer_key_at_list(self):
+		with temp_imagefile(500, 500, 'jpeg') as uploaded_file:
+			boundary = 'my-boundary'
+			content_type = 'multipart/form-data; boundary=' + boundary
+			data = encode_multipart(boundary, {
+				'data': json.dumps({
+					'data': [{
+						'id': -1,
+						'name': 'Wildlands Adventure Zoo Emmen',
+						'floor_plan': None,
+					}],
+				}),
+				'file:data.foo.floor_plan': uploaded_file,
+			})
+			response = self.client.put('/zoo/', content_type=content_type, data=data)
+		self.assertEqual(response.status_code, 418)
+		data = jsonloads(response.content)
+		self.assertEqual(data['code'], 'RequestError')
+		self.assertEqual(data['message'], 'expected integer key at path: data.foo')
+
+	def test_upload_not_null_at_path(self):
+		with temp_imagefile(500, 500, 'jpeg') as uploaded_file:
+			boundary = 'my-boundary'
+			content_type = 'multipart/form-data; boundary=' + boundary
+			data = encode_multipart(boundary, {
+				'data': json.dumps({
+					'data': [{
+						'id': -1,
+						'name': 'Wildlands Adventure Zoo Emmen',
+						'floor_plan': 'foo',
+					}],
+				}),
+				'file:data.0.floor_plan': uploaded_file,
+			})
+			response = self.client.put('/zoo/', content_type=content_type, data=data)
+		self.assertEqual(response.status_code, 418)
+		data = jsonloads(response.content)
+		self.assertEqual(data['code'], 'RequestError')
+		self.assertEqual(data['message'], 'expected null at path: data.0.floor_plan')
