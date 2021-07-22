@@ -89,7 +89,34 @@ class ExcelFileAdapter(ExportFileAdapter):
 			return self.response
 
 
-# A Mixin to add a GET object/download link, that downloads the get request as csv file
+class RequestAwareAdapter(ExportFileAdapter):
+	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
+		super().__init__(request, csv_settings)
+
+		response_type = request.GET.get('response_type', '').lower()
+		
+		AdapterClass = CsvFileAdapter
+		
+		if response_type == 'xlsx':
+			AdapterClass = ExcelFileAdapter
+		
+		self.base_adapter = AdapterClass(request, csv_settings)
+
+
+	def set_file_name(self, file_name: str):
+		return self.base_adapter.set_file_name(file_name)
+	
+	
+	def set_columns(self, columns: List[str]):
+		return self.base_adapter.set_columns(columns)
+
+
+	def add_row(self, values: List[str]):
+		return self.base_adapter.add_row(values)
+	
+	def get_response(self) -> HttpResponse:
+		return self.base_adapter.get_response()
+	
 class CsvExportView:
 	"""
 	This class adds another endpoint to the ModelView, namely GET model/download/. This does the same thing as getting a
@@ -107,7 +134,7 @@ class CsvExportView:
 		"""
 
 		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ',
-					 extra_permission=None, csv_adapter=CsvFileAdapter):
+					 extra_permission=None, csv_adapter=RequestAwareAdapter):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
