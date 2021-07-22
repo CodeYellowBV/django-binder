@@ -3,3 +3,4 @@ Pillow
 django-request-id
 psycopg2
 requests
+openpyxl
