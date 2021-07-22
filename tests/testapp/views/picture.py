@@ -12,7 +12,7 @@ class PictureView(ModelView, ImageView, CsvExportView):
 	csv_settings = CsvExportView.CsvExportSettings(['animal'], [
 		('id', 'picture identifier'),
 		('animal.id', 'animal identifier'),
-		('id', 'squared picture identifier', lambda id, row, mapping: id**2)
+		('id', 'squared picture identifier', lambda id, row, mapping: id**2),
 	])
 
 	@list_route(name='download_csv', methods=['GET'])
