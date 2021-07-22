@@ -16,3 +16,10 @@ class ContactPerson(BinderModel):
 				code='invalid',
 				message='Very special validation check that we need in `tests.M2MStoreErrorsTest`.'
 			)
+
+		# Should only give an error when model is not a validation model
+		if (self.name == 'very_special_validation_contact_person_name' or self.name == 'very_special_validation_contact_person_other_name') and not self._validation_model:
+			raise ValidationError(
+				code='invalid',
+				message='Very special validation check that we need in `tests.M2MStoreErrorsTest`.'
+			)
