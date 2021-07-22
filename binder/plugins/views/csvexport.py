@@ -11,6 +11,9 @@ from binder.router import list_route
 
 
 class ExportFileAdapter:
+	"""
+	Adapter between the data that is exported, and the export file
+	"""
 	__metaclass__ = abc.ABCMeta
 
 	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
@@ -19,18 +22,55 @@ class ExportFileAdapter:
 
 	@abc.abstractmethod
 	def set_file_name(self, file_name: str):
+		"""
+		Sets the file name of the file that needs to be export. File name does not have the extension.
+
+		e.g. set_file_name('foo') => file download name is 'foo.csv' or 'foo.xlsx'
+
+		:param file_name:
+		:return:
+		"""
 		pass
 
 	@abc.abstractmethod
 	def set_columns(self, columns: List[str]):
+		"""
+		Set the column names of the file
+
+		:param columns:
+		:return:
+		"""
 		pass
+
+
+	@abc.abstractmethod
+	def add_row(self, values: List[str]):
+		"""
+		Add a row with values to the file
+
+		:param values:
+		:return:
+		"""
+		pass
+
+
 
 	@abc.abstractmethod
 	def get_response(self) -> HttpResponse:
+		"""
+		Return a http response with the content of the file
+
+		:param columns:
+		:return:
+		"""
 		pass
 
 
 class CsvFileAdapter(ExportFileAdapter):
+	"""
+	Adapter for returning CSV files
+	"""
+
 	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
 		super().__init__(request, csv_settings)
 		self.response = HttpResponse(content_type='text/csv')
@@ -52,6 +92,9 @@ class CsvFileAdapter(ExportFileAdapter):
 
 
 class ExcelFileAdapter(ExportFileAdapter):
+	"""
+	Adapter fore returning excel files
+	"""
 	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
 		super().__init__(request, csv_settings)
 
@@ -90,6 +133,13 @@ class ExcelFileAdapter(ExportFileAdapter):
 
 
 class RequestAwareAdapter(ExportFileAdapter):
+	"""
+	Adapter that returns csv files by default, but allows a request parameter to return other files as well
+
+	e.g. foo/download/?response_type=xlsx
+
+	returns a xlsx type
+	"""
 	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
 		super().__init__(request, csv_settings)
 
@@ -102,20 +152,18 @@ class RequestAwareAdapter(ExportFileAdapter):
 		
 		self.base_adapter = AdapterClass(request, csv_settings)
 
-
 	def set_file_name(self, file_name: str):
 		return self.base_adapter.set_file_name(file_name)
 	
-	
 	def set_columns(self, columns: List[str]):
 		return self.base_adapter.set_columns(columns)
-
 
 	def add_row(self, values: List[str]):
 		return self.base_adapter.add_row(values)
 	
 	def get_response(self) -> HttpResponse:
 		return self.base_adapter.get_response()
+
 	
 class CsvExportView:
 	"""
