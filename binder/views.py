@@ -1397,6 +1397,9 @@ class ModelView(View):
 		ignored_fields = []
 		validation_errors = []
 
+		# When only validating and not saving we attach a parameter so that we can skip or add validation checks
+		only_validate = request.GET.get('validate') == 'true' or request.GET.get('validate') == 'True'
+
 		if obj.pk is None:
 			self._require_model_perm('add', request, obj.pk)
 		else:
@@ -1434,8 +1437,8 @@ class ModelView(View):
 			raise sum(validation_errors, None)
 
 		try:
-			obj.save()
-			assert(obj.pk is not None) # At this point, the object must have been created.
+			obj.save(only_validate=only_validate)
+			assert(obj.pk is not None)  # At this point, the object must have been created.
 		except ValidationError as ve:
 			validation_errors.append(self.binder_validation_error(obj, ve, pk=pk))
 
@@ -1476,6 +1479,9 @@ class ModelView(View):
 	# of OneToOne fields.
 	def _store_m2m_field(self, obj, field, value, request):
 		validation_errors = []
+
+		# When only validating and not saving we attach a parameter so that we can skip or add validation checks
+		only_validate = request.GET.get('validate') == 'true' or request.GET.get('validate') == 'True'
 
 		# Can't use isinstance() because apparantly ManyToManyDescriptor is a subclass of
 		# ReverseManyToOneDescriptor. Yes, really.
@@ -1519,11 +1525,11 @@ class ModelView(View):
 			for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
 				setattr(addobj, obj_field.field.name, obj)
 				try:
-					addobj.save()
+					addobj.save(only_validate=only_validate)
 				except ValidationError as ve:
 					validation_errors.append(self.binder_validation_error(addobj, ve))
 				else:
-					addobj.save()
+					addobj.save(only_validate=only_validate)
 		elif getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor:
 			#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
 			if any(v for v in value if v is not None and v < 0):
@@ -1539,7 +1545,7 @@ class ModelView(View):
 				remote_obj = field_descriptor.related.remote_field.model.objects.get(pk=value[0])
 				setattr(remote_obj, field_descriptor.related.remote_field.name, obj)
 				try:
-					remote_obj.save()
+					remote_obj.save(only_validate=only_validate)
 					remote_obj.refresh_from_db()
 				except ValidationError as ve:
 					validation_errors.append(self.binder_validation_error(remote_obj, ve))
@@ -2234,6 +2240,10 @@ class ModelView(View):
 
 
 	def soft_delete(self, obj, undelete, request):
+
+		# When only validating and not saving we attach a parameter so that we can skip or add validation checks
+		only_validate = request.GET.get('validate') == 'true' or request.GET.get('validate') == 'True'
+
 		# Not only for soft delets, actually handles all deletions
 		try:
 			if obj.deleted and not undelete:
@@ -2265,7 +2275,7 @@ class ModelView(View):
 
 		obj.deleted = not undelete
 		try:
-			obj.save()
+			obj.save(only_validate=only_validate)
 		except ValidationError as ve:
 			raise self.binder_validation_error(obj, ve)
 
