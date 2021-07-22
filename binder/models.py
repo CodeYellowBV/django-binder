@@ -408,7 +408,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		# _validation_model can be used to skip validation checks that are meant for complete models that are actually being saved
 		self._validation_model = only_validate  # Set the model as a validation model when we only want to validate the model
 
-		self.full_clean(only_validate=only_validate)  # Never allow saving invalid models!
+		self.full_clean()  # Never allow saving invalid models!
 		return super().save(*args, **kwargs)
 
 
