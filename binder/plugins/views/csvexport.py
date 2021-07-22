@@ -1,6 +1,5 @@
 import abc
 import csv
-from io import BytesIO
 from tempfile import NamedTemporaryFile
 from typing import List
 
@@ -144,27 +143,24 @@ class RequestAwareAdapter(ExportFileAdapter):
 		super().__init__(request, csv_settings)
 
 		response_type = request.GET.get('response_type', '').lower()
-		
 		AdapterClass = CsvFileAdapter
-		
 		if response_type == 'xlsx':
 			AdapterClass = ExcelFileAdapter
-		
 		self.base_adapter = AdapterClass(request, csv_settings)
 
 	def set_file_name(self, file_name: str):
 		return self.base_adapter.set_file_name(file_name)
-	
+
 	def set_columns(self, columns: List[str]):
 		return self.base_adapter.set_columns(columns)
 
 	def add_row(self, values: List[str]):
 		return self.base_adapter.add_row(values)
-	
+
 	def get_response(self) -> HttpResponse:
 		return self.base_adapter.get_response()
 
-	
+
 class CsvExportView:
 	"""
 	This class adds another endpoint to the ModelView, namely GET model/download/. This does the same thing as getting a
@@ -182,7 +178,7 @@ class CsvExportView:
 		"""
 
 		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ',
-					 extra_permission=None, csv_adapter=RequestAwareAdapter):
+					extra_permission=None, csv_adapter=RequestAwareAdapter):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
@@ -288,8 +284,7 @@ class CsvExportView:
 
 						# if head_key not in key_mapping:
 						prefix_key = parent_data['with_mapping'][new_prefix[1:]]
-						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in
-								  fk_ids]
+						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in fk_ids]
 						return self.csv_settings.multi_value_delimiter.join(
 							datums
 						)
