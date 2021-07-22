@@ -35,7 +35,10 @@ class TestModelValidation(TestCase):
 
 		# some update payload
 		self.model_data_with_error = {
-			'name': 'very_special_forbidden_contact_person_name', # see `contact_person.py`
+			'name': 'very_special_forbidden_contact_person_name',  # see `contact_person.py`
+		}
+		self.model_data_with_non_validation_error = {
+			'name': 'very_special_validation_contact_person_name',  # see `contact_person.py`
 		}
 		self.model_data = {
 			'name': 'Scooooooby',
@@ -127,6 +130,21 @@ class TestModelValidation(TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual('Scooooooby', ContactPerson.objects.first().name)
 
+	def test_validate_model_validation_whitelisting(self):
+		person_id = ContactPerson.objects.create(name='Scooby Doo').id
+		self.assertEqual('Scooby Doo', ContactPerson.objects.first().name)
+
+		# the normal request should give a validation error
+		response = self.client.put(f'/contact_person/{person_id}/', data=json.dumps(self.model_data_with_non_validation_error), content_type='application/json')
+		self.assert_validation_error(response, person_id)
+		self.assertEqual('Scooby Doo', ContactPerson.objects.first().name)
+
+		# when just validating we want to ignore this validation error, so with validation it should not throw an error
+		response = self.client.put(f'/contact_person/{person_id}/?validate=true', data=json.dumps(self.model_data), content_type='application/json')
+		self.assert_no_validation_error(response)
+		self.assertEqual('Scooby Doo', ContactPerson.objects.first().name)
+
+
 
 	def test_validate_on_multiput(self):
 		person_1_id = ContactPerson.objects.create(name='Scooby Doo 1').id
@@ -154,6 +172,17 @@ class TestModelValidation(TestCase):
 				}
 			]}
 
+		multi_put_data_with_validation_whitelist = {'data': [
+			{
+				'id': person_1_id,
+				'name': 'very_special_validation_contact_person_name',
+			},
+			{
+				'id': person_2_id,
+				'name': 'very_special_validation_contact_person_other_name'
+			}
+		]}
+
 		# trigger a validation error
 		response = self.client.put(f'/contact_person/?validate=true', data=json.dumps(multi_put_data_with_error), content_type='application/json')
 		self.assert_multi_put_validation_error(response)
@@ -164,6 +193,20 @@ class TestModelValidation(TestCase):
 		# now without validation error
 		response = self.client.put(f'/contact_person/?validate=true', data=json.dumps(multi_put_data), content_type='application/json')
 		self.assert_no_validation_error(response)
+		self.assertEqual('Scooby Doo 1', ContactPerson.objects.get(id=person_1_id).name)
+		self.assertEqual('Scooby Doo 2', ContactPerson.objects.get(id=person_2_id).name)
+
+		# multi put validation whitelist test
+		response = self.client.put(f'/contact_person/?validate=true', data=json.dumps(multi_put_data_with_validation_whitelist), content_type='application/json')
+		self.assert_no_validation_error(response)
+		self.assertEqual('Scooby Doo 1', ContactPerson.objects.get(id=person_1_id).name)
+		self.assertEqual('Scooby Doo 2', ContactPerson.objects.get(id=person_2_id).name)
+
+		# multi put non validation whitelist test error
+		response = self.client.put(f'/contact_person/',
+								   data=json.dumps(multi_put_data_with_validation_whitelist),
+								   content_type='application/json')
+		self.assert_multi_put_validation_error(response)
 		self.assertEqual('Scooby Doo 1', ContactPerson.objects.get(id=person_1_id).name)
 		self.assertEqual('Scooby Doo 2', ContactPerson.objects.get(id=person_2_id).name)
 
