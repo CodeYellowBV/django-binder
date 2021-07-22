@@ -1,8 +1,52 @@
+import abc
+from typing import List
+from urllib import response
+
 from binder.router import list_route
-from abc import ABCMeta
 import csv
 from binder.json import jsonloads
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpRequest
+
+
+class ExportFileAdapter:
+	__metaclass__ = abc.ABCMeta
+
+	def __init__(self, csv_settings: 'CsvExportView.CsvExportSettings'):
+		self.csv_settings = csv_settings
+
+	@abc.abstractmethod
+	def set_file_name(self, file_name: str):
+		pass
+
+	@abc.abstractmethod
+	def set_columns(self, columns: List[str]):
+		pass
+
+	@abc.abstractmethod
+	def get_response(self) -> HttpResponse:
+		pass
+
+
+class CsvFileAdapter(ExportFileAdapter):
+	def __init__(self, csv_settings: 'CsvExportView.CsvExportSettings'):
+		super().__init__(csv_settings)
+		self.response = HttpResponse(content_type='text/csv')
+		self.file_name = 'export'
+		self.writer = csv.writer(self.response)
+
+	def set_file_name(self, file_name: str):
+		self.file_name = file_name
+
+	def set_columns(self, columns: List[str]):
+		self.writer.writerow(list(map(lambda x: x[1], self.csv_settings.column_map)))
+
+	def add_row(self, values: List[str]):
+		self.writer.writerow(values)
+
+	def get_response(self) -> HttpResponse:
+		self.response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(self.file_name)
+		return self.response
+
 
 # A Mixin to add a GET object/download link, that downloads the get request as csv file
 class CsvExportView:
@@ -10,7 +54,7 @@ class CsvExportView:
 	This class adds another endpoint to the ModelView, namely GET model/download/. This does the same thing as getting a
 	collection, excepts that the result is returned as a csv file, rather than a json file
 	"""
-	__metaclass__ = ABCMeta
+	__metaclass__ = abc.ABCMeta
 
 	# CSV setting contains all the information that is needed to define a csv file. This must be one an instance of
 	# CSVExportSettings
@@ -20,7 +64,9 @@ class CsvExportView:
 		"""
 		This is a fake struct which contains the definition of the CSV Export
 		"""
-		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ', extra_permission=None):
+
+		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ',
+					 extra_permission=None):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
@@ -39,16 +85,7 @@ class CsvExportView:
 			self.multi_value_delimiter = multi_value_delimiter
 			self.extra_permission = extra_permission
 
-	@list_route(name='download', methods=['GET'])
-	def download(self, request):
-		"""
-		Download the get request in csv form
-		@param request:
-		@return:
-		"""
-
-		if self.csv_settings is None:
-			raise Exception('No csv settings set!')
+	def _generate_csv_file(self, request: HttpRequest, file_adapter: CsvFileAdapter):
 
 		# Sometimes we want to add an extra permission check before a csv file can be downloaded. This checks if the
 		# permission is set, and if the permission is set, checks if the current user has the specified permission
@@ -71,13 +108,10 @@ class CsvExportView:
 			file_name = file_name(parent_data)
 		if file_name is None:
 			file_name = self.csv_settings.default_file_name
+		file_adapter.set_file_name(file_name)
 
-		response = HttpResponse(content_type='text/csv')
-		response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(file_name)
-
-		writer = csv.writer(response)
 		# CSV header
-		writer.writerow(list(map(lambda x: x[1], self.csv_settings.column_map)))
+		file_adapter.set_columns(list(map(lambda x: x[1], self.csv_settings.column_map)))
 
 		# Make a mapping from the withs. This creates a map. This is needed for easy looking up relations
 		# {
@@ -92,7 +126,6 @@ class CsvExportView:
 			key_mapping[key] = {}
 			for row in parent_data['with'][key]:
 				key_mapping[key][row['id']] = row
-
 
 		def get_datum(data, key, prefix=''):
 			"""
@@ -137,14 +170,14 @@ class CsvExportView:
 
 						# if head_key not in key_mapping:
 						prefix_key = parent_data['with_mapping'][new_prefix[1:]]
-						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in fk_ids]
+						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in
+								  fk_ids]
 						return self.csv_settings.multi_value_delimiter.join(
 							datums
 						)
 
 				else:
 					raise Exception("{} not found in {}".format(head_key, data))
-
 
 		for row in parent_data['data']:
 			data = []
@@ -154,6 +187,21 @@ class CsvExportView:
 					transform_function = col_definition[2]
 					datum = transform_function(datum, row, key_mapping)
 				data.append(datum)
-			writer.writerow(data)
+			file_adapter.add_row(data)
 
-		return response
+	@list_route(name='download', methods=['GET'])
+	def download(self, request):
+		"""
+		Download the get request in csv form
+		@param request:
+		@return:
+		"""
+
+		if self.csv_settings is None:
+			raise Exception('No csv settings set!')
+
+		file_adapter = CsvFileAdapter(self.csv_settings)
+
+		self._generate_csv_file(request, file_adapter)
+
+		return file_adapter.get_response()
