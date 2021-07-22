@@ -1,18 +1,21 @@
 import abc
-from typing import List
-from urllib import response
-
-from binder.router import list_route
 import csv
-from binder.json import jsonloads
+from io import BytesIO
+from tempfile import NamedTemporaryFile
+from typing import List
+
 from django.http import HttpResponse, HttpRequest
+
+from binder.json import jsonloads
+from binder.router import list_route
 
 
 class ExportFileAdapter:
 	__metaclass__ = abc.ABCMeta
 
-	def __init__(self, csv_settings: 'CsvExportView.CsvExportSettings'):
+	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
 		self.csv_settings = csv_settings
+		self.request = request
 
 	@abc.abstractmethod
 	def set_file_name(self, file_name: str):
@@ -28,8 +31,8 @@ class ExportFileAdapter:
 
 
 class CsvFileAdapter(ExportFileAdapter):
-	def __init__(self, csv_settings: 'CsvExportView.CsvExportSettings'):
-		super().__init__(csv_settings)
+	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
+		super().__init__(request, csv_settings)
 		self.response = HttpResponse(content_type='text/csv')
 		self.file_name = 'export'
 		self.writer = csv.writer(self.response)
@@ -46,6 +49,44 @@ class CsvFileAdapter(ExportFileAdapter):
 	def get_response(self) -> HttpResponse:
 		self.response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(self.file_name)
 		return self.response
+
+
+class ExcelFileAdapter(ExportFileAdapter):
+	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
+		super().__init__(request, csv_settings)
+
+		# Import pandas locally. This means that you can use the CSV adapter without using pandas
+		import openpyxl
+		self.openpyxl = openpyxl
+		self.file_name = 'export'
+		# self.writer = self.pandas.ExcelWriter(self.response)
+
+		self.work_book = self.openpyxl.Workbook()
+		self.sheet = self.work_book.create_sheet()
+
+		# The row number we are currently writing to
+		self._row_number = 0
+
+	def set_file_name(self, file_name: str):
+		self.file_name = file_name
+
+	def set_columns(self, columns: List[str]):
+		self.add_row(columns)
+
+	def add_row(self, values: List[str]):
+		for (value, column_id) in zip(values, range(1000000)):
+			self.sheet.cell(column=column_id + 1, row=self._row_number + 1, value=value)
+		self._row_number += 1
+
+	def get_response(self) -> HttpResponse:
+		with NamedTemporaryFile() as tmp:
+			self.work_book.save(tmp.name)
+			self.response = HttpResponse(
+				content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+				content=tmp,
+			)
+			self.response['Content-Disposition'] = 'attachment; filename="{}.xlsx"'.format(self.file_name)
+			return self.response
 
 
 # A Mixin to add a GET object/download link, that downloads the get request as csv file
@@ -66,7 +107,7 @@ class CsvExportView:
 		"""
 
 		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ',
-					 extra_permission=None):
+					 extra_permission=None, csv_adapter=CsvFileAdapter):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
@@ -77,6 +118,7 @@ class CsvExportView:
 			@param multi_value_delimiter: String When one column has multiple values, they are joined, with this value
 				as delimiter between them. This may be if an array is returned, or if we have a one to many relation
 			@param extra_permission: String When set, an extra binder permission check will be done on this permission.
+			@param csv_adapter: Class. Either an object extending
 			"""
 			self.withs = withs
 			self.column_map = column_map
@@ -84,6 +126,7 @@ class CsvExportView:
 			self.default_file_name = default_file_name
 			self.multi_value_delimiter = multi_value_delimiter
 			self.extra_permission = extra_permission
+			self.csv_adapter = csv_adapter
 
 	def _generate_csv_file(self, request: HttpRequest, file_adapter: CsvFileAdapter):
 
@@ -200,7 +243,7 @@ class CsvExportView:
 		if self.csv_settings is None:
 			raise Exception('No csv settings set!')
 
-		file_adapter = CsvFileAdapter(self.csv_settings)
+		file_adapter = self.csv_settings.csv_adapter(request, self.csv_settings)
 
 		self._generate_csv_file(request, file_adapter)
 

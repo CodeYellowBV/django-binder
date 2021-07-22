@@ -45,8 +45,8 @@ class CsvExportTest(TestCase):
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
 
-	def testSimpleDownload(self):
-		response = self.client.get('/picture/download/')
+	def test_csv_download(self):
+		response = self.client.get('/picture/download_csv/')
 		self.assertEqual(200, response.status_code)
 		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
 
@@ -59,3 +59,12 @@ class CsvExportTest(TestCase):
 		self.assertEqual(data[1], [str(self.pictures[0].id), str(self.pictures[0].animal_id), str(self.pictures[0].id ** 2)])
 		self.assertEqual(data[2], [str(self.pictures[1].id), str(self.pictures[1].animal_id), str(self.pictures[1].id ** 2)])
 		self.assertEqual(data[3], [str(self.pictures[2].id), str(self.pictures[2].animal_id), str(self.pictures[2].id ** 2)])
+
+
+	def test_excel_download(self):
+		response = self.client.get('/picture/download_excel/')
+
+		print(response.content)
+
+		self.assertEqual(200, response.status_code)
+
