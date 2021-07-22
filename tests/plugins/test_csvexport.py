@@ -9,6 +9,7 @@ from django.contrib.auth.models import User
 
 from ..testapp.models import Picture, Animal
 import csv
+import openpyxl
 
 class CsvExportTest(TestCase):
 
@@ -64,7 +65,25 @@ class CsvExportTest(TestCase):
 	def test_excel_download(self):
 		response = self.client.get('/picture/download_excel/')
 
-		print(response.content)
+		with NamedTemporaryFile(suffix='.xlsx') as tmp:
+			tmp.write(response.content)
+
+			wb = openpyxl.load_workbook(tmp.name)
+			sheet = wb._sheets[1]
+
+			_values = list(sheet.values)
+
+			# First line needs to be the header
+			self.assertEqual(list(_values[0]), ['picture identifier', 'animal identifier', 'squared picture identifier'])
+
+			# All other data needs to be ordered using the default ordering (by id, asc)
+			self.assertEqual(list(_values[1]),
+							 [self.pictures[0].id, str(self.pictures[0].animal_id), (self.pictures[0].id ** 2)])
+			self.assertEqual(list(_values[2]),
+							 [self.pictures[1].id, str(self.pictures[1].animal_id), (self.pictures[1].id ** 2)])
+			self.assertEqual(list(_values[3]),
+							 [self.pictures[2].id, str(self.pictures[2].animal_id), (self.pictures[2].id ** 2)])
+
 
 		self.assertEqual(200, response.status_code)
 
