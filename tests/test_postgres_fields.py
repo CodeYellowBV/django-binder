@@ -5,7 +5,10 @@ import unittest
 from django.test import TestCase, Client
 
 from binder.json import jsonloads
+from binder.models import BinderModel, DateTimeRangeField
 from django.contrib.auth.models import User
+from datetime import datetime, date, timedelta
+from django.core.exceptions import ValidationError
 
 if os.environ.get('BINDER_TEST_MYSQL', '0') == '0':
 	from .testapp.models import FeedingSchedule, Animal, Zoo
@@ -385,3 +388,30 @@ class PostgresFieldsTest(TestCase):
 
 		result = jsonloads(response.content)
 		self.assertEqual(0, len(result['data']))
+
+
+@unittest.skipIf(
+	os.environ.get('BINDER_TEST_MYSQL', '0') != '0',
+	"Only available with PostgreSQL"
+)
+class TestDateTimeRangeField(TestCase):
+
+	class TestModel(BinderModel):
+		test_field = DateTimeRangeField()
+
+	def test_availability_upper_bound_smaller_than_lower_bound(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
+
+		with self.assertRaises(ValidationError) as ve:
+			test_model = self.TestModel(test_field=(upper, lower))
+			test_model.save()
+
+		self.assertSetEqual(set(['test_field']), set(ve.exception.error_dict.keys()))
+		errors = ve.exception.message_dict['test_field']
+		self.assertEqual(1, len(errors))
+		self.assertEqual("Lower bound must be smaller or equal to upper bound.", str(errors[0]))
+
+
+	# TODO: more tests
