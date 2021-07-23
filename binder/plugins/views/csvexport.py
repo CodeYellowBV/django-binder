@@ -15,7 +15,8 @@ class ExportFileAdapter:
 	"""
 	__metaclass__ = abc.ABCMeta
 
-	def __init__(self, request: HttpRequest):
+	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
+		self.csv_settings = csv_settings
 		self.request = request
 
 	@abc.abstractmethod
@@ -69,8 +70,8 @@ class CsvFileAdapter(ExportFileAdapter):
 	Adapter for returning CSV files
 	"""
 
-	def __init__(self, request: HttpRequest):
-		super().__init__(request)
+	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
+		super().__init__(request, csv_settings)
 		self.response = HttpResponse(content_type='text/csv')
 		self.file_name = 'export'
 		self.writer = csv.writer(self.response)
@@ -79,7 +80,7 @@ class CsvFileAdapter(ExportFileAdapter):
 		self.file_name = file_name
 
 	def set_columns(self, columns: List[str]):
-		self.add_row(columns)
+		self.writer.writerow(list(map(lambda x: x[1], self.csv_settings.column_map)))
 
 	def add_row(self, values: List[str]):
 		self.writer.writerow(values)
@@ -91,10 +92,10 @@ class CsvFileAdapter(ExportFileAdapter):
 
 class ExcelFileAdapter(ExportFileAdapter):
 	"""
-	Adapter for returning excel files
+	Adapter fore returning excel files
 	"""
-	def __init__(self, request: HttpRequest):
-		super().__init__(request)
+	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
+		super().__init__(request, csv_settings)
 
 		# Import pandas locally. This means that you can use the CSV adapter without using pandas
 		import openpyxl
@@ -103,7 +104,7 @@ class ExcelFileAdapter(ExportFileAdapter):
 		# self.writer = self.pandas.ExcelWriter(self.response)
 
 		self.work_book = self.openpyxl.Workbook()
-		self.sheet = self.work_book.active
+		self.sheet = self.work_book._sheets[0]
 
 		# The row number we are currently writing to
 		self._row_number = 0
@@ -115,7 +116,7 @@ class ExcelFileAdapter(ExportFileAdapter):
 		self.add_row(columns)
 
 	def add_row(self, values: List[str]):
-		for (column_id, value) in enumerate(values):
+		for (value, column_id) in zip(values, range(1000000)):
 			self.sheet.cell(column=column_id + 1, row=self._row_number + 1, value=value)
 		self._row_number += 1
 
@@ -129,9 +130,6 @@ class ExcelFileAdapter(ExportFileAdapter):
 			self.response['Content-Disposition'] = 'attachment; filename="{}.xlsx"'.format(self.file_name)
 			return self.response
 
-DEFAULT_RESPONSE_TYPE_MAPPING = {
-	'xlsx': ExcelFileAdapter,
-}
 
 class RequestAwareAdapter(ExportFileAdapter):
 	"""
@@ -141,14 +139,14 @@ class RequestAwareAdapter(ExportFileAdapter):
 
 	returns a xlsx type
 	"""
-	def __init__(self, request: HttpRequest):
-		super().__init__(request)
+	def __init__(self, request: HttpRequest, csv_settings: 'CsvExportView.CsvExportSettings'):
+		super().__init__(request, csv_settings)
 
-		response_type_mapping = DEFAULT_RESPONSE_TYPE_MAPPING
 		response_type = request.GET.get('response_type', '').lower()
-		AdapterClass = response_type_mapping.get(response_type, CsvFileAdapter)
-
-		self.base_adapter = AdapterClass(request)
+		AdapterClass = CsvFileAdapter
+		if response_type == 'xlsx':
+			AdapterClass = ExcelFileAdapter
+		self.base_adapter = AdapterClass(request, csv_settings)
 
 	def set_file_name(self, file_name: str):
 		return self.base_adapter.set_file_name(file_name)
@@ -161,8 +159,6 @@ class RequestAwareAdapter(ExportFileAdapter):
 
 	def get_response(self) -> HttpResponse:
 		return self.base_adapter.get_response()
-
-
 
 
 class CsvExportView:
@@ -182,7 +178,7 @@ class CsvExportView:
 		"""
 
 		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ',
-					extra_permission=None, extra_params={}, csv_adapter=RequestAwareAdapter, limit=10000):
+					extra_permission=None, csv_adapter=RequestAwareAdapter):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
@@ -194,9 +190,6 @@ class CsvExportView:
 				as delimiter between them. This may be if an array is returned, or if we have a one to many relation
 			@param extra_permission: String When set, an extra binder permission check will be done on this permission.
 			@param csv_adapter: Class. Either an object extending
-			@param response_type_mapping: Mapping between the parameter used in the custom response type
-			@param limit: Limit for amount of items in the csv. This is a fail save that you do not bring down the server with
-			a big query
 			"""
 			self.withs = withs
 			self.column_map = column_map
@@ -204,10 +197,7 @@ class CsvExportView:
 			self.default_file_name = default_file_name
 			self.multi_value_delimiter = multi_value_delimiter
 			self.extra_permission = extra_permission
-			self.extra_params = extra_params
 			self.csv_adapter = csv_adapter
-			self.limit = limit
-
 
 	def _generate_csv_file(self, request: HttpRequest, file_adapter: CsvFileAdapter):
 
@@ -220,10 +210,8 @@ class CsvExportView:
 		mutable = request.POST._mutable
 		request.GET._mutable = True
 		request.GET['page'] = 1
-		request.GET['limit'] = self.csv_settings.limit if self.csv_settings.limit is not None else 'none'
+		request.GET['limit'] = 10000
 		request.GET['with'] = ",".join(self.csv_settings.withs)
-		for key, value in self.csv_settings.extra_params.items():
-			request.GET[key] = value
 		request.GET._mutable = mutable
 
 		parent_result = self.get(request)
@@ -269,6 +257,8 @@ class CsvExportView:
 			if '.' not in key:
 				if key not in data:
 					raise Exception("{} not found in data: {}".format(key, data))
+				if type(data[key]) == list:
+					return self.csv_settings.multi_value_delimiter.join(data[key])
 				return data[key]
 			else:
 				"""
@@ -284,12 +274,12 @@ class CsvExportView:
 				head_key, subkey = key.split('.', 1)
 				if head_key in data:
 					new_prefix = '{}.{}'.format(prefix, head_key)
-					if isinstance(data[head_key], dict):
+					if type(data[head_key]) == dict:
 						return get_datum(data[head_key], subkey, new_prefix)
 					else:
 						# Assume that we have a mapping now
 						fk_ids = data[head_key]
-						if not isinstance(fk_ids, list):
+						if type(fk_ids) != list:
 							fk_ids = [fk_ids]
 
 						# if head_key not in key_mapping:
@@ -309,8 +299,6 @@ class CsvExportView:
 				if len(col_definition) >= 3:
 					transform_function = col_definition[2]
 					datum = transform_function(datum, row, key_mapping)
-				if isinstance(datum, list):
-					datum = self.csv_settings.multi_value_delimiter.join(datum)
 				data.append(datum)
 			file_adapter.add_row(data)
 
@@ -325,7 +313,7 @@ class CsvExportView:
 		if self.csv_settings is None:
 			raise Exception('No csv settings set!')
 
-		file_adapter = self.csv_settings.csv_adapter(request)
+		file_adapter = self.csv_settings.csv_adapter(request, self.csv_settings)
 
 		self._generate_csv_file(request, file_adapter)
 
