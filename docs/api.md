@@ -170,6 +170,8 @@ Currently this is implemented by raising an `BinderValidateOnly` exception, whic
 
 It is important to realize that in this way, the normal `save()` function is called on a model, so it is possible that possible side effects are triggered, when these are implemented directly in `save()`, as opposed to in a signal method, which would be preferable. In other words, we cannot guarantee that the request will be idempotent. Therefore, the validation only feature is disabled by default and must be enabled by setting `allow_standalone_validation=True` on the view.
 
+When a model is being validated and not actually being saved the `_validation_model property` of the binder model is set to True. This allows whitelisting of certain validation checks such as with certain relations that are not included with the validation model.
+
 ### Uploading files
 
 To upload a file, you have to add it to the `file_fields` of the `ModelView`:
