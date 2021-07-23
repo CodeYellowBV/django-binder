@@ -9,7 +9,7 @@ from contextlib import suppress
 from django import forms
 from django.db import models
 from django.db.models.fields.files import FieldFile, FileField
-from django.contrib.postgres.fields import CITextField, ArrayField, JSONField
+from django.contrib.postgres.fields import CITextField, ArrayField, JSONField, DateTimeRangeField as DTRangeField
 from django.core import checks
 from django.core.files.base import File, ContentFile
 from django.core.files.images import ImageFile
@@ -25,6 +25,70 @@ from binder.json import jsonloads
 from binder.exceptions import BinderRequestError
 
 from . import history
+
+
+class DateTimeRangeField(DTRangeField):
+
+	default_error_messages = {
+		'bound_error': _('Lower bound must be smaller or equal to upper bound.'),
+		'invalid_type': _('Wrong range type provided: %(type)s.'),
+	}
+
+	def to_python(self, value):
+		if value is None:
+			return value
+
+		if isinstance(value, self.range_type):
+			# Also validate the bounds
+			lower = self.base_field.to_python(value.lower)
+			upper = self.base_field.to_python(value.upper)
+			return self.range_type(lower, upper)
+
+		if isinstance(value, str):
+			# Assume we are deserializing
+			vals = jsonloads(value)
+			if isinstance(vals, dict):
+				for end in ('lower', 'upper'):
+					if end in vals:
+						vals[end] = self.base_field.to_python(vals[end])
+				value = self.range_type(**vals)
+				return value
+			# Pass on to next 'if'-statement
+			elif isinstance(vals, list):
+				value = vals
+
+		if isinstance(value, (tuple, list)):
+			try:
+				lower = value[0]
+			except IndexError:
+				lower = None
+			try:
+				upper = value[1]
+			except IndexError:
+				upper = None
+
+			lower = self.base_field.to_python(lower)
+			upper = self.base_field.to_python(upper)
+			value = self.range_type(lower, upper)
+			return value
+
+		# At this point we declare the value to be of wrong type
+		raise ValidationError(
+			self.error_messages['invalid_type'],
+			code='invalid_type',
+			params={'type': type(value)}
+		)
+
+
+	def validate(self, value, _):
+		# If range bounded, disallow higher lower bound than upper bound
+		if (value is not None and value.lower is not None and value.upper is not None):
+			if value.lower > value.upper:
+				raise ValidationError(
+					self.error_messages['bound_error'],
+					code='bound_error',
+				)
+
 
 
 class CaseInsensitiveCharField(CITextField):
