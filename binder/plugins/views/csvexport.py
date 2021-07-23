@@ -103,7 +103,7 @@ class ExcelFileAdapter(ExportFileAdapter):
 		# self.writer = self.pandas.ExcelWriter(self.response)
 
 		self.work_book = self.openpyxl.Workbook()
-		self.sheet = self.work_book.create_sheet()
+		self.sheet = self.work_book._sheets[0]
 
 		# The row number we are currently writing to
 		self._row_number = 0
