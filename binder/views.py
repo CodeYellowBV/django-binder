@@ -33,6 +33,8 @@ from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField
 from .json import JsonResponse, jsonloads
 
+logger = logging.getLogger(__name__)
+
 
 def split_par_aware(content):
 	start = 0
@@ -129,11 +131,6 @@ def annotate(qs, request=None, annotations=None):
 	return qs
 
 
-
-logger = logging.getLogger(__name__)
-
-
-
 # Used to truncate request bodies.
 def ellipsize(msg, length=2048):
 	msglen = len(msg)
@@ -155,6 +152,7 @@ def sign(num):
 
 RelatedModel = namedtuple('RelatedModel', ['fieldname', 'model', 'reverse_fieldname'])
 FilterDescription = namedtuple('FilterDescription', ['filter', 'need_distinct'])
+
 
 # Stolen and improved from https://stackoverflow.com/a/30462851
 def image_transpose_exif(im):
@@ -214,6 +212,7 @@ def prefix_db_expression(value, prefix):
 
 	else:
 		raise ValueError('Unknown expression type, cannot apply db prefix: %s', value)
+
 
 
 class ModelView(View):
@@ -440,7 +439,6 @@ class ModelView(View):
 		return ''.join((x + '_' if x.islower() and y.isupper() else x.lower() for x, y in zip(mn, mn[1:] + 'x')))
 
 
-
 	# Use this to instantiate other views you need. It returns a properly initialized view instance.
 	# Call like:   foo_view_instance = self.get_view(FooView)
 	def get_view(self, cls):
@@ -449,12 +447,10 @@ class ModelView(View):
 		return view
 
 
-
 	# Use this to instantiate the default view for a specific model class.
 	# Call like:   foo_view_instance = self.get_model_view(FooModel)
 	def get_model_view(self, model):
 		return self.get_view(self.router.model_view(model))
-
 
 
 	# Return a list of RelatedObjects for all _visible_ reverse relations (from both FKs and m2ms).
@@ -578,7 +574,6 @@ class ModelView(View):
 			raise self.model.DoesNotExist()
 
 
-
 	# Split ['animals(name:contains=lion)']
 	# in ['animals': ['name:contains=lion']]
 	# { 'animals': {'filters': ['name:contains=lion'], 'subrels': {}}}
@@ -617,7 +612,7 @@ class ModelView(View):
 
 	# Find which objects of which models to include according to <withs> for the objects in <queryset>.
 	# returns three dictionaries:
-	# - withs: { related_modal_name: [ids] }
+	# - withs: { related_model_name: [ids] }
 	# - mappings: { with_name: related_model_name }
 	# - related_name_mappings: { with_name: related_model_reverse_key }
 	#
@@ -1047,7 +1042,6 @@ class ModelView(View):
 		return FilterDescription(q, need_distinct)
 
 
-
 	def _filter_field(self, field_name, qualifier, value, invert, request, include_annotations, partial=''):
 		try:
 			if field_name in self.hidden_fields:
@@ -1084,7 +1078,6 @@ class ModelView(View):
 				.format(field.__class__.__name__, self.model.__name__, field_name))
 
 
-
 	def _parse_order_by(self, queryset, field, request, partial=''):
 		head, *tail = field.split('.')
 
@@ -1112,7 +1105,6 @@ class ModelView(View):
 				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head, nulls_last)
-
 
 
 	def search(self, queryset, search, request):
@@ -1156,7 +1148,6 @@ class ModelView(View):
 		raise BinderRequestError('Invalid value: deleted={{{}}}.'.format(request.GET.get('deleted')))
 
 
-
 	def _paginate(self, queryset, request):
 		limit = self.limit_default
 		if request.GET.get('limit') == 'none':
@@ -1186,10 +1177,8 @@ class ModelView(View):
 		return queryset
 
 
-
 	def get_queryset(self, request):
 		return self.model.objects.all()
-
 
 
 	def order_by(self, queryset, request):
@@ -1348,7 +1337,6 @@ class ModelView(View):
 			logger.error('Detected anomalous total record count versus data response length.  Please check if there are any scopes returning Q() objects which follow one-to-many links!')
 
 
-
 	def binder_validation_error(self, obj, validation_error, pk=None):
 		model_name = self.get_model_view(obj.__class__)._model_name()
 
@@ -1448,7 +1436,6 @@ class ModelView(View):
 		return data
 
 
-
 	# NOTE: This is misnamed because it also stores the reverse side
 	# of OneToOne fields.
 	def _store_m2m_field(self, obj, field, value, request):
@@ -1534,13 +1521,10 @@ class ModelView(View):
 			raise sum(validation_errors, None)
 
 
-
-
 	# Override _store_field example for a "FOO" field
 	# Try to override setters using these methods, if at all possible.
 	# def _store__FOO(self, obj, field, value, request):
 	#	return self._store_field(obj, field, value, request)
-
 
 
 	# Store <value> on <obj>.<field>
@@ -1689,7 +1673,6 @@ class ModelView(View):
 		raise BinderInvalidField(self.model.__name__, field)
 
 
-
 	def _require_model_perm(self, perm_type, request, pk=None):
 		if hasattr(self, 'perms_via'):
 			model = self.perms_via
@@ -1704,7 +1687,6 @@ class ModelView(View):
 			raise BinderForbidden(perm, request.user)
 
 		logger.debug('passed permission check: {}'.format(perm))
-
 
 
 	def _obj_diff(self, old, new, name):
@@ -1733,7 +1715,6 @@ class ModelView(View):
 		if old != new:
 			return ['changed {}: {} -> {}'.format(name, repr(old), repr(new))]
 		return []
-
 
 
 	# Put data and with on one big pile, that's easier for us
@@ -1767,7 +1748,6 @@ class ModelView(View):
 				raise BinderRequestError('deletions should be a list')
 
 		return data, deletions
-
 
 
 	# Sort object values by model/id
@@ -1874,7 +1854,6 @@ class ModelView(View):
 		return objects
 
 
-
 	def _multi_put_calculate_dependencies(self, objects):
 		logger.info('Resolving dependencies for {} objects'.format(len(objects)))
 		dependencies = {}
@@ -1912,7 +1891,6 @@ class ModelView(View):
 		return dependencies
 
 
-
 	# Actually sort the objects by dependency (and within dependency layer by model/id)
 	def _multi_put_order_dependencies(self, dependencies):
 		ordered_objects = []
@@ -1938,7 +1916,6 @@ class ModelView(View):
 			)
 
 		return ordered_objects
-
 
 
 	def _multi_put_save_objects(self, ordered_objects, objects, request):
@@ -2095,8 +2072,10 @@ class ModelView(View):
 
 		return JsonResponse({'idmap': output})
 
+
 	def _get_request_values(self, request):
 		return jsonloads(request.body)
+
 
 	def put(self, request, pk=None):
 		if pk is None:
@@ -2137,10 +2116,8 @@ class ModelView(View):
 		return JsonResponse(data)
 
 
-
 	def patch(self, request, pk=None):
 		return self.put(request, pk)
-
 
 
 	def post(self, request, pk=None):
@@ -2165,7 +2142,6 @@ class ModelView(View):
 			logger.debug('POST ' + c)
 
 		return JsonResponse(data)
-
 
 
 	def delete(self, request, pk=None, undelete=False, skip_body_check=False):
@@ -2195,10 +2171,8 @@ class ModelView(View):
 		return HttpResponse(status=204)  # No content
 
 
-
 	def delete_obj(self, obj, undelete, request):
 		return self.soft_delete(obj, undelete, request)
-
 
 
 	def soft_delete(self, obj, undelete, request):
@@ -2236,7 +2210,6 @@ class ModelView(View):
 			obj.save()
 		except ValidationError as ve:
 			raise self.binder_validation_error(obj, ve)
-
 
 
 	def dispatch_file_field(self, request, pk=None, file_field=None):
@@ -2417,14 +2390,12 @@ class ModelView(View):
 			return JsonResponse( {"data": {file_field_name: None}} )
 
 
-
 	def filefield_get_name(self, instance=None, request=None, file_field=None):
 		try:
 			method = getattr(self, 'filefield_get_name_' + file_field.field.name)
 		except AttributeError:
 			return os.path.basename(file_field.path)
 		return method(instance=instance, request=request, file_field=file_field)
-
 
 
 	def view_history(self, request, pk=None, **kwargs):
@@ -2454,7 +2425,6 @@ def api_catchall(request):
 		return e.response(request=request)
 
 
-
 def debug_changesets_24h(request):
 	if request.method != 'GET':
 		raise BinderMethodNotAllowed()
@@ -2469,7 +2439,6 @@ def debug_changesets_24h(request):
 
 	changesets = history.Changeset.objects.filter(date__gte=timezone.now() - datetime.timedelta(days=1))
 	return history.view_changesets_debug(request, changesets.order_by('-id'))
-
 
 
 def handler500(request):
