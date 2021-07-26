@@ -46,7 +46,7 @@ jobs:
         image: "mcr.microsoft.com/mssql/server:2017-latest"
         env:
           ACCEPT_EULA: y
-          SA_PASSWORD: test
+          SA_PASSWORD: '~Test123'
         ports:
           - 1433:1433
 
@@ -88,7 +88,7 @@ jobs:
 
       - name: Prepare mssql database
         run: |
-          /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P test  -c 'CREATE DATABASE "binder-test"; go'
+          /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P '~Test123'  -c 'CREATE DATABASE "binder-test"; go'
         if: matrix.database-engine == 'mssql'
 
       - name: Run tests
