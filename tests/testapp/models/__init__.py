@@ -17,3 +17,4 @@ from .zoo import Zoo
 from .zoo_employee import ZooEmployee
 from .city import City, CityState, PermanentCity
 from .country import Country
+from .timetable import TimeTable

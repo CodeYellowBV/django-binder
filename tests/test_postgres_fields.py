@@ -5,10 +5,12 @@ import unittest
 from django.test import TestCase, Client
 
 from binder.json import jsonloads
-from binder.models import BinderModel, DateTimeRangeField
 from django.contrib.auth.models import User
 from datetime import datetime, date, timedelta
 from django.core.exceptions import ValidationError
+from .testapp.models import TimeTable
+
+from psycopg2.extras import DateTimeTZRange
 
 if os.environ.get('BINDER_TEST_MYSQL', '0') == '0':
 	from .testapp.models import FeedingSchedule, Animal, Zoo
@@ -395,23 +397,330 @@ class PostgresFieldsTest(TestCase):
 	"Only available with PostgreSQL"
 )
 class TestDateTimeRangeField(TestCase):
+	def test_value_None(self):
+		# This should be valid (if not set to non-nullable)
+		test_model = TimeTable(daterange=None)
+		test_model.save()
 
-	class TestModel(BinderModel):
-		test_field = DateTimeRangeField()
+		self.assertIsNone(test_model.daterange)
 
-	def test_availability_upper_bound_smaller_than_lower_bound(self):
+
+	def test_value_DateTimeRangeTZ_empty(self):
+		# empty is equivalent to None
+		test_model = TimeTable(daterange=DateTimeTZRange())
+		test_model.save()
+
+		self.assertIsNone(test_model.daterange.lower)
+		self.assertIsNone(test_model.daterange.upper)
+
+
+	def test_value_DateTimeRangeTZ_None(self):
+		# None is a valid value for the bounds
+		test_model = TimeTable(daterange=DateTimeTZRange(None, None))
+		test_model.save()
+
+		self.assertIsNone(test_model.daterange.lower)
+		self.assertIsNone(test_model.daterange.upper)
+
+
+	def test_value_DateTimeRangeTZ_datetime(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
+
+		test_model = TimeTable(daterange=DateTimeTZRange(lower, upper))
+		test_model.save()
+
+
+	def test_value_DateTimeRangeTZ_date(self):
+		today = date.today()
+		lower = today + timedelta(days=1)
+		upper = today + timedelta(days=2)
+
+		test_model = TimeTable(daterange=DateTimeTZRange(lower, upper))
+		test_model.save()
+
+		# range_type.to_python should cast dates to datetimes + making them
+		# tz aware!
+		self.assertTrue(isinstance(test_model.daterange.lower, datetime))
+		self.assertTrue(isinstance(test_model.daterange.upper, datetime))
+
+
+	def test_value_DateTimeRangeTZ_valid_string(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
+
+		lower_parsed = lower.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+		upper_parsed = upper.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+
+		test_model = TimeTable(daterange=DateTimeTZRange(lower_parsed, upper_parsed))
+		test_model.save()
+
+
+	def test_value_DateTimeRangeTZ_invalid_string(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = "]&!" # invalid but json parsable
+
+		with self.assertRaises(ValidationError) as ve:
+			test_model = TimeTable(daterange=DateTimeTZRange(lower, upper))
+			test_model.save()
+
+		self.assertSetEqual(set(['daterange']), set(ve.exception.error_dict.keys()))
+		errors = ve.exception.message_dict['daterange']
+		self.assertEqual(1, len(errors))
+		self.assertEqual('“%s” value has an invalid format. It must be in YYYY-MM-DD HH:MM[:ss[.uuuuuu]][TZ] format.' % upper, str(errors[0]))
+
+
+	# This case should not happen (http payloads are always interpreted as strings)
+	def test_value_DateTimeRangeTZ_invalid_non_json_parsable(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = 1 # not json parsable
+
+		with self.assertRaises(TypeError) as te:
+			test_model = TimeTable(daterange=DateTimeTZRange(lower, upper))
+			test_model.save()
+
+		self.assertEqual("expected string or bytes-like object", str(te.exception))
+
+
+	def test_value_tuple_empty(self):
+		# empty is equivalent to None
+		test_model = TimeTable(daterange=())
+		test_model.save()
+
+		self.assertIsNone(test_model.daterange.lower)
+		self.assertIsNone(test_model.daterange.upper)
+
+
+	def test_value_tuple_None(self):
+		test_model = TimeTable(daterange=(None, None))
+		test_model.save()
+
+		self.assertIsNone(test_model.daterange.lower)
+		self.assertIsNone(test_model.daterange.upper)
+
+
+	def test_value_tuple_datetime(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
+
+		test_model = TimeTable(daterange=(lower, upper))
+		test_model.save()
+
+
+	def test_value_tuple_date(self):
+		today = date.today()
+		lower = today + timedelta(days=1)
+		upper = today + timedelta(days=2)
+
+		test_model = TimeTable(daterange=(lower, upper))
+		test_model.save()
+
+		# range_type.to_python should cast dates to datetimes + making them
+		# tz aware!
+		self.assertTrue(isinstance(test_model.daterange.lower, datetime))
+		self.assertTrue(isinstance(test_model.daterange.upper, datetime))
+
+
+	def test_value_tuple_valid_string(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
+
+		lower_parsed = lower.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+		upper_parsed = upper.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+
+		test_model = TimeTable(daterange=(lower_parsed, upper_parsed))
+		test_model.save()
+
+
+	def test_value_tuple_invalid_string(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = "]&!" # invalid but json parsable
+
+		with self.assertRaises(ValidationError) as ve:
+			test_model = TimeTable(daterange=(lower, upper))
+			test_model.save()
+
+		self.assertSetEqual(set(['daterange']), set(ve.exception.error_dict.keys()))
+		errors = ve.exception.message_dict['daterange']
+		self.assertEqual(1, len(errors))
+		self.assertEqual('“%s” value has an invalid format. It must be in YYYY-MM-DD HH:MM[:ss[.uuuuuu]][TZ] format.' % upper, str(errors[0]))
+
+
+	# This case should not happen (http payloads are always interpreted as strings)
+	def test_value_tuple_invalid_non_json_parsable(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = 1 # not json parsable
+
+		with self.assertRaises(TypeError) as te:
+			test_model = TimeTable(daterange=(lower, upper))
+			test_model.save()
+
+		self.assertEqual("expected string or bytes-like object", str(te.exception))
+
+
+	def test_value_array_empty(self):
+		# empty is equivalent to None
+		test_model = TimeTable(daterange=[])
+		test_model.save()
+
+		self.assertIsNone(test_model.daterange.lower)
+		self.assertIsNone(test_model.daterange.upper)
+
+
+	def test_value_array_None(self):
+		test_model = TimeTable(daterange=[None, None])
+		test_model.save()
+
+		self.assertIsNone(test_model.daterange.lower)
+		self.assertIsNone(test_model.daterange.upper)
+
+
+	def test_value_array_datetime(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
+
+		test_model = TimeTable(daterange=[lower, upper])
+		test_model.save()
+
+
+	def test_value_array_date(self):
+		today = date.today()
+		lower = today + timedelta(days=1)
+		upper = today + timedelta(days=2)
+
+		test_model = TimeTable(daterange=[lower, upper])
+		test_model.save()
+
+		# range_type.to_python should cast dates to datetimes + making them
+		# tz aware!
+		self.assertTrue(isinstance(test_model.daterange.lower, datetime))
+		self.assertTrue(isinstance(test_model.daterange.upper, datetime))
+
+
+	def test_value_array_valid_string(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
+
+		lower_parsed = lower.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+		upper_parsed = upper.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+
+		test_model = TimeTable(daterange=[lower_parsed, upper_parsed])
+		test_model.save()
+
+
+	def test_value_array_invalid_string(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = "]&!" # invalid but json parsable
+
+		with self.assertRaises(ValidationError) as ve:
+			test_model = TimeTable(daterange=[lower, upper])
+			test_model.save()
+
+		self.assertSetEqual(set(['daterange']), set(ve.exception.error_dict.keys()))
+		errors = ve.exception.message_dict['daterange']
+		self.assertEqual(1, len(errors))
+		self.assertEqual('“%s” value has an invalid format. It must be in YYYY-MM-DD HH:MM[:ss[.uuuuuu]][TZ] format.' % upper, str(errors[0]))
+
+
+	# This case should not happen (http payloads are always interpreted as strings)
+	def test_value_array_invalid_non_json_parsable(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = 1 # not json parsable
+
+		with self.assertRaises(TypeError) as te:
+			test_model = TimeTable(daterange=[lower, upper])
+			test_model.save()
+
+		self.assertEqual("expected string or bytes-like object", str(te.exception))
+
+
+	def test_value_stringified_array(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
+
+		lower_parsed = lower.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+		upper_parsed = upper.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+
+		# just test through some valid possibilities
+		for daterange in ['[]', '["{}", "{}"]'.format(lower_parsed, upper_parsed)]:
+			test_model = TimeTable(daterange=daterange)
+			test_model.save()
+
+		test_model = TimeTable(daterange='["2000-01-01", "2000-01-02"]')
+		test_model.save()
+
+		# range_type.to_python should cast dates to datetimes + making them
+		# tz aware!
+		self.assertTrue(isinstance(test_model.daterange.lower, datetime))
+		self.assertTrue(isinstance(test_model.daterange.upper, datetime))
+
+		with self.assertRaises(TypeError):
+			test_model = TimeTable(daterange='[1, ""]')
+			test_model.save()
+
+		with self.assertRaises(ValidationError):
+			test_model = TimeTable(daterange='["", ""]')
+			test_model.save()
+
+
+	def test_value_stringified_dict(self):
+		tmrw = date.today() + timedelta(days=1)
+		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
+		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
+
+		lower_parsed = lower.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+		upper_parsed = upper.strftime('%Y-%m-%dT%H:%M:%S.%f%z')
+
+		test_model = TimeTable(daterange='{}')
+		test_model.save()
+		self.assertIsNone(test_model.daterange.lower)
+		self.assertIsNone(test_model.daterange.upper)
+
+		test_model = TimeTable(daterange='{ "lower": "%s", "upper": "%s" }' % (lower_parsed, upper_parsed))
+		test_model.save()
+		self.assertTrue(isinstance(test_model.daterange.lower, datetime))
+		self.assertTrue(isinstance(test_model.daterange.upper, datetime))
+
+		test_model = TimeTable(daterange='{ "lower": "2000-01-01", "upper": "2000-01-02"}')
+		test_model.save()
+
+		# range_type.to_python should cast dates to datetimes + making them
+		# tz aware!
+		self.assertTrue(isinstance(test_model.daterange.lower, datetime))
+		self.assertTrue(isinstance(test_model.daterange.upper, datetime))
+
+		with self.assertRaises(TypeError):
+			test_model = TimeTable(daterange='[1, ""]')
+			test_model.save()
+
+		with self.assertRaises(ValidationError):
+			test_model = TimeTable(daterange='["", ""]')
+			test_model.save()
+
+
+	def test_upper_bound_smaller_than_lower_bound(self):
 		tmrw = date.today() + timedelta(days=1)
 		lower = datetime(tmrw.year, tmrw.month, tmrw.day, 8, 30)
 		upper = datetime(tmrw.year, tmrw.month, tmrw.day, 17, 30)
 
 		with self.assertRaises(ValidationError) as ve:
-			test_model = self.TestModel(test_field=(upper, lower))
+			test_model = TimeTable(daterange=(upper, lower))
 			test_model.save()
 
-		self.assertSetEqual(set(['test_field']), set(ve.exception.error_dict.keys()))
-		errors = ve.exception.message_dict['test_field']
+		self.assertSetEqual(set(['daterange']), set(ve.exception.error_dict.keys()))
+		errors = ve.exception.message_dict['daterange']
 		self.assertEqual(1, len(errors))
 		self.assertEqual("Lower bound must be smaller or equal to upper bound.", str(errors[0]))
-
-
-	# TODO: more tests

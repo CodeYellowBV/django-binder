@@ -2,6 +2,7 @@ import re
 import warnings
 import hashlib
 import mimetypes
+import json
 from collections import defaultdict
 from datetime import date, datetime, time
 from contextlib import suppress
@@ -46,7 +47,7 @@ class DateTimeRangeField(DTRangeField):
 
 		if isinstance(value, str):
 			# Assume we are deserializing
-			vals = jsonloads(value)
+			vals = json.loads(value)
 			if isinstance(vals, dict):
 				for end in ('lower', 'upper'):
 					if end in vals:
