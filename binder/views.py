@@ -1432,7 +1432,7 @@ class ModelView(View):
 		if validation_errors:
 			raise sum(validation_errors, None)
 
-		# Skip re-fetch and serialization via get_objs if we're in
+		# Skip re-fetch and serialization via _get_objs if we're in
 		# multi-put (data is discarded!).
 		if getattr(request, '_is_multi_put', False):
 			return None
@@ -2073,7 +2073,7 @@ class ModelView(View):
 
 
 	def multi_put(self, request):
-		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
+		logger.info('ACTIVATING THE MULTI-PUT!!!!!')
 
 		# Hack to communicate to _store() that we're not interested in
 		# the new data (for perf reasons).
