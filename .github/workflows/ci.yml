@@ -82,6 +82,11 @@ jobs:
           mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql --protocol=TCP -h localhost -u root -prootpassword mysql
         if: matrix.database-engine == 'mysql'
 
+      - name: Prepare mssql database
+        run: |
+          /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P test  -c 'CREATE DATABASE "binder-test"; go' -h localhost -U postgres
+        if: matrix.database-engine == 'mssql'
+
       - name: Run tests
         run: |
           .venv/bin/coverage run --include="binder/*" setup.py test
