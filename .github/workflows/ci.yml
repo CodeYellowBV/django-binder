@@ -95,7 +95,7 @@ jobs:
         run: |
           .venv/bin/coverage run --include="binder/*" setup.py test
         env:
-          BINDER_TEST_MYSQL: ${{ matrix.database-engine == 'mysql' && 1 || 0 }}
+          BINDER_TEST_DATABASE_ENGINE: ${{ matrix.database-engine }}
           CY_RUNNING_INSIDE_CI: 1
 
       - name: Upload coverage report

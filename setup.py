@@ -46,7 +46,7 @@ setup(
 		'django-hijack >= 2.1.10',
 		(
 			'mysqlclient >= 1.3.12'
-			if os.environ.get('BINDER_TEST_MYSQL', '0') == '1' else
+			if os.environ.get('BINDER_TEST_DATABASE_ENGINE', ') == 'mysql' else
 			'psycopg2 >= 2.7'
 		),
 		"openpyxl >= 3.0.0"

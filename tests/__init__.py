@@ -14,7 +14,7 @@ if (
 		'HOST': 'db',
 		'PORT': 5432,
 	}
-elif os.environ.get('BINDER_TEST_MYSQL', '0') == '1':
+elif os.environ.get('BINDER_TEST_DATABASE_ENGINE', ') == 'mysql':
 	db_settings = {
 		'ENGINE': 'django.db.backends.mysql',
 		'NAME': 'binder-test',
