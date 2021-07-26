@@ -7,7 +7,7 @@ from django.test import TestCase, Client
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-if os.environ.get('BINDER_TEST_DATABASE_ENGINE', ') != 'mysql':
+if os.environ.get('BINDER_TEST_DATABASE_ENGINE') != 'mysql':
 	from .testapp.models import FeedingSchedule, Animal, Zoo
 
 # TODO: Currently these only really test filtering.  Move to test/filters?
