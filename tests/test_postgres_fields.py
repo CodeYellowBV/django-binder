@@ -12,7 +12,7 @@ if os.environ.get('BINDER_TEST_DATABASE_ENGINE') != 'mysql':
 
 # TODO: Currently these only really test filtering.  Move to test/filters?
 @unittest.skipIf(
-	os.environ.get('BINDER_TEST_MYSQL', '0') != '0',
+	os.environ.get('BINDER_TEST_DATABASE_ENGINE') in ['mysql'],
 	"Only available with PostgreSQL"
 )
 class PostgresFieldsTest(TestCase):
