@@ -176,6 +176,8 @@ class MultiPutTest(TestCase):
 		}
 		response = self.client.put('/animal/', data=json.dumps(with_model_data), content_type='application/json')
 
+		print(response.content)
+
 		self.assertEqual(response.status_code, 200)
 
 		returned_data = jsonloads(response.content)

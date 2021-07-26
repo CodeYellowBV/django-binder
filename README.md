@@ -14,10 +14,18 @@ There are two ways to run the tests:
 - Run with docker `docker-compose run binder ./setup.py test`
   - Access the test database directly by with `docker-compose run db psql -h db -U postgres`.
   - It may be possible to recreate the test database (for example when you added/changed models). One way of achieving this is to just remove all the docker images that were build `docker-compose rm`. The database will be created during the setup in `tests/__init__.py`.
-
+   
 The tests are set up in such a way that there is no need to keep migration files. The setup procedure in `tests/__init__.py` handles the preparation of the database by directly calling some build-in Django commands.
 
 To only run a selection of the tests, use the `-s` flag like `./setup.py test -s tests.test_some_specific_test`.
+
+### Running test other database systems
+Locally the tests can be run for MySQL or MSSQL by overriding the `BINDER_TEST_DATABASE_ENGINE` environment variable:
+
+- `docker-compose run -e BINDER_TEST_DATABASE_ENGINE=mysql binder ./setup.py test` for MySQL
+- `docker-compose run -e BINDER_TEST_DATABASE_ENGINE=mssql binder ./setup.py test` for MsSQL
+
+
 
 ## MySQL support
 

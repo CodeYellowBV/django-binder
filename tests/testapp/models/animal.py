@@ -11,6 +11,7 @@ class Concat(Func):
 
 # From the api docs: an animal with a name.
 class Animal(LoadedValuesMixin, BinderModel):
+	# id = models.IntegerField(primary_key=True, null=True, blank=True)
 	name = models.TextField(max_length=64)
 	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 	zoo_of_birth = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='+', blank=True, null=True) # might've been born outside captivity

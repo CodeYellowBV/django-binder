@@ -7,12 +7,12 @@ from django.test import TestCase, Client
 from binder.json import jsonloads
 from django.contrib.auth.models import User
 
-if os.environ.get('BINDER_TEST_MYSQL', '0') == '0':
+if os.environ.get('BINDER_TEST_DATABASE_ENGINE') not in ['mysql', 'mssql']:
 	from .testapp.models import FeedingSchedule, Animal, Zoo
 
 # TODO: Currently these only really test filtering.  Move to test/filters?
 @unittest.skipIf(
-	os.environ.get('BINDER_TEST_MYSQL', '0') != '0',
+	os.environ.get('BINDER_TEST_DATABASE_ENGINE') in ['mysql', 'mssql'],
 	"Only available with PostgreSQL"
 )
 class PostgresFieldsTest(TestCase):

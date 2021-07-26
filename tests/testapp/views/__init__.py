@@ -10,7 +10,7 @@ from .city import CityView
 from .country import CountryView
 
 # This has a Postgres-specific model
-if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
+if os.environ.get('BINDER_TEST_DATABASE_ENGINE') not in ['mysql', 'mssql']:
 	from .feeding_schedule import FeedingScheduleView
 from .gate import GateView
 from .lion import LionView

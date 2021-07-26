@@ -316,10 +316,17 @@ class ModelView(View):
 	virtual_relations = {}
 
 	@property
+	def database_type(self):
+		return {
+			'mysql': 'mysql',
+			'microsoft': 'mssql',
+		}.get(connections[self.model.objects.db].vendor, 'postgres')
+
+	@property
 	def AggStrategy(self):
-		if connections[self.model.objects.db].vendor == 'mysql':
+		if self.database_type == 'mysql':
 			return GroupConcat
-		if connections[self.model.objects.db].vendor == 'microsoft':
+		if self.database_type == 'mssql':
 			return StringAgg
 		return OrderableArrayAgg
 
@@ -869,6 +876,14 @@ class ModelView(View):
 	# permission scoping.  This will be done when fetching the actual
 	# objects.
 	def _get_with_ids(self, pks, request, include_annotations, with_map, where_map):
+		if self.database_type == 'mssql':
+			with_ids = {}
+			for key, sub_with_map in with_map.items():
+				with_ids.update(self._base_get_with_ids(pks, request, include_annotations, {key: sub_with_map}, where_map))
+			return with_ids
+		return self._base_get_with_ids( pks, request, include_annotations, with_map, where_map)
+
+	def _base_get_with_ids(self, pks, request, include_annotations, with_map, where_map):
 		result = {}
 
 		annotations = {}

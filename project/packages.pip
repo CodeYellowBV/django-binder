@@ -4,3 +4,5 @@ django-request-id
 psycopg2
 requests
 openpyxl
+django-pyodbc-azure
+django-pyodbc
