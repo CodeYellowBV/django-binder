@@ -4,28 +4,13 @@ on: push
 
 jobs:
   check:
+    runs-on: ubuntu-latest
+
     strategy:
       matrix:
-        # Testing Python 3.7 (deb 10), Python 3.9 (deb 11), Python 3.11 (deb 12)
-        python-version: ["3.9", "3.11"]
-        django-version: ["3.2.25", "4.2.17", "5.1.4"]
-        database-engine: ["postgres", "mysql"]
-        os: [ubuntu-latest]
-        include:
-          # 3.7 cannot run on latest ubuntu
-          - python-version: 3.7
-            django-version: 3.2.25
-            database-engine: postgres
-            os: ubuntu-22.04
-          - python-version: 3.7
-            django-version: 3.2.25
-            database-engine: mysql
-            os: ubuntu-22.04
-        exclude:
-          - python-version: 3.9
-            django-version: 5.1.4
-
-    runs-on: ${{ matrix.os }}
+        python-version: [ "3.7", "3.8" ]
+        django-version: [ "2.1.1", "3.1.4" ]
+        database-engine: [ "postgres", "mysql", "mssql"]
 
     services:
       postgres:
@@ -52,19 +37,35 @@ jobs:
         ports:
           - 3306:3306
 
+
+      mssqldb:
+        image: mcr.microsoft.com/mssql/server:2017-latest
+       env:
+        ACCEPT_EULA: y
+        SA_PASSWORD: Test
+
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
       - name: Setup python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Retrieve cached venv
+        uses: actions/cache@v1
+        id: cache-venv
+        with:
+          path: ./.venv/
+          key: ${{ runner.os }}-${{ matrix.python-version }}-${{ matrix.django-version }}-venv-${{ hashFiles('ci-requirements.txt') }}
 
       - name: Install requirements
         run: |
           python -m venv .venv
-          .venv/bin/pip install django==${{ matrix.django-version }} -r ci-requirements.txt
+          .venv/bin/pip install -qr ci-requirements.txt django==${{ matrix.django-version }}
+        if: steps.cache-venv.outputs.cache-hit != 'true'
 
       - name: Run linting
         run: .venv/bin/flake8 binder
@@ -82,7 +83,7 @@ jobs:
 
       - name: Run tests
         run: |
-          .venv/bin/coverage run --include="binder/*" -m unittest discover -vt . -s tests
+          .venv/bin/coverage run --include="binder/*" setup.py test
         env:
           BINDER_TEST_MYSQL: ${{ matrix.database-engine == 'mysql' && 1 || 0 }}
           CY_RUNNING_INSIDE_CI: 1
