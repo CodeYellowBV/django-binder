@@ -12,6 +12,8 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 test_require_database_engine = {
 	'mysql': ['mysqlclient >= 1.3.12', 'psycopg2 >= 2.7'],
 	'mssql': ['django-pyodbc-azure >= 2.1.0.0', 'django-pyodbc >= 1.1.3', 'django-hijack == 2.1.10', 'psycopg2 >= 2.7'],
+	# Alternative mssql setup with django 3 setup. For later
+	# 'mssql': ['mssql-django==1.0rc1', 'psycopg2 >= 2.7']
 }.get(os.environ.get('BINDER_TEST_DATABASE_ENGINE'),  ['psycopg2 >= 2.7'])
 
 

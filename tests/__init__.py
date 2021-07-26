@@ -45,6 +45,7 @@ else:
 		'USER': 'postgres',
 	}
 
+
 settings.configure(**{
 	'DEBUG': True,
 	'SECRET_KEY': 'testy mctestface',
@@ -88,6 +89,12 @@ settings.configure(**{
 				'level': 'DEBUG',
 				'class': 'logging.StreamHandler',
 			},
+            'file': {
+                'level': 'DEBUG',
+                'class': 'logging.handlers.WatchedFileHandler',
+                'filename': 'backend.log',
+                'filters': [],
+            },
 		},
 		'loggers': {
 			# We override only this one to avoid logspam
@@ -97,7 +104,13 @@ settings.configure(**{
 				'handlers': ['console'],
 				'level': 'ERROR',
 			},
-		}
+            # 'django.db.backends': {
+            #     'handlers': ['console', 'file'],
+            #     'level': 'DEBUG',
+            #     'propagate': True,
+            # },
+        }
+
 	},
 	'BINDER_PERMISSION': {
 		'default': [
@@ -124,7 +137,6 @@ settings.configure(**{
 		'admin': []
 	}
 })
-
 setup()
 
 # Do the dance to ensure the models are synched to the DB.

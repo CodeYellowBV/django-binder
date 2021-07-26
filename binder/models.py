@@ -405,6 +405,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 
 	def save(self, *args, **kwargs):
 		self.full_clean() # Never allow saving invalid models!
+
 		return super().save(*args, **kwargs)
 
 

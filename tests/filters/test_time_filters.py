@@ -6,7 +6,7 @@ from ..testapp.models import Zoo
 import os
 
 # This is not possible in
-if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
+if os.environ.get('BINDER_TEST_DATABASE_ENGINE') not in ['mssql', 'mysql']:
 	class TimeFiltersTest(TestCase):
 
 		def setUp(self):
