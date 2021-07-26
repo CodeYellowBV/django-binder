@@ -3,6 +3,7 @@ from django.conf import settings
 from django.core.management import call_command
 import os
 
+
 if (
 	os.path.exists('/.dockerenv') and
 	'CY_RUNNING_INSIDE_CI' not in os.environ

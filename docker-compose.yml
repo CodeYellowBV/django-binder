@@ -10,3 +10,16 @@ services:
       - .:/binder
     depends_on:
       - db
+  mysql:
+    image: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - 3306:3306
+  mssqldb:
+    image: "mcr.microsoft.com/mssql/server:2017-latest"
+    environment:
+      ACCEPT_EULA: y
+      SA_PASSWORD: '~Test123'
+    ports:
+      - 1433:1433
