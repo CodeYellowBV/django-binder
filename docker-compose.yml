@@ -4,12 +4,16 @@ services:
   db:
     image: postgres:11.5
   binder:
-    build: .
+    build:
+      context: ./
+      dockerfile: docker/binder/Dockerfile
     command: tail -f /dev/null
     volumes:
       - .:/binder
     depends_on:
       - db
+      - mysql
+      - mssqldb
   mysql:
     image: mysql
     environment:
@@ -17,7 +21,9 @@ services:
     ports:
       - 3306:3306
   mssqldb:
-    image: "mcr.microsoft.com/mssql/server:2017-latest"
+    build:
+      context: ./
+      dockerfile: docker/mssqldb/Dockerfile
     environment:
       ACCEPT_EULA: y
       SA_PASSWORD: '~Test123'

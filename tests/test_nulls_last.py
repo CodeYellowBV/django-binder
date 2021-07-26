@@ -26,7 +26,7 @@ class NullsLastTest(TestCase):
 		self._load_test_data()
 
 		# MySQL has different defaults when no nulls option is selected...
-		if os.environ.get('BINDER_TEST_MYSQL', '0') != '0':
+		if os.environ.get('BINDER_TEST_DATABASE_ENGINE') in ['mssql', 'mysql']:
 			self._assert_order('last_seen', ['4', '5', '1', '2', '3'])
 			self._assert_order('-last_seen', ['3', '2', '1', '4', '5'])
 		else:
@@ -46,7 +46,7 @@ class NullsLastTest(TestCase):
 		self._load_test_data()
 
 		# MySQL has different defaults when no nulls option is selected...
-		if os.environ.get('BINDER_TEST_MYSQL', '0') != '0':
+		if os.environ.get('BINDER_TEST_DATABASE_ENGINE') in ['mssql', 'mysql']:
 			self._assert_order('last_present', ['4', '5', '1', '2', '3'])
 			self._assert_order('-last_present', ['3', '2', '1', '4', '5'])
 		else:

@@ -3,19 +3,12 @@ from django.conf import settings
 from django.core.management import call_command
 import os
 
+if os.environ.get('BINDER_TEST_DATABASE_ENGINE') == 'mssql':
+	os.system("/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P '~Test123' -m-1 -Q 'CREATE DATABASE [binder-test];'")
 
-if (
-	os.path.exists('/.dockerenv') and
-	'CY_RUNNING_INSIDE_CI' not in os.environ
-):
-	db_settings = {
-		'ENGINE': 'django.db.backends.postgresql',
-		'NAME': 'postgres',
-		'USER': 'postgres',
-		'HOST': 'db',
-		'PORT': 5432,
-	}
-elif os.environ.get('BINDER_TEST_DATABASE_ENGINE') == 'mysql':
+
+
+if os.environ.get('BINDER_TEST_DATABASE_ENGINE') == 'mysql':
 	db_settings = {
 		'ENGINE': 'django.db.backends.mysql',
 		'NAME': 'binder-test',
@@ -24,6 +17,26 @@ elif os.environ.get('BINDER_TEST_DATABASE_ENGINE') == 'mysql':
 		'USER': 'root',
 		'PASSWORD': 'rootpassword',
 	}
+if os.environ.get('BINDER_TEST_DATABASE_ENGINE') == 'mssql':
+	db_settings = {
+		'ENGINE': 'sql_server.pyodbc',
+		'NAME': 'binder-test',
+		'TIME_ZONE': 'UTC',
+		'HOST': 'mssqldb',
+		'USER': 'sa',
+		'PASSWORD': '~Test123',
+		'OPTIONS': {
+			'driver': 'ODBC Driver 17 for SQL Server',
+		},
+	}
+elif (os.path.exists('/.dockerenv') and  'CY_RUNNING_INSIDE_CI' not in os.environ):
+    db_settings = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'postgres',
+        'USER': 'postgres',
+        'HOST': 'db',
+        'PORT': 5432,
+    }
 else:
 	db_settings = {
 		'ENGINE': 'django.db.backends.postgresql_psycopg2',

@@ -7,7 +7,7 @@ from .caretaker import Caretaker
 from .contact_person import ContactPerson
 from .costume import Costume
 # This is a Postgres-specific model
-if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
+if os.environ.get('BINDER_TEST_DATABASE_ENGINE') not in ['mysql', 'mssql']:
 	from .feeding_schedule import FeedingSchedule
 from .gate import Gate
 from .nickname import Nickname, NullableNickname
