@@ -84,7 +84,7 @@ jobs:
 
       - name: Prepare mssql database
         run: |
-          /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P test  -c 'CREATE DATABASE "binder-test"; go' -h localhost -U postgres
+          /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P test  -c 'CREATE DATABASE "binder-test"; go' 
         if: matrix.database-engine == 'mssql'
 
       - name: Run tests
