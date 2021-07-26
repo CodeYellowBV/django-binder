@@ -40,10 +40,11 @@ jobs:
 
       mssqldb:
         image: "mcr.microsoft.com/mssql/server:2017-latest"
-       env:
-        ACCEPT_EULA: y
-        SA_PASSWORD: Test
-
+        env:
+          ACCEPT_EULA: y
+          SA_PASSWORD: Test
+        ports:
+          - 1433:1433
 
     steps:
       - name: Checkout code
