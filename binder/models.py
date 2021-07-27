@@ -288,7 +288,7 @@ class TimeFieldFilter(FieldFilter):
 	fields = [models.TimeField]
 	# Maybe allow __startswith? And __year etc?
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
-	time_re = re.compile(r'^(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?:\d{2})?)$')
+	time_re = re.compile(r'^(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?::?\d{2})?)$')
 
 	def clean_value(self, qualifier, v):
 		# Match value
@@ -304,7 +304,7 @@ class TimeFieldFilter(FieldFilter):
 		if tzinfo == 'Z':
 			tzinfo = timezone.utc
 		else:
-			tzinfo = tzinfo.ljust(5, '0')
+			tzinfo = tzinfo.replace(':', '').ljust(5, '0')
 			offset = int(tzinfo[1:3]) * 60 + int(tzinfo[3:5])
 			if tzinfo.startswith('-'):
 				offset = -offset
