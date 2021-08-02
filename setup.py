@@ -49,5 +49,6 @@ setup(
 			if os.environ.get('BINDER_TEST_MYSQL', '0') == '1' else
 			'psycopg2 >= 2.7'
 		),
+		"openpyxl >= 3.0.0"
 	],
 )
