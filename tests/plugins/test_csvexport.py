@@ -145,4 +145,4 @@ class CsvExportTest(TestCase):
 			self.assertEqual(list(_values[2]),
 							 [self.pictures[1].id, str(self.pictures[1].animal_id), (self.pictures[1].id ** 2)])
 			self.assertEqual(list(_values[3]),
-							 [self.pictures[3].id, str(self.pictures[2].animal_id), (self.pictures[2].id ** 2)])
+							 [self.pictures[2].id, str(self.pictures[2].animal_id), (self.pictures[2].id ** 2)])
