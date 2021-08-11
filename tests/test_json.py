@@ -77,4 +77,4 @@ class JsonTest(TestCase):
 	def test_json_datetimerange_dump_correctly(self):
 		t = datetime(2016, 1, 1, 1, 2, 3, 313337, tzinfo=timezone.utc)
 		d = DateTimeTZRange(t, t)
-		self.assertEqual('["2016-01-01T01:02:03.313337+0000", "2016-01-01T01:02:03.313337+0000"]', binder_json.jsondumps([d]))
+		self.assertEqual('["2016-01-01T01:02:03.313337+0000", "2016-01-01T01:02:03.313337+0000"]', binder_json.jsondumps(d))
