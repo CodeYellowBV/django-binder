@@ -8,12 +8,12 @@ from binder.json import jsonloads
 from django.contrib.auth.models import User
 from datetime import datetime, date, timedelta
 from django.core.exceptions import ValidationError
-from .testapp.models import TimeTable
 
 from psycopg2.extras import DateTimeTZRange
 
 if os.environ.get('BINDER_TEST_MYSQL', '0') == '0':
 	from .testapp.models import FeedingSchedule, Animal, Zoo
+	from .testapp.models import TimeTable
 
 # TODO: Currently these only really test filtering.  Move to test/filters?
 @unittest.skipIf(
