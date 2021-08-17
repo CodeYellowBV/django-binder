@@ -8,7 +8,7 @@ import functools
 import re
 from collections import defaultdict, namedtuple
 from contextlib import ExitStack
-from unicode import unicode
+from unidecode import unidecode
 
 from PIL import Image
 from inspect import getmro
