@@ -2006,7 +2006,7 @@ class ModelView(View):
 			except BinderFieldTypeError:
 				if not validation_errors:
 					raise
-				
+
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				for base in getmro(model)[1:]:
