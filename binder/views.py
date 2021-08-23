@@ -5,6 +5,7 @@ import os
 import datetime
 import mimetypes
 import functools
+import re
 from collections import defaultdict, namedtuple
 from contextlib import ExitStack
 
@@ -1667,6 +1668,25 @@ class ModelView(View):
 					setattr(obj, f.attname, value)
 
 				elif isinstance(f, models.FileField):
+					# If the value is a str that matches how we return file
+					# fields we convert it to the correct file
+					if isinstance(value, str):
+						match = re.match(r'/api/(\w+)/(\d+)/(\w+)/', value)
+						model, pk_, field_ = match.groups()
+						try:
+							model = self.router.name_models[model]
+						except KeyError:
+							pass
+						else:
+							view = self.get_model_view(model)
+							if field_ in view.file_fields:
+								try:
+									obj_ = view.get_queryset(request).get(pk=pk_)
+								except model.DoesNotExist:
+									pass
+								else:
+									value = getattr(obj_, field_)
+
 					if not isinstance(value, File) and value is not None:
 						raise BinderFieldTypeError(self.model.__name__, field)
 

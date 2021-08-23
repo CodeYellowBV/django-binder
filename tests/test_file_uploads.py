@@ -286,3 +286,25 @@ class FileUploadTest(TestCase):
 		data = jsonloads(response.content)
 		self.assertEqual(data['code'], 'RequestError')
 		self.assertEqual(data['message'], 'expected null at path: data.0.floor_plan')
+
+	def test_upload_using_path(self):
+		with temp_imagefile(500, 500, 'jpeg') as file:
+			zoo1 = Zoo(name='Zoo')
+			zoo1.floor_plan.save('plan.jpg', File(file), save=False)
+			zoo1.save()
+
+		response = self.client.post(
+			'/zoo/',
+			content_type='application/json',
+			data={
+				'name': 'Zoo 2',
+				'floor_plan': f'/api/zoo/{zoo1.pk}/floor_plan/',
+			},
+		)
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+		zoo2 = Zoo.objects.get(pk=data['id'])
+
+		self.assertIsNotNone(zoo2.floor_plan.name)
+		with zoo1.floor_plan.open() as f1, zoo2.floor_plan.open() as f2:
+			self.assertEqual(f1.read(), f2.read())
