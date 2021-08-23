@@ -1,16 +1,176 @@
-from binder.router import list_route
-from abc import ABCMeta
+import abc
 import csv
-from binder.json import jsonloads
-from django.http import HttpResponse
+from tempfile import NamedTemporaryFile
+from typing import List
 
-# A Mixin to add a GET object/download link, that downloads the get request as csv file
+from django.http import HttpResponse, HttpRequest
+
+from binder.json import jsonloads
+from binder.router import list_route
+
+
+class ExportFileAdapter:
+	"""
+	Adapter between the data that is exported, and the export file
+	"""
+	__metaclass__ = abc.ABCMeta
+
+	def __init__(self, request: HttpRequest):
+		self.request = request
+
+	@abc.abstractmethod
+	def set_file_name(self, file_name: str):
+		"""
+		Sets the file name of the file that needs to be export. File name does not have the extension.
+
+		e.g. set_file_name('foo') => file download name is 'foo.csv' or 'foo.xlsx'
+
+		:param file_name:
+		:return:
+		"""
+		pass
+
+	@abc.abstractmethod
+	def set_columns(self, columns: List[str]):
+		"""
+		Set the column names of the file
+
+		:param columns:
+		:return:
+		"""
+		pass
+
+
+	@abc.abstractmethod
+	def add_row(self, values: List[str]):
+		"""
+		Add a row with values to the file
+
+		:param values:
+		:return:
+		"""
+		pass
+
+
+
+	@abc.abstractmethod
+	def get_response(self) -> HttpResponse:
+		"""
+		Return a http response with the content of the file
+
+		:param columns:
+		:return:
+		"""
+		pass
+
+
+class CsvFileAdapter(ExportFileAdapter):
+	"""
+	Adapter for returning CSV files
+	"""
+
+	def __init__(self, request: HttpRequest):
+		super().__init__(request)
+		self.response = HttpResponse(content_type='text/csv')
+		self.file_name = 'export'
+		self.writer = csv.writer(self.response)
+
+	def set_file_name(self, file_name: str):
+		self.file_name = file_name
+
+	def set_columns(self, columns: List[str]):
+		self.add_row(columns)
+
+	def add_row(self, values: List[str]):
+		self.writer.writerow(values)
+
+	def get_response(self) -> HttpResponse:
+		self.response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(self.file_name)
+		return self.response
+
+
+class ExcelFileAdapter(ExportFileAdapter):
+	"""
+	Adapter fore returning excel files
+	"""
+	def __init__(self, request: HttpRequest):
+		super().__init__(request)
+
+		# Import pandas locally. This means that you can use the CSV adapter without using pandas
+		import openpyxl
+		self.openpyxl = openpyxl
+		self.file_name = 'export'
+		# self.writer = self.pandas.ExcelWriter(self.response)
+
+		self.work_book = self.openpyxl.Workbook()
+		self.sheet = self.work_book.create_sheet()
+
+		# The row number we are currently writing to
+		self._row_number = 0
+
+	def set_file_name(self, file_name: str):
+		self.file_name = file_name
+
+	def set_columns(self, columns: List[str]):
+		self.add_row(columns)
+
+	def add_row(self, values: List[str]):
+		for (column_id, value) in enumerate(values):
+			self.sheet.cell(column=column_id + 1, row=self._row_number + 1, value=value)
+		self._row_number += 1
+
+	def get_response(self) -> HttpResponse:
+		with NamedTemporaryFile() as tmp:
+			self.work_book.save(tmp.name)
+			self.response = HttpResponse(
+				content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+				content=tmp,
+			)
+			self.response['Content-Disposition'] = 'attachment; filename="{}.xlsx"'.format(self.file_name)
+			return self.response
+
+DEFAULT_RESPONSE_TYPE_MAPPING = {
+	'xlsx': ExcelFileAdapter,
+}
+
+class RequestAwareAdapter(ExportFileAdapter):
+	"""
+	Adapter that returns csv files by default, but allows a request parameter to return other files as well
+
+	e.g. foo/download/?response_type=xlsx
+
+	returns a xlsx type
+	"""
+	def __init__(self, request: HttpRequest):
+		super().__init__(request)
+
+		response_type_mapping = DEFAULT_RESPONSE_TYPE_MAPPING
+		response_type = request.GET.get('response_type', '').lower()
+		AdapterClass = response_type_mapping.get(response_type, CsvFileAdapter)
+
+		self.base_adapter = AdapterClass(request)
+
+	def set_file_name(self, file_name: str):
+		return self.base_adapter.set_file_name(file_name)
+
+	def set_columns(self, columns: List[str]):
+		return self.base_adapter.set_columns(columns)
+
+	def add_row(self, values: List[str]):
+		return self.base_adapter.add_row(values)
+
+	def get_response(self) -> HttpResponse:
+		return self.base_adapter.get_response()
+
+
+
+
 class CsvExportView:
 	"""
 	This class adds another endpoint to the ModelView, namely GET model/download/. This does the same thing as getting a
 	collection, excepts that the result is returned as a csv file, rather than a json file
 	"""
-	__metaclass__ = ABCMeta
+	__metaclass__ = abc.ABCMeta
 
 	# CSV setting contains all the information that is needed to define a csv file. This must be one an instance of
 	# CSVExportSettings
@@ -20,7 +180,9 @@ class CsvExportView:
 		"""
 		This is a fake struct which contains the definition of the CSV Export
 		"""
-		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ', extra_permission=None):
+
+		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ',
+					extra_permission=None, csv_adapter=RequestAwareAdapter):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
@@ -31,6 +193,8 @@ class CsvExportView:
 			@param multi_value_delimiter: String When one column has multiple values, they are joined, with this value
 				as delimiter between them. This may be if an array is returned, or if we have a one to many relation
 			@param extra_permission: String When set, an extra binder permission check will be done on this permission.
+			@param csv_adapter: Class. Either an object extending
+			@param response_type_mapping: Mapping between the parameter used in the custom response type
 			"""
 			self.withs = withs
 			self.column_map = column_map
@@ -38,17 +202,9 @@ class CsvExportView:
 			self.default_file_name = default_file_name
 			self.multi_value_delimiter = multi_value_delimiter
 			self.extra_permission = extra_permission
+			self.csv_adapter = csv_adapter
 
-	@list_route(name='download', methods=['GET'])
-	def download(self, request):
-		"""
-		Download the get request in csv form
-		@param request:
-		@return:
-		"""
-
-		if self.csv_settings is None:
-			raise Exception('No csv settings set!')
+	def _generate_csv_file(self, request: HttpRequest, file_adapter: CsvFileAdapter):
 
 		# Sometimes we want to add an extra permission check before a csv file can be downloaded. This checks if the
 		# permission is set, and if the permission is set, checks if the current user has the specified permission
@@ -71,13 +227,10 @@ class CsvExportView:
 			file_name = file_name(parent_data)
 		if file_name is None:
 			file_name = self.csv_settings.default_file_name
+		file_adapter.set_file_name(file_name)
 
-		response = HttpResponse(content_type='text/csv')
-		response['Content-Disposition'] = 'attachment; filename="{}.csv"'.format(file_name)
-
-		writer = csv.writer(response)
 		# CSV header
-		writer.writerow(list(map(lambda x: x[1], self.csv_settings.column_map)))
+		file_adapter.set_columns(list(map(lambda x: x[1], self.csv_settings.column_map)))
 
 		# Make a mapping from the withs. This creates a map. This is needed for easy looking up relations
 		# {
@@ -92,7 +245,6 @@ class CsvExportView:
 			key_mapping[key] = {}
 			for row in parent_data['with'][key]:
 				key_mapping[key][row['id']] = row
-
 
 		def get_datum(data, key, prefix=''):
 			"""
@@ -145,7 +297,6 @@ class CsvExportView:
 				else:
 					raise Exception("{} not found in {}".format(head_key, data))
 
-
 		for row in parent_data['data']:
 			data = []
 			for col_definition in self.csv_settings.column_map:
@@ -154,6 +305,21 @@ class CsvExportView:
 					transform_function = col_definition[2]
 					datum = transform_function(datum, row, key_mapping)
 				data.append(datum)
-			writer.writerow(data)
+			file_adapter.add_row(data)
 
-		return response
+	@list_route(name='download', methods=['GET'])
+	def download(self, request):
+		"""
+		Download the get request in csv form
+		@param request:
+		@return:
+		"""
+
+		if self.csv_settings is None:
+			raise Exception('No csv settings set!')
+
+		file_adapter = self.csv_settings.csv_adapter(request)
+
+		self._generate_csv_file(request, file_adapter)
+
+		return file_adapter.get_response()
