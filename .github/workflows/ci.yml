@@ -1,0 +1,84 @@
+name: Continuous Integration
+
+on: push
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.7", "3.8"]
+        django-version: ["2.1.1", "3.1.4"]
+        database-engine: ["postgres", "mysql"]
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      mysql:
+        image: mysql
+        env:
+          MYSQL_ROOT_PASSWORD: rootpassword
+        options: >-
+          --health-cmd "mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 3306:3306
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Retrieve cached venv
+        uses: actions/cache@v1
+        id: cache-venv
+        with:
+          path: ./.venv/
+          key: ${{ runner.os }}-${{ matrix.python-version }}-${{ matrix.django-version }}-venv-${{ hashFiles('ci-requirements.txt') }}
+
+      - name: Install requirements
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -qr ci-requirements.txt django==${{ matrix.django-version }}
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+
+      - name: Run linting
+        run: .venv/bin/flake8 binder
+
+      - name: Prepare postgres database
+        run: |
+          psql -c 'CREATE DATABASE "binder-test";' -h localhost -U postgres
+        if: matrix.database-engine == 'postgres'
+
+      - name: Prepare mysql database
+        run: |
+          mysql --protocol=TCP -h localhost -u root -prootpassword -e 'CREATE DATABASE `binder-test`;'
+          mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql --protocol=TCP -h localhost -u root -prootpassword mysql
+        if: matrix.database-engine == 'mysql'
+
+      - name: Run tests
+        run: |
+          .venv/bin/coverage run --include="binder/*" setup.py test
+        env:
+          BINDER_TEST_MYSQL: ${{ matrix.database-engine == 'mysql' && 1 || 0 }}
+          CY_RUNNING_INSIDE_CI: 1
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v1

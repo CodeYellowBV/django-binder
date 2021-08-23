@@ -5,7 +5,7 @@ import os
 
 if (
 	os.path.exists('/.dockerenv') and
-	'CY_RUNNING_INSIDE_TRAVIS' not in os.environ
+	'CY_RUNNING_INSIDE_CI' not in os.environ
 ):
 	db_settings = {
 		'ENGINE': 'django.db.backends.postgresql',
@@ -19,15 +19,21 @@ elif os.environ.get('BINDER_TEST_MYSQL', '0') == '1':
 		'ENGINE': 'django.db.backends.mysql',
 		'NAME': 'binder-test',
 		'TIME_ZONE': 'UTC',
+		'HOST': '127.0.0.1',
+		'USER': 'root',
+		'PASSWORD': 'rootpassword',
 	}
 else:
 	db_settings = {
 		'ENGINE': 'django.db.backends.postgresql_psycopg2',
 		'NAME': 'binder-test',
+		'HOST': 'localhost',
+		'USER': 'postgres',
 	}
 
 settings.configure(**{
 	'DEBUG': True,
+	'SECRET_KEY': 'testy mctestface',
 	'ALLOWED_HOSTS': ['*'],
 	'SECRET_KEY': 'test_secret',
 	'DATABASES': {
