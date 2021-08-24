@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/CodeYellowBV/django-binder.svg?branch=master)](https://travis-ci.org/CodeYellowBV/django-binder)
 [![codecov](https://codecov.io/gh/CodeYellowBV/django-binder/branch/master/graph/badge.svg)](https://codecov.io/gh/CodeYellowBV/django-binder)
 
-Code Yellow backend framework for SPA webapps with REST-like API.
+Code Yellow backend framework for SPA webapps with REST-like API. Dive into the [documentation](docs/api.md) to get started.
 
 **This framework is a work-in-progress. There is no complete documentation yet. We are using it for a couple of projects and fine-tuning it.**
 
