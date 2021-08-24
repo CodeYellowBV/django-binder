@@ -82,7 +82,7 @@ When fetching an object that has relations, it is very convenient to receive the
  
 which produces the following response (some fields are left out for clarity)
 
-```json
+```json5
 {
   "data": [
     {
@@ -90,7 +90,7 @@ which produces the following response (some fields are left out for clarity)
       "id": 1,
       "zoo": 1,
 
-	  ...
+      // ...
 
     }
   ],
@@ -103,7 +103,7 @@ which produces the following response (some fields are left out for clarity)
           1
         ],
 
-		...
+        // ...
 
       }
     ],
@@ -115,7 +115,7 @@ which produces the following response (some fields are left out for clarity)
           1
         ],
 
-		...
+        // ...
 
       }
     ]
@@ -129,7 +129,7 @@ which produces the following response (some fields are left out for clarity)
     "zoo.contacts": "zoos"
   },
 
-  ...
+  // ...
 
 }
 ```
