@@ -82,7 +82,7 @@ When fetching an object that has relations, it is very convenient to receive the
  
 which produces the following response (some fields are left out for clarity)
 
-```json
+```json5
 {
   "data": [
     {
