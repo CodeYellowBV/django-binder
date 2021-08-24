@@ -307,9 +307,9 @@ Then, to upload the file, do a `POST api/<model>/<pk>/<file_field_name>/` with t
 
 To retrieve the file, do `GET api/<model>/<pk>/<file_field_name>/`
 
-TODO:
+**TODO**
 - permissions
--- change permission model
+	- change permission model
 
 ## Hacking the API
 
@@ -409,7 +409,7 @@ class FooView(BaseView):
 
 
 
-TODO:
+**TODO**
 
 - how to add custom saving logic
 - how to add custom viewing logic
