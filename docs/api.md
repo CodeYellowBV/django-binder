@@ -48,6 +48,8 @@ After registering the models, a couple of routes is immediately available for ea
 - `DELETE api/animal/[id]/` - delete a specific model
 - `POST api/animal/[id]/` - undelete a specific "soft-deleted" (see below) model
 
+## Viewing data
+
 ### Filtering on the collection
 
 #### Simple field filtering
@@ -141,9 +143,10 @@ We note that there is currently only one animal (Scooby Doo) in our database.  T
 Note that the `with` query parameter is heavily used by [mobx-spine](https://github.com/CodeYellowBV/mobx-spine).  For some more background we refer to the `json-api` specification of [Compound Documents](https://jsonapi.org/format/#document-compound-documents), which is related to our implementation.
 
 
-### Saving a model
+## Writing data
 
-Creating a new model is possible with `POST api/animal/`, and updating a model with `PUT api/animal/`. Both requests accept a JSON body, like this:
+### Creating and updating a single object
+Creating a new object is possible with `POST api/animal/`, and updating an object with `PUT api/animal/[id]`.  Both requests accept a JSON body, like this:
 
 ```json
 {
@@ -163,7 +166,7 @@ If the request succeeds, it will return a `200` response, with a JSON body:
 }
 ```
 
-If you leave the `name` field blank, and `blank=True` is not set on the field, this will result in a response with status `400`;
+If the request did not pass validation, errors are included in the response, grouped by field name. For example, if you leave the `name` field blank, and `blank=True` is not set on the field, this will result in a response with status `400`:
 
 ```json
 {
@@ -180,17 +183,16 @@ If you leave the `name` field blank, and `blank=True` is not set on the field, t
 }
 ```
 
-#### Multi PUT
+### Creating and updating multiple objects using Multi PUT
+Instead of having to make separate requests for each model type, it is common practice to group operations on a bunch of (possibly related) objects together in a single request.  For some additional background on this technique, we refer to the `json-api` specification of [Atomic Operations](https://jsonapi.org/ext/atomic), to which our specification of Multi PUT is somewhat related.
 
-For models with relations, you often don't want to make a separate request to save each model. Multi PUT makes it easy to save related models in one request.
-
-Imagine that the `Animal` model from above is linked to a `Zoo` model;
+Remember that the `Animal` model that we defined is linked to the `Zoo` model by:
 
 ```python
-zoo = models.ForeignKey(Zoo, on_delete=models.CASCADE, related_name='+')
+zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 ```
 
-Now you can create a new animal and zoo in one request to `PUT api/animal/`;
+Now you can create objects for a zoo housing two animals in one request to `PUT api/animal/`:
 
 ```json
 {
@@ -212,11 +214,11 @@ Now you can create a new animal and zoo in one request to `PUT api/animal/`;
 }
 ```
 
-The negative `id` indicates that it is made up. Because those models are not created yet, they don't have an `id`. By using a "fake" `id`, it is possible to reference a model in another model.
+The negative `id` indicates that it is made up.  Because those objects are not created yet, they don't have an `id`.  By using a "fake" `id`, it is possible to reference an object in another object.
 
 The fake `id` has to be unique per model type. So you can use `-1` once for `Animal`, and once for `Zoo`. The backend does not care what number you use exactly, as long as it is negative.
 
-If this request succeeds, you'll get back a mapping of the fake ids and the real ones;
+If this request succeeds, you'll get back a mapping from the fake ids to the real ones:
 
 ```json
 {
@@ -233,7 +235,63 @@ If this request succeeds, you'll get back a mapping of the fake ids and the real
 }
 ```
 
-It is also possible to update existing models with multi PUT. If you use a "real" id instead of a fake one, the model will be updated instead of created.
+It is also possible to update existing models with Multi PUT.  If you use a "real" id instead of a fake one, the model will be updated instead of created.
+
+It is also possible to delete existing models with Multi PUT by providing a `deletions` list containing the ids of the models that need to be deleted.  It is also possible to remove related models by specifying a list of ids for each related model type in the `with_deletions` dictionary.  For example, we may make the following request to the endpoint for `animal`, which deletes three animals, one zoo and two care takers:
+
+```json
+{
+	"deletions": [
+		1,
+		2,
+		3
+	],
+	"with_deletions": {
+		"zoo": [
+			1,
+		],
+		"care_taker": [
+			2,
+			4
+		]
+	}
+}
+```
+
+
+### Updating relationship fields
+Updating relations is rather straightforward either using a direct PUT request or a Multi PUT request.  Set the foreign key field to the id of the object you want to link to or include the id in the list in case of a reverse foreign key or many-to-many relation.  When leaving out an id in the list of related object ids, you are effectively "unlinking" the object, which also triggers the action as defined by the `on_delete` setting (CASCADE, PROTECT, SET_NULL).
+
+We will now shortly illustrate how to update foreign keys (one-to-many) in both directions and many-to-many relations.  Suppose that we have the following objects and relationships: two animals (1 and 2), one zoo (1) that houses both animals and two contact persons (1 and 2) that are both affiliated to the zoo.  The following API calls may be made using curl, see [Test Application](test-app.md). You may verify their effects using the Django admin panels.
+
+**Forward foreign key.**
+Let's unlink Animal 2 from the zoo:
+```json
+PUT api/animal/2/
+{ "zoo": null }
+```
+
+**Reverse foreign key.**
+Now let's add Animal 2 back to the zoo and at the same time unlink Animal 1 by updating the `related_name` field on the zoo:
+```json
+PUT api/zoo/1/
+{ "animals": [ 2 ] }
+```
+
+**M2M zoos.**
+Let's unlink Contact Person 1 from the zoo:
+```json
+PUT api/contact_person/1/
+{ "zoos": [ ] }
+```
+
+**M2M contacts.**
+Let's now swap Contact Person 1 back in and remove Contact Person 2 from the zoo:
+```json
+PUT api/zoo/1/
+{ "contacts": [ 2 ] }
+```
+
 
 ### Uploading files
 
