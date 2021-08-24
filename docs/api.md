@@ -2,9 +2,9 @@
 
 Binder automatically exposes a fairly powerful API for all your models.
 
-## Registering an API endpoint
+## Registering API endpoints
 
-We’ll use this example model, added in `models.py`.
+In order to illustrate the API, we’ll use the following minimal set of models (similar to the models found in the test application):
 
 ```python
 from binder.models import BinderModel
@@ -12,33 +12,41 @@ from django.db import models
 
 class Animal(BinderModel):
 	name = models.TextField()
+	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
+
+class Zoo(BinderModel):
+	name = models.TextField()
+	contacts = models.ManyToManyField('ContactPerson', blank=True, related_name='zoos')
+
+class ContactPerson(BinderModel):
+	name = models.CharField(unique=True, max_length=50)
 ```
 
-In `views.py`, add the following:
+Each model is registered as a separate API endpoint by defining a `ModelView` for it:
 
 ```python
 from binder.views import ModelView
-
 from .models import Animal
-
 
 class AnimalView(ModelView):
 	model = Animal
+
+class ZooView(ModelView):
+	model = Zoo
+	
+class ContactPersonView(ModelView):
+	model = ContactPerson
 ```
 
-And that’s it!
-
-## Using an API endpoint
-
-After registering the model, a couple of new routes are at your disposal:
+After registering the models, a couple of routes is immediately available for each of them:
 
 - `GET api/animal/` - view collection of models
 - `GET api/animal/[id]/` - view a specific model
 - `POST api/animal/` - create a new model
-- `PUT api/animal/` - create or update (nested) models
 - `PUT api/animal/[id]/` - update a specific model
+- `PUT api/animal/` - create, update or delete multiple models at once ("Multi PUT")
 - `DELETE api/animal/[id]/` - delete a specific model
-- `POST api/animal/[id]/` - undelete a specific model
+- `POST api/animal/[id]/` - undelete a specific "soft-deleted" (see below) model
 
 ### Filtering on the collection
 
