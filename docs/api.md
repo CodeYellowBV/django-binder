@@ -50,7 +50,6 @@ To use a partial case-insensitive match, you can use `api/animal?.name:icontains
 Note that currently, it is not possible to search on many-to-many fields.
 
 #### More advanced searching
-
 Sometimes you want to search on multiple fields at once.
 
 ```python
@@ -65,6 +64,73 @@ After adding the above, you can search on a model by using `api/animal?search=12
 Ordering is a simple matter of enumerating the fields in the `order_by` query parameter, eg. `api/animal?order_by=name`.  If you want to make the ordering stable when there are multiple animals sharing the same name, you can separate with commas like `api/animal?order_by=name,id`.  The results will be sorted on name, and where the name is the same, they'll be sorted by `id`.
 
 The default sort order is ascending.  If you want to sort in descending order, simply prefix the attribute name with a minus sign.  This honors the scoping, so `api/animal?order_by=-name,id` will sort by `name` in descending order and by `id` in ascending order.
+
+### Fetching related resources (aka compound documents)
+When fetching an object that has relations, it is very convenient to receive these related models in the same response.  Related resources may be requested by specifying a list of model types in the `with` query parameter using "dotted relationship" notation.  Consider the following example: an animal belongs to at most one zoo, which may have multiple contact persons.  Suppose that we want to list all animals with their zoo and all contact persons for each zoo, then we would make the request 
+
+`api/animal/?with=zoo.contacts`
+ 
+which produces the following response (some fields are left out for clarity)
+
+```json
+{
+  "data": [
+    {
+      "name": "Scooby Doo",
+      "id": 1,
+      "zoo": 1,
+
+	  ...
+
+    }
+  ],
+  "with": {
+    "zoo": [
+      {
+        "name": "Dierentuin",
+        "id": 1,
+        "contacts": [
+          1
+        ],
+
+		...
+
+      }
+    ],
+    "contact_person": [
+      {
+        "name": "Tom",
+        "id": 1,
+        "zoos": [
+          1
+        ],
+
+		...
+
+      }
+    ]
+  },
+  "with_mapping": {
+    "zoo": "zoo",
+    "zoo.contacts": "contact_person"
+  },
+  "with_related_name_mapping": {
+    "zoo": "animals",
+    "zoo.contacts": "zoos"
+  },
+
+  ...
+
+}
+```
+
+We note that there is currently only one animal (Scooby Doo) in our database.  The `with` clause includes a list of related objects per related object type (`related_model_name`), which includes the zoo that the animal belongs to and a list of contact persons that belong to that zoo.  The translation between the dotted relationship and the actual name of the related model is given in the `with_mapping` entry.  The `with_related_name_mapping` entry gives backwards relationship name (`related_name`) that belongs to the last part of each dotted relationship.  So for example, we see that in `zoo.contacts`, the `related_name` for the last `contacts` many-to-many relation is `zoos`.  To summarize:
+
+- `withs: { related model name: [ids] }`
+- `mappings: { dotted relationship: related model name }`
+- `related_name_mappings: { dotted relationship: related model reverse key }`
+
+Note that the `with` query parameter is heavily used by [mobx-spine](https://github.com/CodeYellowBV/mobx-spine).  For some more background we refer to the `json-api` specification of [Compound Documents](https://jsonapi.org/format/#document-compound-documents), which is related to our implementation.
 
 
 ### Saving a model
