@@ -1,6 +1,6 @@
 # API
 
-Binder automatically exposes a fairly powerful API for all your models.
+Binder automatically exposes a fairly powerful API for all registered models. You may want to use the [test application](./test-app.md) for trying out the below described features.
 
 ## Registering API endpoints
 
