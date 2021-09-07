@@ -1774,11 +1774,17 @@ class ModelView(View):
 						if value.size > self.max_upload_size * 10**6:
 							raise BinderFileSizeExceeded(self.max_upload_size)
 
-						if getattr(f, 'allowed_extensions', None) is not None:
-							extension = None if '.' not in value.name else value.name.split('.')[-1]
+						if isinstance(f, models.ImageField):
+							allowed_extensions = ['png', 'gif', 'jpg', 'jpeg']
+						elif isinstance(f, BinderFileField):
+							allowed_extensions = f.allowed_extensions
+						else:
+							allowed_extensions = None
 
-							if extension not in f.allowed_extensions:
-								raise BinderFileTypeIncorrect([{'extension': t} for t in f.allowed_extensions])
+						if allowed_extensions is not None:
+							extension = None if '.' not in value.name else os.path.splitext(value.name)[1][1:]
+							if extension not in allowed_extensions:
+								raise BinderFileTypeIncorrect([{'extension': t} for t in allowed_extensions])
 
 						if isinstance(f, (models.ImageField, BinderImageField)):
 							value = self._clean_image_file(field, value)
