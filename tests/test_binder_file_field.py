@@ -287,11 +287,11 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 		self.assertEqual(content['allowed_types'], [{"extension": "png"}])
 
 	def test_post_allowed_extension_success(self):
-		zoo = Zoo(name='Apenheul')
-		zoo.save()
-
 		for filename in ['foobar.png', 'foobar.PNG', 'foobar.Png', 'foobar.pNg', 'foobar.pnG']:
 			with self.subTest(filename=filename):
+				zoo = Zoo(name='Apenheul')
+				zoo.save()
+
 				response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
 					'file': ContentFile(PNG_CONTENT, name=filename),
 				})
