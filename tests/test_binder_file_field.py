@@ -273,6 +273,19 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 
 		self.assertEqual(response.status_code, 400)
 
+	def test_post_without_extension_fails(self):
+		zoo = Zoo(name='Apenheul')
+		zoo.save()
+
+		response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
+			'file': ContentFile(PNG_CONTENT, name='foobar'),
+		})
+
+		self.assertEqual(response.status_code, 400)
+		content = jsonloads(response.content)
+		self.assertEqual(content['code'], 'FileTypeIncorrect')
+		self.assertEqual(content['allowed_types'], [{"extension": "png"}])
+
 	def test_post_allowed_extension_success(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
