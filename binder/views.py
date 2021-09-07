@@ -1573,6 +1573,98 @@ class ModelView(View):
 			raise sum(validation_errors, None)
 
 
+	def _resolve_file_path(self, value, request):
+		match = re.match(r'/api/(\w+)/(\d+)/(\w+)/', value)
+		if not match:
+			return None
+
+		model, pk, field = match.groups()
+		try:
+			model = self.router.name_models[model]
+		except KeyError:
+			return None
+
+		view = self.get_model_view(model)
+		if field not in view.file_fields:
+			return None
+
+		try:
+			obj = view.get_queryset(request).get(pk=pk)
+		except model.DoesNotExist:
+			return None
+
+		return getattr(obj, field)
+
+
+	def _clean_image_file(self, field, value):
+		try:
+			img = Image.open(value)
+		except Exception:
+			raise BinderImageError('Could not parse the file as an image.')
+
+		format = img.format.lower()
+		if not format in ('png', 'gif', 'jpeg'):
+			raise BinderFileTypeIncorrect([{'extension': t, 'mimetype': 'image/' + t} for t in ['jpeg', 'png', 'gif']])
+
+		width, height = img.size
+		if format == 'jpeg':
+			img2 = image_transpose_exif(img)
+
+			if img2 != img:
+				value.seek(0)  # Do not append to the existing file!
+				value.truncate()
+				img2.save(value, 'jpeg')
+				img = img2
+
+		# Determine resize threshold
+		try:
+			max_size = self.image_resize_threshold[field]
+		except TypeError:
+			max_size = self.image_resize_threshold
+
+		try:
+			max_width, max_height = max_size
+		except (TypeError, ValueError):
+			max_width, max_height = max_size, max_size
+
+		try:
+			format_override = self.image_format_override.get(field)
+		except AttributeError:
+			format_override = self.image_format_override
+
+		changes = False
+
+		# FIXME: hardcoded max
+		# Flat out refuse images exceeding this size, to prevent DoS.
+		width_limit, height_limit = max(max_width, 4096), max(max_height, 4096)
+		if width > width_limit or height > height_limit:
+			raise BinderImageSizeExceeded(width_limit, height_limit)
+
+		# Resize images that are too large.
+		if width > max_width or height > max_height:
+			img.thumbnail((max_width, max_height), Image.ANTIALIAS)
+			logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
+			if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
+				img = img.convert("RGB")
+			if format != 'jpeg':
+				format = 'png'
+			changes = True
+
+		if format_override and format != format_override:
+			format = format_override
+			changes = True
+
+		name, ext = os.path.splitext(value.name)
+		if ext != '.' + format and not (ext == '.jpg' and format == 'jpeg'):
+			ext = '.' + format
+			changes = True
+
+		if changes:
+			filename = name + ext
+			value = ContentFile(b'', name=filename)
+			img.save(value, format)
+
+		return value
 
 
 	# Override _store_field example for a "FOO" field
@@ -1671,21 +1763,9 @@ class ModelView(View):
 					# If the value is a str that matches how we return file
 					# fields we convert it to the correct file
 					if isinstance(value, str):
-						match = re.match(r'/api/(\w+)/(\d+)/(\w+)/', value)
-						model, pk_, field_ = match.groups()
-						try:
-							model = self.router.name_models[model]
-						except KeyError:
-							pass
-						else:
-							view = self.get_model_view(model)
-							if field_ in view.file_fields:
-								try:
-									obj_ = view.get_queryset(request).get(pk=pk_)
-								except model.DoesNotExist:
-									pass
-								else:
-									value = getattr(obj_, field_)
+						value_ = self._resolve_file_path(value, request)
+						if value_ is not None:
+							value = value_
 
 					if not isinstance(value, File) and value is not None:
 						raise BinderFieldTypeError(self.model.__name__, field)
@@ -1701,72 +1781,7 @@ class ModelView(View):
 								raise BinderFileTypeIncorrect([{'extension': t} for t in f.allowed_extensions])
 
 						if isinstance(f, (models.ImageField, BinderImageField)):
-							try:
-								img = Image.open(value)
-							except Exception:
-								raise BinderImageError('Could not parse the file as an image.')
-
-							format = img.format.lower()
-							if not format in ('png', 'gif', 'jpeg'):
-								raise BinderFileTypeIncorrect([{'extension': t, 'mimetype': 'image/' + t} for t in ['jpeg', 'png', 'gif']])
-
-							width, height = img.size
-							if format == 'jpeg':
-								img2 = image_transpose_exif(img)
-
-								if img2 != img:
-									value.seek(0)  # Do not append to the existing file!
-									value.truncate()
-									img2.save(value, 'jpeg')
-									img = img2
-
-							# Determine resize threshold
-							try:
-								max_size = self.image_resize_threshold[field]
-							except TypeError:
-								max_size = self.image_resize_threshold
-
-							try:
-								max_width, max_height = max_size
-							except (TypeError, ValueError):
-								max_width, max_height = max_size, max_size
-
-							try:
-								format_override = self.image_format_override.get(field)
-							except AttributeError:
-								format_override = self.image_format_override
-
-							changes = False
-
-							# FIXME: hardcoded max
-							# Flat out refuse images exceeding this size, to prevent DoS.
-							width_limit, height_limit = max(max_width, 4096), max(max_height, 4096)
-							if width > width_limit or height > height_limit:
-								raise BinderImageSizeExceeded(width_limit, height_limit)
-
-							# Resize images that are too large.
-							if width > max_width or height > max_height:
-								img.thumbnail((max_width, max_height), Image.ANTIALIAS)
-								logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
-								if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
-									img = img.convert("RGB")
-								if format != 'jpeg':
-									format = 'png'
-								changes = True
-
-							if format_override and format != format_override:
-								format = format_override
-								changes = True
-
-							name, ext = os.path.splitext(value.name)
-							if ext != '.' + format and not (ext == '.jpg' and format == 'jpeg'):
-								ext = '.' + format
-								changes = True
-
-							if changes:
-								filename = name + ext
-								value = ContentFile(b'', name=filename)
-								img.save(value, format)
+							value = self._clean_image_file(field, value)
 
 					old_value = getattr(obj, f.attname)
 					if old_value.name:
