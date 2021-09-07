@@ -1782,7 +1782,8 @@ class ModelView(View):
 							allowed_extensions = None
 
 						if allowed_extensions is not None:
-							extension = None if '.' not in value.name else os.path.splitext(value.name)[1][1:]
+							extension = os.path.splitext(value.name)[1][1:].lower()
+							allowed_extensions = {ext.lower() for ext in allowed_extensions}
 							if extension not in allowed_extensions:
 								raise BinderFileTypeIncorrect([{'extension': t} for t in allowed_extensions])
 
