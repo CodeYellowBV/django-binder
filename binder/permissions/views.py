@@ -359,8 +359,8 @@ class PermissionView(ModelView):
 			raise BinderNotFound()
 
 		# We must have permission to view the object. If not we can not view the history
-		data = self._get_objs(self.get_queryset(request), request=request)
-		if not data:
+		data = self.get_queryset(request).filter(pk=pk)
+		if not data.exists():
 			raise BinderNotFound()
 
 		return super().view_history(request, pk, **kwargs)
