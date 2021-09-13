@@ -43,7 +43,7 @@ setup(
 		'requests >= 2.13.0',
 	],
 	tests_require=[
-		'django-hijack >= 2.1.10',
+		'django-hijack >= 2.1.10, < 3.0.0',
 		(
 			'mysqlclient >= 1.3.12'
 			if os.environ.get('BINDER_TEST_MYSQL', '0') == '1' else
