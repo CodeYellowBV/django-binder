@@ -6,6 +6,7 @@ import decimal
 from django.http import HttpResponse
 
 from .exceptions import BinderRequestError
+from psycopg2.extras import DateTimeTZRange
 
 
 
@@ -18,6 +19,7 @@ SERIALIZERS = {
 	datetime.time:       lambda v: v.strftime('%H:%M:%S.%f%z'),
 	uuid.UUID:           str,
 	decimal.Decimal:     str,
+	DateTimeTZRange:     lambda v: (v.lower.strftime('%Y-%m-%dT%H:%M:%S.%f%z'), v.upper.strftime('%Y-%m-%dT%H:%M:%S.%f%z'))
 }
 
 
