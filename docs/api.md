@@ -1,10 +1,10 @@
 # API
 
-Binder automatically exposes a fairly powerful API for all your models.
+Binder automatically exposes a fairly powerful API for all registered models. You may want to use the [test application](./test-app.md) for trying out the below described features.
 
-## Registering an API endpoint
+## Registering API endpoints
 
-We’ll use this example model, added in `models.py`.
+In order to illustrate the API, we’ll use the following minimal set of models (similar to the models found in the test application):
 
 ```python
 from binder.models import BinderModel
@@ -12,33 +12,43 @@ from django.db import models
 
 class Animal(BinderModel):
 	name = models.TextField()
+	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
+
+class Zoo(BinderModel):
+	name = models.TextField()
+	contacts = models.ManyToManyField('ContactPerson', blank=True, related_name='zoos')
+
+class ContactPerson(BinderModel):
+	name = models.CharField(unique=True, max_length=50)
 ```
 
-In `views.py`, add the following:
+Each model is registered as a separate API endpoint by defining a `ModelView` for it:
 
 ```python
 from binder.views import ModelView
-
 from .models import Animal
-
 
 class AnimalView(ModelView):
 	model = Animal
+
+class ZooView(ModelView):
+	model = Zoo
+	
+class ContactPersonView(ModelView):
+	model = ContactPerson
 ```
 
-And that’s it!
-
-## Using an API endpoint
-
-After registering the model, a couple of new routes are at your disposal:
+After registering the models, a couple of routes is immediately available for each of them:
 
 - `GET api/animal/` - view collection of models
 - `GET api/animal/[id]/` - view a specific model
 - `POST api/animal/` - create a new model
-- `PUT api/animal/` - create or update (nested) models
 - `PUT api/animal/[id]/` - update a specific model
+- `PUT api/animal/` - create, update or delete multiple models at once ("Multi PUT")
 - `DELETE api/animal/[id]/` - delete a specific model
-- `POST api/animal/[id]/` - undelete a specific model
+- `POST api/animal/[id]/` - undelete a specific "soft-deleted" (see below) model
+
+## Viewing data
 
 ### Filtering on the collection
 
@@ -50,7 +60,6 @@ To use a partial case-insensitive match, you can use `api/animal?.name:icontains
 Note that currently, it is not possible to search on many-to-many fields.
 
 #### More advanced searching
-
 Sometimes you want to search on multiple fields at once.
 
 ```python
@@ -66,10 +75,78 @@ Ordering is a simple matter of enumerating the fields in the `order_by` query pa
 
 The default sort order is ascending.  If you want to sort in descending order, simply prefix the attribute name with a minus sign.  This honors the scoping, so `api/animal?order_by=-name,id` will sort by `name` in descending order and by `id` in ascending order.
 
+### Fetching related resources (aka compound documents)
+When fetching an object that has relations, it is very convenient to receive these related models in the same response.  Related resources may be requested by specifying a list of model types in the `with` query parameter using "dotted relationship" notation.  Consider the following example: an animal belongs to at most one zoo, which may have multiple contact persons.  Suppose that we want to list all animals with their zoo and all contact persons for each zoo, then we would make the request 
 
-### Saving a model
+`api/animal/?with=zoo.contacts`
+ 
+which produces the following response (some fields are left out for clarity)
 
-Creating a new model is possible with `POST api/animal/`, and updating a model with `PUT api/animal/`. Both requests accept a JSON body, like this:
+```json5
+{
+  "data": [
+    {
+      "name": "Scooby Doo",
+      "id": 1,
+      "zoo": 1,
+
+      // ...
+
+    }
+  ],
+  "with": {
+    "zoo": [
+      {
+        "name": "Dierentuin",
+        "id": 1,
+        "contacts": [
+          1
+        ],
+
+        // ...
+
+      }
+    ],
+    "contact_person": [
+      {
+        "name": "Tom",
+        "id": 1,
+        "zoos": [
+          1
+        ],
+
+        // ...
+
+      }
+    ]
+  },
+  "with_mapping": {
+    "zoo": "zoo",
+    "zoo.contacts": "contact_person"
+  },
+  "with_related_name_mapping": {
+    "zoo": "animals",
+    "zoo.contacts": "zoos"
+  },
+
+  // ...
+
+}
+```
+
+We note that there is currently only one animal (Scooby Doo) in our database.  The `with` clause includes a list of related objects per related object type (`related_model_name`), which includes the zoo that the animal belongs to and a list of contact persons that belong to that zoo.  The translation between the dotted relationship and the actual name of the related model is given in the `with_mapping` entry.  The `with_related_name_mapping` entry gives backwards relationship name (`related_name`) that belongs to the last part of each dotted relationship.  So for example, we see that in `zoo.contacts`, the `related_name` for the last `contacts` many-to-many relation is `zoos`.  To summarize:
+
+- `withs: { related model name: [ids] }`
+- `mappings: { dotted relationship: related model name }`
+- `related_name_mappings: { dotted relationship: related model reverse key }`
+
+Note that the `with` query parameter is heavily used by [mobx-spine](https://github.com/CodeYellowBV/mobx-spine).  For some more background we refer to the `json-api` specification of [Compound Documents](https://jsonapi.org/format/#document-compound-documents), which is related to our implementation.
+
+
+## Writing data
+
+### Creating and updating a single object
+Creating a new object is possible with `POST api/animal/`, and updating an object with `PUT api/animal/[id]`.  Both requests accept a JSON body, like this:
 
 ```json
 {
@@ -89,7 +166,7 @@ If the request succeeds, it will return a `200` response, with a JSON body:
 }
 ```
 
-If you leave the `name` field blank, and `blank=True` is not set on the field, this will result in a response with status `400`;
+If the request did not pass validation, errors are included in the response, grouped by field name. For example, if you leave the `name` field blank, and `blank=True` is not set on the field, this will result in a response with status `400`:
 
 ```json
 {
@@ -106,17 +183,16 @@ If you leave the `name` field blank, and `blank=True` is not set on the field, t
 }
 ```
 
-#### Multi PUT
+### Creating and updating multiple objects using Multi PUT
+Instead of having to make separate requests for each model type, it is common practice to group operations on a bunch of (possibly related) objects together in a single request.  For some additional background on this technique, we refer to the `json-api` specification of [Atomic Operations](https://jsonapi.org/ext/atomic), to which our specification of Multi PUT is somewhat related.
 
-For models with relations, you often don't want to make a separate request to save each model. Multi PUT makes it easy to save related models in one request.
-
-Imagine that the `Animal` model from above is linked to a `Zoo` model;
+Remember that the `Animal` model that we defined is linked to the `Zoo` model by:
 
 ```python
-zoo = models.ForeignKey(Zoo, on_delete=models.CASCADE, related_name='+')
+zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 ```
 
-Now you can create a new animal and zoo in one request to `PUT api/animal/`;
+Now you can create objects for a zoo housing two animals in one request to `PUT api/animal/`:
 
 ```json
 {
@@ -138,11 +214,11 @@ Now you can create a new animal and zoo in one request to `PUT api/animal/`;
 }
 ```
 
-The negative `id` indicates that it is made up. Because those models are not created yet, they don't have an `id`. By using a "fake" `id`, it is possible to reference a model in another model.
+The negative `id` indicates that it is made up.  Because those objects are not created yet, they don't have an `id`.  By using a "fake" `id`, it is possible to reference an object in another object.
 
 The fake `id` has to be unique per model type. So you can use `-1` once for `Animal`, and once for `Zoo`. The backend does not care what number you use exactly, as long as it is negative.
 
-If this request succeeds, you'll get back a mapping of the fake ids and the real ones;
+If this request succeeds, you'll get back a mapping from the fake ids to the real ones:
 
 ```json
 {
@@ -159,7 +235,63 @@ If this request succeeds, you'll get back a mapping of the fake ids and the real
 }
 ```
 
-It is also possible to update existing models with multi PUT. If you use a "real" id instead of a fake one, the model will be updated instead of created.
+It is also possible to update existing models with Multi PUT.  If you use a "real" id instead of a fake one, the model will be updated instead of created.
+
+It is also possible to delete existing models with Multi PUT by providing a `deletions` list containing the ids of the models that need to be deleted.  It is also possible to remove related models by specifying a list of ids for each related model type in the `with_deletions` dictionary.  For example, we may make the following request to the endpoint for `animal`, which deletes three animals, one zoo and two care takers:
+
+```json
+{
+	"deletions": [
+		1,
+		2,
+		3
+	],
+	"with_deletions": {
+		"zoo": [
+			1,
+		],
+		"care_taker": [
+			2,
+			4
+		]
+	}
+}
+```
+
+
+### Updating relationship fields
+Updating relations is rather straightforward either using a direct PUT request or a Multi PUT request.  Set the foreign key field to the id of the object you want to link to or include the id in the list in case of a reverse foreign key or many-to-many relation.  When leaving out an id in the list of related object ids, you are effectively "unlinking" the object, which also triggers the action as defined by the `on_delete` setting (CASCADE, PROTECT, SET_NULL).
+
+We will now shortly illustrate how to update foreign keys (one-to-many) in both directions and many-to-many relations.  Suppose that we have the following objects and relationships: two animals (1 and 2), one zoo (1) that houses both animals and two contact persons (1 and 2) that are both affiliated to the zoo.  The following API calls may be made using curl, see [Test Application](test-app.md). You may verify their effects using the Django admin panels.
+
+**Forward foreign key.**
+Let's unlink Animal 2 from the zoo:
+```json
+PUT api/animal/2/
+{ "zoo": null }
+```
+
+**Reverse foreign key.**
+Now let's add Animal 2 back to the zoo and at the same time unlink Animal 1 by updating the `related_name` field on the zoo:
+```json
+PUT api/zoo/1/
+{ "animals": [ 2 ] }
+```
+
+**M2M zoos.**
+Let's unlink Contact Person 1 from the zoo:
+```json
+PUT api/contact_person/1/
+{ "zoos": [ ] }
+```
+
+**M2M contacts.**
+Let's now swap Contact Person 1 back in and remove Contact Person 2 from the zoo:
+```json
+PUT api/zoo/1/
+{ "contacts": [ 2 ] }
+```
+
 
 ### Uploading files
 
@@ -175,9 +307,9 @@ Then, to upload the file, do a `POST api/<model>/<pk>/<file_field_name>/` with t
 
 To retrieve the file, do `GET api/<model>/<pk>/<file_field_name>/`
 
-TODO:
+**TODO**
 - permissions
--- change permission model
+	- change permission model
 
 ## Hacking the API
 
@@ -277,7 +409,7 @@ class FooView(BaseView):
 
 
 
-TODO:
+**TODO**
 
 - how to add custom saving logic
 - how to add custom viewing logic
