@@ -52,6 +52,21 @@ class PermissionView(ModelView):
 		return self.scope_view(request, queryset)
 
 
+	def get_columns(self, request):
+		fields, annotations, properties = self.scope_columns(request)
+
+		if fields is None:
+			fields = list(self.model._meta.fields)
+		else:
+			fields = list(map(self.model._meta.get_field, fields))
+
+		properties = properties if properties is not None else self.shown_properties
+
+		# TODO: At this point we would like to not use None anymore but instead
+		# use collections. Annotations are might still be None at this point.
+		return fields, annotations, properties
+
+
 
 	def _require_model_perm(self, perm_type, request, pk=None):
 		"""
@@ -266,6 +281,65 @@ class PermissionView(ModelView):
 
 
 
+	def scope_columns(self, request):
+		"""
+		Each view scope may optionally declare which columns (fields, annotations, properties)
+		ought to be exposed to client. So view scope functions may return a tuple of (rows, columns)
+		instead of rows only. Columns are specified like so:
+
+		{
+			'fields': ['id', 'name', ...] | None,
+			'annotations': ['derived_name', 'bsn', ...] | None,
+			'properties': ['amount', ...] | None,
+		}
+
+		Where 'None' means, that there is scoping being performed on that column type.
+		If multiple functions with scoped columns exist, we take the set union.
+		"""
+
+		# helper function to take the set union of columns
+		def append_columns(columns, new_columns):
+			if new_columns is None:
+				return columns
+			if columns is None:
+				columns = set()
+			return columns | set(new_columns)
+
+		scopes = self._require_model_perm('view', request)
+
+		fields = None # this is equivalent to all fields
+		annotations = None # this is equivalent to all annotations
+		properties = None # this is equivalent to all properties
+
+		for s in scopes:
+			scope_name = '_scope_view_{}'.format(s)
+			scope_func = getattr(self, scope_name, None)
+			if scope_func is None:
+				raise UnexpectedScopeException(
+					'Scope {} is not implemented for model {}'.format(scope_name, self.model))
+
+			result = scope_func(request)
+
+			# ignore scope functions which do not scope columns
+			# i.e. they do not return a tuple of length two
+			if isinstance(result, tuple):
+				if len(result) < 2:
+					continue
+
+				# TODO: This could be more DRY, but its readable
+				columns = result[1]
+				new_fields = columns.get('fields')
+				new_annotations = columns.get('annotations')
+				new_properties = columns.get('properties')
+
+				fields = append_columns(fields, new_fields)
+				annotations = append_columns(annotations, new_annotations)
+				properties = append_columns(properties, new_properties)
+
+		return fields, annotations, properties
+
+
+
 	def scope_view(self, request, queryset):
 		"""
 		Performs the scopes for a get request
@@ -280,6 +354,13 @@ class PermissionView(ModelView):
 				raise UnexpectedScopeException(
 					'Scope {} is not implemented for model {}'.format(scope_name, self.model))
 			query_or_q = scope_func(request)
+
+			# view scoping may describe scoping of columns. In this case
+			# the return type is a tuple and we only have to consider the
+			# first argument
+			if isinstance(query_or_q, tuple):
+				query_or_q = query_or_q[0]
+
 			# Allow either a ORM filter query manager or a Q object.
 			# Q objects generate more efficient queries (so we don't
 			# get an "id IN (subquery)"), but query managers allow

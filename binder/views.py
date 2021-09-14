@@ -473,14 +473,24 @@ class ModelView(View):
 		datas_by_id = {} # Save datas so we can annotate m2m fields later (avoiding a query)
 		objs_by_id = {} # Same for original objects
 
+		# get scoped fields, properties and annotations
+		fields_scoped, annotations_scoped, properties_scoped = self.get_columns(request)
+
 		# Serialize the objects!
 		if self.shown_fields is None:
-			fields = [f for f in self.model._meta.fields if f.name not in self.hidden_fields]
+			fields = [f for f in fields_scoped if f.name not in self.hidden_fields]
 		else:
-			fields = [f for f in self.model._meta.fields if f.name in self.shown_fields]
+			fields = [f for f in fields_scoped if f.name in self.shown_fields]
 
 		if annotations is None:
 			annotations = set(self.annotations(request))
+
+		# from the set of annotations remove the ones which are
+		# hidden by scoping. TODO: perhaps accessing disallowed
+		# annotations should throw 403 much alike row scoping.
+		if annotations_scoped is not None:
+			annotations &= annotations_scoped
+
 		if self.shown_annotations is None:
 			annotations -= set(self.hidden_annotations)
 		else:
@@ -518,7 +528,7 @@ class ModelView(View):
 			for a in annotations:
 				data[a] = getattr(obj, a)
 
-			for prop in self.shown_properties:
+			for prop in properties_scoped:
 				data[prop] = getattr(obj, prop)
 
 			if self.model._meta.pk.name in data:
@@ -1189,6 +1199,13 @@ class ModelView(View):
 
 	def get_queryset(self, request):
 		return self.model.objects.all()
+
+
+	def get_columns(self, request):
+		# TODO: annotations are currently just None here which is not very
+		# expressive. But annotations are a little more complicated than
+		# fields and properties.
+		return list(self.model._meta.fields), None, self.shown_properties
 
 
 
