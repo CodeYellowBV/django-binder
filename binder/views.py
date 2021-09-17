@@ -17,7 +17,7 @@ import django
 from django.views.generic import View
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
-from django.http.request import RawPostDataException
+from django.http.request import RawPostDataException, QueryDict
 from django.db import models, connections
 from django.db.models import Q, F
 from django.db.models.lookups import Transform
@@ -27,7 +27,11 @@ from django.db.models.expressions import BaseExpression, Value, CombinedExpressi
 from django.db.models.fields.reverse_related import ForeignObjectRel
 
 
-from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
+from .exceptions import (
+	BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded,
+	BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound,
+	BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI, BinderSkipSave
+)
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField
@@ -265,6 +269,9 @@ class ModelView(View):
 	# NOTE: custom _store__foo() methods will still be called for unupdatable fields.
 	unupdatable_fields = []
 
+	# Allow validation without saving.
+	allow_standalone_validation = False
+
 	# Fields to use for ?search=foo. Empty tuple for disabled search.
 	# NOTE: only string fields and 'id' are supported.
 	# id is hardcoded to be treated as an integer.
@@ -371,6 +378,10 @@ class ModelView(View):
 
 		response = None
 		try:
+			# only allow standalone validation if you know what you are doing
+			if 'validate' in request.GET and request.GET['validate'] == 'true' and not self.allow_standalone_validation:
+				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
+
 			#### START TRANSACTION
 			with ExitStack() as stack, history.atomic(source='http', user=request.user, uuid=request.request_id):
 				transaction_dbs = ['default']
@@ -1365,6 +1376,18 @@ class ModelView(View):
 		})
 
 
+
+	def _abort_when_standalone_validation(self, request):
+		"""Raise a `BinderSkipSave` exception when this is a validation request."""
+		if 'validate' in request.GET and request.GET['validate'] == 'true':
+			if self.allow_standalone_validation:
+				params = QueryDict(request.body)
+				raise BinderSkipSave
+			else:
+				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
+
+
+
 	# Deserialize JSON to Django Model objects.
 	# obj: Model object to update (for PUT), newly created object (for POST)
 	# values: Python dict of {field name: value} (parsed JSON)
@@ -1373,6 +1396,9 @@ class ModelView(View):
 		deferred_m2ms = {}
 		ignored_fields = []
 		validation_errors = []
+
+		# When only validating and not saving we attach a parameter so that we can skip or add validation checks
+		only_validate = request.GET.get('validate') == 'true' or request.GET.get('validate') == 'True'
 
 		if obj.pk is None:
 			self._require_model_perm('add', request, obj.pk)
@@ -1411,8 +1437,8 @@ class ModelView(View):
 			raise sum(validation_errors, None)
 
 		try:
-			obj.save()
-			assert(obj.pk is not None) # At this point, the object must have been created.
+			obj.save(only_validate=only_validate)
+			assert(obj.pk is not None)  # At this point, the object must have been created.
 		except ValidationError as ve:
 			validation_errors.append(self.binder_validation_error(obj, ve, pk=pk))
 
@@ -1453,6 +1479,9 @@ class ModelView(View):
 	# of OneToOne fields.
 	def _store_m2m_field(self, obj, field, value, request):
 		validation_errors = []
+
+		# When only validating and not saving we attach a parameter so that we can skip or add validation checks
+		only_validate = request.GET.get('validate') == 'true' or request.GET.get('validate') == 'True'
 
 		# Can't use isinstance() because apparantly ManyToManyDescriptor is a subclass of
 		# ReverseManyToOneDescriptor. Yes, really.
@@ -1496,11 +1525,11 @@ class ModelView(View):
 			for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
 				setattr(addobj, obj_field.field.name, obj)
 				try:
-					addobj.save()
+					addobj.save(only_validate=only_validate)
 				except ValidationError as ve:
 					validation_errors.append(self.binder_validation_error(addobj, ve))
 				else:
-					addobj.save()
+					addobj.save(only_validate=only_validate)
 		elif getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor:
 			#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
 			if any(v for v in value if v is not None and v < 0):
@@ -1516,7 +1545,7 @@ class ModelView(View):
 				remote_obj = field_descriptor.related.remote_field.model.objects.get(pk=value[0])
 				setattr(remote_obj, field_descriptor.related.remote_field.name, obj)
 				try:
-					remote_obj.save()
+					remote_obj.save(only_validate=only_validate)
 					remote_obj.refresh_from_db()
 				except ValidationError as ve:
 					validation_errors.append(self.binder_validation_error(remote_obj, ve))
@@ -2073,7 +2102,7 @@ class ModelView(View):
 
 
 	def multi_put(self, request):
-		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
+		logger.info('ACTIVATING THE MULTI-PUT!!!!!')
 
 		# Hack to communicate to _store() that we're not interested in
 		# the new data (for perf reasons).
@@ -2081,13 +2110,15 @@ class ModelView(View):
 
 		data, deletions = self._multi_put_parse_request(request)
 		objects = self._multi_put_collect_objects(data)
-		objects, overrides = self._multi_put_override_superclass(objects)
+		objects, overrides = self._multi_put_override_superclass(objects) # model inheritance
 		objects = self._multi_put_convert_backref_to_forwardref(objects)
 		dependencies = self._multi_put_calculate_dependencies(objects)
 		ordered_objects = self._multi_put_order_dependencies(dependencies)
-		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request)
-		self._multi_put_id_map_add_overrides(new_id_map, overrides)
-		new_id_map = self._multi_put_deletions(deletions, new_id_map, request)
+		new_id_map = self._multi_put_save_objects(ordered_objects, objects, request) # may raise validation errors
+		self._multi_put_id_map_add_overrides(new_id_map, overrides) # model inheritance
+		new_id_map = self._multi_put_deletions(deletions, new_id_map, request) # may raise validation errors
+
+		self._abort_when_standalone_validation(request)
 
 		output = defaultdict(list)
 		for (model, oid), nid in new_id_map.items():
@@ -2123,6 +2154,8 @@ class ModelView(View):
 
 		data = self._store(obj, values, request)
 
+		self._abort_when_standalone_validation(request)
+
 		new = dict(data)
 		new.pop('_meta', None)
 
@@ -2152,6 +2185,8 @@ class ModelView(View):
 		values = self._get_request_values(request)
 
 		data = self._store(self.model(), values, request)
+
+		self._abort_when_standalone_validation(request)
 
 		new = dict(data)
 		new.pop('_meta', None)
@@ -2190,6 +2225,9 @@ class ModelView(View):
 			raise BinderNotFound()
 
 		self.delete_obj(obj, undelete, request)
+
+		self._abort_when_standalone_validation(request)
+
 		logger.info('{}DELETEd {} #{}'.format('UN' if undelete else '', self._model_name(), pk))
 
 		return HttpResponse(status=204)  # No content
@@ -2202,6 +2240,10 @@ class ModelView(View):
 
 
 	def soft_delete(self, obj, undelete, request):
+
+		# When only validating and not saving we attach a parameter so that we can skip or add validation checks
+		only_validate = request.GET.get('validate') == 'true' or request.GET.get('validate') == 'True'
+
 		# Not only for soft delets, actually handles all deletions
 		try:
 			if obj.deleted and not undelete:
@@ -2233,7 +2275,7 @@ class ModelView(View):
 
 		obj.deleted = not undelete
 		try:
-			obj.save()
+			obj.save(only_validate=only_validate)
 		except ValidationError as ve:
 			raise self.binder_validation_error(obj, ve)
 

@@ -468,8 +468,12 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		abstract = True
 		ordering = ['pk']
 
-	def save(self, *args, **kwargs):
-		self.full_clean() # Never allow saving invalid models!
+	def save(self, *args, only_validate=False, **kwargs):
+		# A validation model might not require all validation checks as it is not a full model
+		# _validation_model can be used to skip validation checks that are meant for complete models that are actually being saved
+		self._validation_model = only_validate  # Set the model as a validation model when we only want to validate the model
+
+		self.full_clean()  # Never allow saving invalid models!
 		return super().save(*args, **kwargs)
 
 
