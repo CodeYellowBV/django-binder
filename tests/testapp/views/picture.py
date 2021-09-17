@@ -3,16 +3,19 @@ from binder.router import list_route
 from binder.views import ModelView
 from binder.plugins.views import ImageView, CsvExportView
 
-from ..models import Picture
+from ..models import Picture, PictureBook
 
+class PictureBookView(ModelView):
+	model = PictureBook
 
 class PictureView(ModelView, ImageView, CsvExportView):
 	model = Picture
 	file_fields = ['file', 'original_file']
-	csv_settings = CsvExportView.CsvExportSettings(['animal'], [
+	csv_settings = CsvExportView.CsvExportSettings(['animal', 'picture_book'], [
 		('id', 'picture identifier'),
 		('animal.id', 'animal identifier'),
-		('id', 'squared picture identifier', lambda id, row, mapping: id**2)
+		('id', 'squared picture identifier', lambda id, row, mapping: id**2),
+		('picture_book.name', 'Picturebook name')
 	])
 
 	@list_route(name='download_csv', methods=['GET'])
