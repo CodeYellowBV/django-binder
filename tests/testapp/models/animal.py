@@ -14,7 +14,7 @@ class Animal(LoadedValuesMixin, BinderModel):
 	name = models.TextField(max_length=64)
 	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 	zoo_of_birth = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='+', blank=True, null=True) # might've been born outside captivity
-	caretaker = models.ForeignKey('Caretaker', on_delete=models.PROTECT, related_name='animals', blank=True, null=True)
+	caretaker = models.ForeignKey('Caretaker', on_delete=models.PROTECT, related_name='animals', blank=True, null=True) # we use the fact that this one is PROTECT in `test_model_validation.py`
 	deleted = models.BooleanField(default=False)  # Softdelete
 
 	def __str__(self):
