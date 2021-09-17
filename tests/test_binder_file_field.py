@@ -267,34 +267,52 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 		response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
 			'file': ContentFile(CONTENT, name='foobar.jpg'),
 		})
+
 		self.assertEqual(response.status_code, 400)
-	
-	def test_post_allowed_extension_success(self):
-		filename = 'foobar.png'
+		content = jsonloads(response.content)
+		self.assertEqual(content['code'], 'FileTypeIncorrect')
+		self.assertEqual(content['allowed_types'], [{"extension": "png"}])
+
+	def test_post_without_extension_fails(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
 
 		response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
-			'file': ContentFile(CONTENT, name=filename),
+			'file': ContentFile(CONTENT, name='foobar'),
 		})
-		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(response.status_code, 400)
 		content = jsonloads(response.content)
+		self.assertEqual(content['code'], 'FileTypeIncorrect')
+		self.assertEqual(content['allowed_types'], [{"extension": "png"}])
 
-		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
-		zoo.refresh_from_db()
-		filename = basename(zoo.binder_picture_custom_extensions.name) # Without folders foo/bar/
+	def test_post_allowed_extension_success(self):
+		for filename in ['foobar.png', 'foobar.PNG', 'foobar.Png', 'foobar.pNg', 'foobar.pnG']:
+			with self.subTest(filename=filename):
+				zoo = Zoo(name='Apenheul')
+				zoo.save()
+
+				response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
+					'file': ContentFile(CONTENT, name=filename),
+				})
+				self.assertEqual(response.status_code, 200)
+				content = jsonloads(response.content)
+
+				# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+				zoo.refresh_from_db()
+				filename = basename(zoo.binder_picture_custom_extensions.name) # Without folders foo/bar/
 
 
 
-		self.assertEqual(
-			content['data']['binder_picture_custom_extensions'],
-			'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=image/png&filename={}'.format(zoo.pk, HASH, filename),
-		)
+				self.assertEqual(
+					content['data']['binder_picture_custom_extensions'],
+					'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=image/png&filename={}'.format(zoo.pk, HASH, filename),
+				)
 
-		response = self.client.get('/zoo/{}/'.format(zoo.pk))
-		self.assertEqual(response.status_code, 200)
-		data = jsonloads(response.content)
-		self.assertEqual(
-			data['data']['binder_picture_custom_extensions'],
-			'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=image/png&filename={}'.format(zoo.pk, HASH, filename),
-		)
+				response = self.client.get('/zoo/{}/'.format(zoo.pk))
+				self.assertEqual(response.status_code, 200)
+				data = jsonloads(response.content)
+				self.assertEqual(
+					data['data']['binder_picture_custom_extensions'],
+					'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=image/png&filename={}'.format(zoo.pk, HASH, filename),
+				)

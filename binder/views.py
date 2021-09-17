@@ -2290,9 +2290,9 @@ class ModelView(View):
 				field = self.model._meta.get_field(file_field_name)
 
 				if getattr(field, 'allowed_extensions', None) is not None:
-					extension = None if '.' not in file.name else file.name.split('.')[-1]
+					extension = None if '.' not in file.name else file.name.split('.')[-1].lower()
 
-					if extension not in field.allowed_extensions:
+					if extension not in (ex.lower() for ex in field.allowed_extensions):
 						raise BinderFileTypeIncorrect([{'extension': t} for t in field.allowed_extensions])
 
 				if isinstance(field, models.fields.files.ImageField):
