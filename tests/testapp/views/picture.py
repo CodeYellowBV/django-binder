@@ -5,8 +5,10 @@ from binder.plugins.views import ImageView, CsvExportView
 
 from ..models import Picture, PictureBook
 
+
 class PictureBookView(ModelView):
 	model = PictureBook
+
 
 class PictureView(ModelView, ImageView, CsvExportView):
 	model = Picture
@@ -15,7 +17,10 @@ class PictureView(ModelView, ImageView, CsvExportView):
 		('id', 'picture identifier'),
 		('animal.id', 'animal identifier'),
 		('id', 'squared picture identifier', lambda id, row, mapping: id**2),
-		('picture_book.name', 'Picturebook name')
+		('picture_book.name', 'Picturebook name'),
+		('id', 'dictionary_example', lambda id, row, mapping: {'id': id}),
+		('id', 'list_example', lambda id, row, mapping: [id]),
+		('id', 'set_example', lambda id, row, mapping: {id})
 	])
 
 	@list_route(name='download_csv', methods=['GET'])

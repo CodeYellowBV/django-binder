@@ -116,6 +116,11 @@ class ExcelFileAdapter(ExportFileAdapter):
 
 	def add_row(self, values: List[str]):
 		for (column_id, value) in enumerate(values):
+
+			# The excel library doesn't implicitely cast this to string, so do it explicitely to prevent
+			# the export from crashing
+			if type(value) in [dict, list, set]:
+				value = str(value)
 			self.sheet.cell(column=column_id + 1, row=self._row_number + 1, value=value)
 		self._row_number += 1
 

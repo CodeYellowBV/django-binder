@@ -50,19 +50,18 @@ class CsvExportTest(TestCase):
 
 	def test_csv_download(self):
 		response = self.client.get('/picture/download_csv/')
-		print(response.content)
 		self.assertEqual(200, response.status_code)
 		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
 
 		data = list(response_data)
 
 		# First line needs to be the header
-		self.assertEqual(data[0], ['picture identifier', 'animal identifier', 'squared picture identifier'])
+		self.assertEqual(data[0][:3], ['picture identifier', 'animal identifier', 'squared picture identifier'])
 
 		# All other data needs to be ordered using the default ordering (by id, asc)
-		self.assertEqual(data[1], [str(self.pictures[0].id), str(self.pictures[0].animal_id), str(self.pictures[0].id ** 2)])
-		self.assertEqual(data[2], [str(self.pictures[1].id), str(self.pictures[1].animal_id), str(self.pictures[1].id ** 2)])
-		self.assertEqual(data[3], [str(self.pictures[2].id), str(self.pictures[2].animal_id), str(self.pictures[2].id ** 2)])
+		self.assertEqual(data[1][:3], [str(self.pictures[0].id), str(self.pictures[0].animal_id), str(self.pictures[0].id ** 2)])
+		self.assertEqual(data[2][:3], [str(self.pictures[1].id), str(self.pictures[1].animal_id), str(self.pictures[1].id ** 2)])
+		self.assertEqual(data[3][:3], [str(self.pictures[2].id), str(self.pictures[2].animal_id), str(self.pictures[2].id ** 2)])
 
 
 	def test_excel_download(self):
@@ -77,14 +76,14 @@ class CsvExportTest(TestCase):
 			_values = list(sheet.values)
 
 			# First line needs to be the header
-			self.assertEqual(list(_values[0]), ['picture identifier', 'animal identifier', 'squared picture identifier'])
+			self.assertEqual(list(_values[0][:3]), ['picture identifier', 'animal identifier', 'squared picture identifier'])
 
 			# All other data needs to be ordered using the default ordering (by id, asc)
-			self.assertEqual(list(_values[1]),
+			self.assertEqual(list(_values[1][:3]),
 							 [self.pictures[0].id, str(self.pictures[0].animal_id), (self.pictures[0].id ** 2)])
-			self.assertEqual(list(_values[2]),
+			self.assertEqual(list(_values[2][:3]),
 							 [self.pictures[1].id, str(self.pictures[1].animal_id), (self.pictures[1].id ** 2)])
-			self.assertEqual(list(_values[3]),
+			self.assertEqual(list(_values[3][:3]),
 							 [self.pictures[2].id, str(self.pictures[2].animal_id), (self.pictures[2].id ** 2)])
 
 
@@ -98,12 +97,12 @@ class CsvExportTest(TestCase):
 		data = list(response_data)
 
 		# First line needs to be the header
-		self.assertEqual(data[0], ['picture identifier', 'animal identifier', 'squared picture identifier'])
+		self.assertEqual(data[0][:3], ['picture identifier', 'animal identifier', 'squared picture identifier'])
 
 		# All other data needs to be ordered using the default ordering (by id, asc)
-		self.assertEqual(data[1], [str(self.pictures[0].id), str(self.pictures[0].animal_id), str(self.pictures[0].id ** 2)])
-		self.assertEqual(data[2], [str(self.pictures[1].id), str(self.pictures[1].animal_id), str(self.pictures[1].id ** 2)])
-		self.assertEqual(data[3], [str(self.pictures[2].id), str(self.pictures[2].animal_id), str(self.pictures[2].id ** 2)])
+		self.assertEqual(data[1][:3], [str(self.pictures[0].id), str(self.pictures[0].animal_id), str(self.pictures[0].id ** 2)])
+		self.assertEqual(data[2][:3], [str(self.pictures[1].id), str(self.pictures[1].animal_id), str(self.pictures[1].id ** 2)])
+		self.assertEqual(data[3][:3], [str(self.pictures[2].id), str(self.pictures[2].animal_id), str(self.pictures[2].id ** 2)])
 
 	def test_context_aware_download_xlsx(self):
 		response = self.client.get('/picture/download/?response_type=xlsx')
@@ -118,14 +117,14 @@ class CsvExportTest(TestCase):
 			_values = list(sheet.values)
 
 			# First line needs to be the header
-			self.assertEqual(list(_values[0]), ['picture identifier', 'animal identifier', 'squared picture identifier'])
+			self.assertEqual(list(_values[0][:3]), ['picture identifier', 'animal identifier', 'squared picture identifier'])
 
 			# All other data needs to be ordered using the default ordering (by id, asc)
-			self.assertEqual(list(_values[1]),
+			self.assertEqual(list(_values[1][:3]),
 							 [self.pictures[0].id, str(self.pictures[0].animal_id), (self.pictures[0].id ** 2)])
-			self.assertEqual(list(_values[2]),
+			self.assertEqual(list(_values[2][:3]),
 							 [self.pictures[1].id, str(self.pictures[1].animal_id), (self.pictures[1].id ** 2)])
-			self.assertEqual(list(_values[3]),
+			self.assertEqual(list(_values[3][:3]),
 							 [self.pictures[2].id, str(self.pictures[2].animal_id), (self.pictures[2].id ** 2)])
 
 	def test_none_foreign_key(self):
@@ -148,3 +147,25 @@ class CsvExportTest(TestCase):
 		picture_books = [c[-1] for c in content]
 
 		self.assertEqual(['', 'Holiday 2012', 'Holiday 2012'], picture_books)
+
+	def test_convert_list_dictionary_set_excel(self):
+		"""
+		In the first implementation there was a bug where returning a list or dictionary in the csv export worked for
+		csv, but not for excel. This checks if we can retun list and dictionaries
+		"""
+		response = self.client.get('/picture/download_excel/')
+
+		with NamedTemporaryFile(suffix='.xlsx') as tmp:
+			tmp.write(response.content)
+
+			wb = openpyxl.load_workbook(tmp.name)
+			sheet = wb._sheets[1]
+
+			_values = list(sheet.values)
+
+			# Check for the correct titles
+			self.assertEqual(('dictionary_example', 'list_example', 'set_example'), (_values[0][4:7]))
+
+			id = str(self.pictures[0].id)
+			# And the content of the first row
+			self.assertEqual(("{'id': " +id + "}", "[" +id + "]", "{" +id + "}"), (_values[1][4:7]))
