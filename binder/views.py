@@ -1085,13 +1085,13 @@ class ModelView(View):
 
 
 
-	def _parse_order_by(self, queryset, field, request, partial=''):
+	def _parse_order_by(self, queryset, field, request, partial='', include_annotations=None):
 		head, *tail = field.split('.')
 
 		if tail:
 			next = self._follow_related(head)[0].model
 			view = self.get_model_view(next)
-			return view._parse_order_by(queryset, '.'.join(tail), request, partial + head + '__')
+			return view._parse_order_by(queryset, '.'.join(tail), request, partial + head + '__', include_annotations=include_annotations)
 
 		if head.endswith('__nulls_last'):
 			head = head[:-12]
@@ -1108,7 +1108,7 @@ class ModelView(View):
 			if head == 'id':
 				pk = self.model._meta.pk
 				head = pk.get_attname() if pk.one_to_one or pk.many_to_one else pk.name
-			elif head not in self.annotations(request):
+			elif head not in self.annotations(request, include_annotations=include_annotations):
 				raise BinderRequestError('Unknown field in order_by: {{{}}}.{{{}}}.'.format(self.model.__name__, head))
 
 		return (queryset, partial + head, nulls_last)
@@ -1192,7 +1192,7 @@ class ModelView(View):
 
 
 
-	def order_by(self, queryset, request):
+	def order_by(self, queryset, request, include_annotations=None):
 		#### order_by
 		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
 
@@ -1200,9 +1200,9 @@ class ModelView(View):
 		if order_bys:
 			for o in order_bys:
 				if o.startswith('-'):
-					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], request, partial='-')
+					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], request, partial='-', include_annotations=include_annotations)
 				else:
-					queryset, order, nulls_last = self._parse_order_by(queryset, o, request)
+					queryset, order, nulls_last = self._parse_order_by(queryset, o, request, include_annotations=include_annotations)
 
 				if nulls_last is not None:
 					if order.startswith('-'):
@@ -1291,7 +1291,7 @@ class ModelView(View):
 		if 'search' in request.GET:
 			queryset = self.search(queryset, request.GET['search'], request)
 
-		queryset = self.order_by(queryset, request)
+		queryset = self.order_by(queryset, request, include_annotations=include_annotations)
 
 		meta = self._generate_meta(include_meta, queryset, request, pk)
 
