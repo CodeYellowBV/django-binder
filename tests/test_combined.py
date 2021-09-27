@@ -82,11 +82,10 @@ class CombinedTest(TestCase):
 		animal2 = Animal.objects.create(zoo=zoo2, name='Harambe')
 
 		res = self.client.get('/combined/zoo/animal/?with=zoo,animal.zoo')
-		self.assertEqual(res.status_code, 200)
 		if res.status_code != 200:
 			print(res.content)
+		self.assertEqual(res.status_code, 200)
 		data = json.loads(res.content)
-		objs_by_id = {obj['id']: obj for obj in data['data']}
 
 		self.assertEqual(set(data['with']), {'zoo', 'animal'})
 		self.assertEqual(len(data['with']['zoo']), 2)
