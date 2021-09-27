@@ -82,8 +82,6 @@ class CombinedTest(TestCase):
 		animal2 = Animal.objects.create(zoo=zoo2, name='Harambe')
 
 		res = self.client.get('/combined/zoo/animal/?with=zoo,animal.zoo')
-		if res.status_code != 200:
-			print(res.content)
 		self.assertEqual(res.status_code, 200)
 		data = json.loads(res.content)
 
