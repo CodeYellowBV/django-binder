@@ -292,7 +292,7 @@ class CsvExportView:
 
 						if fk_ids is None:
 							# This case happens if we have a nullable foreign key that is null. Treat this as a many
-							# to one relation with no values. 
+							# to one relation with no values.
 							fk_ids = []
 						elif type(fk_ids) != list:
 							fk_ids = [fk_ids]
