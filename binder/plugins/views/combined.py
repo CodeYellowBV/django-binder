@@ -256,7 +256,7 @@ def combined_view(request, router, names):
 			if fieldname not in names:
 				raise BinderRequestError(f'Field is not a related object {{{fieldname}}}.')
 
-			view = views[name]
+			view = views[fieldname]
 			return (RelatedModel(fieldname, view.model, None),) + view._follow_related(fieldspec)
 
 		def _get_with_ids(self, pks, request, include_annotations, with_map, where_map):
