@@ -2,7 +2,7 @@ from collections import namedtuple, defaultdict
 import logging
 import re
 
-from django.db import models, connection
+from django.db import connection
 from django.db.models import Value, F
 from django.conf import settings
 
@@ -256,7 +256,7 @@ def combined_view(request, router, names):
 			fieldname, *fieldspec = fieldspec
 
 			if fieldname not in names:
-				raise BinderRequestError(f'Field is not a related object {{{field_name}}}.')
+				raise BinderRequestError(f'Field is not a related object {{{fieldname}}}.')
 
 			view = views[name]
 			return (RelatedModel(fieldname, view.model, None),) + view._follow_related(fieldspec)
