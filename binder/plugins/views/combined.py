@@ -231,11 +231,9 @@ def combined_view(request, router, names):
 
 	# Get base data
 	data = []
-	name_ids = {name: [] for name in names}
 	for pk, in objs:
 		name_pk, name_index = divmod(pk, len(names))
 		name = names[name_index]
-		name_ids[name].append(id)
 		data.append({
 			'id': pk,
 			**{name_: name_pk if name_ == name else None for name_ in names},

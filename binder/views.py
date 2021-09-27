@@ -1044,7 +1044,7 @@ class ModelView(View):
 				except KeyError:
 					raise BinderRequestError('No model defined for virtual relation field {{{}}}.{{{}}}.'.format(self.model.__name__, fieldname))
 			except KeyError:
-				raise BinderRequestError('Unknown field {{{}}}.{{{}}}.'.format(self.model.__name__, fieldname))
+				raise Exception('Unknown field {{{}}}.{{{}}}.'.format(self.model.__name__, fieldname))
 
 
 		view = self.get_model_view(related_model)
