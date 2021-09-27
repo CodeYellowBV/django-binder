@@ -16,6 +16,7 @@ class Animal(LoadedValuesMixin, BinderModel):
 	zoo_of_birth = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='+', blank=True, null=True) # might've been born outside captivity
 	caretaker = models.ForeignKey('Caretaker', on_delete=models.PROTECT, related_name='animals', blank=True, null=True)
 	deleted = models.BooleanField(default=False)  # Softdelete
+	birth_date = models.DateField(blank=True, null=True)
 
 	def __str__(self):
 		return 'animal %d: %s' % (self.pk, self.name)

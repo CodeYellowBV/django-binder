@@ -37,6 +37,7 @@ class LoadedValuesMixinTest(TestCase):
 			'zoo_of_birth': artis.id,
 			'caretaker': caretaker.id,
 			'deleted': False,
+			'birth_date': None,
 		}, scooby.get_old_values())
 
 		self.assertFalse(scooby.field_changed('zoo'))
@@ -76,6 +77,7 @@ class LoadedValuesMixinTest(TestCase):
 			'zoo_of_birth': artis.id,
 			'caretaker': None,
 			'deleted': False,
+			'birth_date': None,
 		}, scooby.get_old_values())
 
 
@@ -110,6 +112,7 @@ class LoadedValuesMixinTest(TestCase):
 			'zoo_of_birth': artis.id,
 			'caretaker': None,
 			'deleted': False,
+			'birth_date': None,
 		}, scooby.get_old_values())
 
 		# He goes back to the old zoo
@@ -147,6 +150,7 @@ class LoadedValuesMixinTest(TestCase):
 			'zoo_of_birth': artis.id,
 			'caretaker': None,
 			'deleted': False,
+			'birth_date': None,
 		}, scooby.get_old_values())
 
 		self.assertEqual('Scooby Doo', scooby.get_old_value('name'))

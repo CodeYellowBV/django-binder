@@ -344,6 +344,42 @@ class FooView(BaseView):
     model = Foo
 ```
 
+## Combining multiple collections into one
+
+There are some usecases where you want to query multiple collections as one.
+With filtering & pagination this can be cumbersome to do manually. For this
+use case binder supplies a special view that acts like a generic combined
+collection `binder.plugins.views.combined_view`.
+
+This is usually registered in your urlpatterns on `api/combined/<path:names>/`.
+Note that you also need to supply the router to this view in the kwargs that
+you can supply from urlpatterns directly.
+
+You can then for example query `api/combined/zoo/animal/`. This will behave
+like a model that has a nullable foreign key to both `zoo` and `animal` of
+which always exactly 1 will be filled. Filtering, withs, wheres, and ordering
+work the same as normal with a few caveats.
+
+### Scoping
+Scoping of this combined 'model' is done based on view scoping of the related
+models. So for the aforementioned endpoint you would be able to see the entries
+related to a zoo or animal that you are allowed to see.
+
+### Filtering
+When filtering on a field of one of the relations (for example
+`.zoo.name=foo`). This will only filter the models that have a zoo. This is
+done intentionally since you often want to filter models in a similar way
+(think `.animal.name=foo`).
+
+### Ordering
+When supplying a field to `order_by` it will be used for all models. So for
+example you could order `api/combined/zoo/animal/` on `name` since they both
+have this field. If you would want to sort on different fields per model you
+have to wrap them in parenthesis and seperate them with commas. The order of
+the fields should then have the same order as the models. For example with
+the aforementioned api you could use `order_by=(founding_date,birth_date)`.
+Modifiers like the `-`-prefix to sort descending and the suffixes
+`__nulls_last` and `__nulls_first` should be outside of these parenthesis.
 
 
 TODO:
