@@ -692,3 +692,53 @@ class TestPutRelationScoping(TestCase):
         self.assertEquals(403, res.status_code)
 
         country.refresh_from_db()
+
+
+class TestColumnScoping(TestCase):
+	def setUp(self):
+		super().setUp()
+
+		u = User(username='testuser_for_not_all_fields', is_active=True, is_superuser=False)
+		u.set_password('test')
+		u.save()
+
+		self.client = Client()
+		r = self.client.login(username='testuser_for_not_all_fields', password='test')
+		self.assertTrue(r)
+
+		self.zoo = Zoo(name='Artis')
+		self.zoo.save()
+
+
+	def test_column_scoping_excludes_columns(self):
+		res = self.client.get('/zoo/{}/'.format(self.zoo.id))
+		self.assertEqual(res.status_code, 200)
+
+		columns = jsonloads(res.content)['data'].keys()
+
+		for field in ['name', 'founding_date', 'django_picture']:
+			self.zoo._meta.get_field(field) # check if those fields exist, otherwise throw error
+			self.assertTrue(field not in columns)
+
+		for annotation in ['zoo_name']:
+			self.assertTrue(annotation not in columns)
+
+		for property in ['animal_count']:
+			self.assertTrue(property not in columns)
+
+
+	def test_column_scoping_includes_columns(self):
+		res = self.client.get('/zoo/{}/'.format(self.zoo.id))
+		self.assertEqual(res.status_code, 200)
+
+		columns = jsonloads(res.content)['data'].keys()
+
+		for field in ['id', 'floor_plan']:
+			self.zoo._meta.get_field(field) # check if those fields exist, otherwise throw error
+			self.assertTrue(field in columns)
+
+		for annotation in ['another_zoo_name']:
+			self.assertTrue(annotation in columns)
+
+		for property in ['another_animal_count']:
+			self.assertTrue(property in columns)

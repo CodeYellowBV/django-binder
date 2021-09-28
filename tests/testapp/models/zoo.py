@@ -35,11 +35,21 @@ class Zoo(BinderModel):
 
 	binder_picture_custom_extensions = BinderImageField(allowed_extensions=['png'], blank=True, null=True)
 
+
+	class Annotations:
+		zoo_name = models.F('name') # simple alias for testing scoping on annotations
+		another_zoo_name = models.F('name') # simple alias for testing scoping on annotations
+
+
 	def __str__(self):
 		return 'zoo %d: %s' % (self.pk, self.name)
 
 	@property
 	def animal_count(self):
+		return self.animals.count()
+
+	@property
+	def another_animal_count(self):
 		return self.animals.count()
 
 
