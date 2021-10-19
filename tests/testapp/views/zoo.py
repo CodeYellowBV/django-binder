@@ -14,6 +14,8 @@ class ZooView(PermissionView):
     shown_properties = ['animal_count']
     image_resize_threshold = {
         'floor_plan': 500,
+        'binder_picture': 500,
+        'binder_picture_custom_extensions': 500,
     }
     image_format_override = {
         'floor_plan': 'jpeg',
