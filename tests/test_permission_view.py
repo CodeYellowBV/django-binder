@@ -1,11 +1,13 @@
 import json
 from .compare import assert_json, EXTRA
+from unittest.mock import MagicMock
 
 from django.test import TestCase, Client,  override_settings
 
 from binder.json import jsonloads, jsondumps
 
-from .testapp.models import Zoo, ZooEmployee, Country, City, PermanentCity, CityState
+from .testapp.models import Zoo, ZooEmployee, Country, City, PermanentCity, CityState, Animal
+from .testapp.urls import router
 
 from binder.json import jsondumps
 from django.contrib.auth.models import User, Group
@@ -692,3 +694,37 @@ class TestPutRelationScoping(TestCase):
         self.assertEquals(403, res.status_code)
 
         country.refresh_from_db()
+
+
+class ViewScopeTest(TestCase):
+
+	def setUp(self):
+		self.zoo = Zoo.objects.create(name='Zoo')
+		Animal.objects.create(zoo=self.zoo, name='Foo')
+		Animal.objects.create(zoo=self.zoo, name='Bar')
+
+	def test_bad_scope(self):
+		user = User.objects.create(username='testuser_for_bad_q_filter')
+
+		ZooView = router.model_views[Zoo]
+		zoo_view = ZooView()
+		zoo_view.router = router
+
+		request = MagicMock()
+		request.user = user
+
+		zoos = list(zoo_view.get_queryset(request).values_list('pk', flat=True))
+		self.assertEqual(zoos, [self.zoo.pk, self.zoo.pk])
+
+	def test_good_scope(self):
+		user = User.objects.create(username='testuser_for_good_q_filter')
+
+		ZooView = router.model_views[Zoo]
+		zoo_view = ZooView()
+		zoo_view.router = router
+
+		request = MagicMock()
+		request.user = user
+
+		zoos = list(zoo_view.get_queryset(request).values_list('pk', flat=True))
+		self.assertEqual(zoos, [self.zoo.pk])
