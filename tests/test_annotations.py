@@ -1,7 +1,7 @@
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 
-from binder.json import jsonloads
+from binder.json import jsonloads, jsondumps
 from .testapp.models import Animal, Caretaker, Zoo
 
 
@@ -159,6 +159,15 @@ class AnnotationTestCase(TestCase):
 		data = jsonloads(res.content)
 		self.assertEqual(data['data']['name'], 'Harambe')
 		self.assertEqual(data['data']['prefixed_name'], 'Lady Harambe')
+
+	def test_save_unriwttable_annotation(self):
+		res = self.client.put('/caretaker/%s/' % self.caretaker.pk, data=jsondumps({'animal_count': 2}), content_type='application/json')
+		self.assertEqual(res.status_code, 200)
+  
+		data = jsonloads(res.content)
+  
+		self.assertEqual(data['_meta']['ignored_fields'], ['animal_count'])
+		self.assertEqual(data['animal_count'], 1)
 
 
 class IncludeAnnotationsTest(TestCase):
