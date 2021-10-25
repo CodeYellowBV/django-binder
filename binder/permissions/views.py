@@ -9,7 +9,7 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 
 from binder.exceptions import BinderForbidden, BinderNotFound
-from binder.views import ModelView
+from binder.views import ModelView, FilterDescription
 
 
 
@@ -273,6 +273,8 @@ class PermissionView(ModelView):
 		scopes = self._require_model_perm('view', request)
 		scope_queries = []
 		scope_querysets = []
+		need_distinct = False
+
 		for s in scopes:
 			scope_name = '_scope_view_{}'.format(s)
 			scope_func = getattr(self, scope_name, None)
@@ -286,6 +288,9 @@ class PermissionView(ModelView):
 			# filtering on annotations, which Q objects don't.
 			if isinstance(query_or_q, Q):
 				scope_queries.append(query_or_q)
+			elif isinstance(query_or_q, FilterDescription):
+				scope_queries.append(query_or_q.filter)
+				need_distinct = need_distinct or query_or_q.need_distinct
 			else:
 				# Reset the ORDER BY at least to get a faster query.
 				# Even better performance could be gained if
@@ -303,7 +308,12 @@ class PermissionView(ModelView):
 
 		self._save_scope(request, Scope.VIEW)
 
-		return queryset.filter(subfilter)
+		queryset = queryset.filter(subfilter)
+
+		if need_distinct:
+			queryset = queryset.distinct()
+
+		return queryset
 
 
 
