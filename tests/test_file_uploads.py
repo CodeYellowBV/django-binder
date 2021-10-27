@@ -149,6 +149,21 @@ class FileUploadTest(TestCase):
 		self.assertEqual(emmen.floor_plan.height, 500)
 
 
+	def test_upload_size_resized_png_rgba(self):
+		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
+		emmen.save()
+
+		with temp_imagefile(600, 600, 'png', 'RGBA') as uploaded_file:
+			response = self.client.post('/zoo/%s/floor_plan/' % emmen.id, data={'file': uploaded_file})
+		self.assertEqual(response.status_code, 200)
+
+		emmen.refresh_from_db()
+		content_type = mimetypes.guess_type(emmen.floor_plan.path)[0]
+		self.assertEqual(content_type, 'image/jpeg')
+		self.assertEqual(emmen.floor_plan.width, 500)
+		self.assertEqual(emmen.floor_plan.height, 500)
+
+
 	def test_upload_size_resized_jpeg(self):
 		emmen = Zoo(name='Wildlands Adventure Zoo Emmen')
 		emmen.save()
