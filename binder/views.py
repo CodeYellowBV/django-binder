@@ -1650,6 +1650,8 @@ class ModelView(View):
 				format = 'png'
 			changes = True
 
+		# Saving a JPEG with mode RGBA will crash because JPEG does not support
+		# an alpha channel, so in this case we convert to RGB
 		if format_override == 'jpeg' and img.mode == 'RGBA':
 			img = img.convert('RGB')
 
