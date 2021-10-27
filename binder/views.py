@@ -1650,6 +1650,9 @@ class ModelView(View):
 				format = 'png'
 			changes = True
 
+		if format_override == 'jpeg' and img.mode == 'RGBA':
+			img = img.convert('RGB')
+
 		if format_override and format != format_override:
 			format = format_override
 			changes = True
