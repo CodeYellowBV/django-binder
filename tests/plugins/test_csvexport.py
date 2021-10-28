@@ -7,7 +7,7 @@ from django.test import TestCase, Client
 from django.core.files import File
 from django.contrib.auth.models import User
 
-from ..testapp.models import Picture, Animal
+from ..testapp.models import Picture, Animal, PictureBook
 import csv
 import openpyxl
 
@@ -31,8 +31,10 @@ class CsvExportTest(TestCase):
 
 		self.pictures = []
 
+		picture_book = PictureBook.objects.create(name='Holiday 2012')
+
 		for i in range(3):
-			picture = Picture(animal=animal)
+			picture = Picture(animal=animal, picture_book=picture_book)
 			file = CsvExportTest.temp_imagefile(50, 50, 'jpeg')
 			picture.file.save('picture.jpg', File(file), save=False)
 			picture.original_file.save('picture_copy.jpg', File(file), save=False)
@@ -48,6 +50,7 @@ class CsvExportTest(TestCase):
 
 	def test_csv_download(self):
 		response = self.client.get('/picture/download_csv/')
+		print(response.content)
 		self.assertEqual(200, response.status_code)
 		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
 
@@ -124,3 +127,24 @@ class CsvExportTest(TestCase):
 							 [self.pictures[1].id, str(self.pictures[1].animal_id), (self.pictures[1].id ** 2)])
 			self.assertEqual(list(_values[3]),
 							 [self.pictures[2].id, str(self.pictures[2].animal_id), (self.pictures[2].id ** 2)])
+
+	def test_none_foreign_key(self):
+		"""
+		If we have a relation that we have to include which is nullable, and we have a foreign key, we do not want the
+		csv export to crash. I.e. we also want for a picture to export the picture book name, even though not all pioctures
+		belong to a picture book
+		:return:
+		"""
+		self.pictures[0].picture_book = None
+		self.pictures[0].save()
+
+		response = self.client.get('/picture/download/')
+		self.assertEqual(200, response.status_code)
+		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
+
+		data = list(response_data)
+		content = data[1:]
+
+		picture_books = [c[-1] for c in content]
+
+		self.assertEqual(['', 'Holiday 2012', 'Holiday 2012'], picture_books)

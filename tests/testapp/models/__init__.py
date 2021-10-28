@@ -9,7 +9,7 @@ from .costume import Costume
 from .gate import Gate
 from .nickname import Nickname, NullableNickname
 from .lion import Lion
-from .picture import Picture
+from .picture import Picture, PictureBook
 from .zoo import Zoo
 from .zoo_employee import ZooEmployee
 from .city import City, CityState, PermanentCity
