@@ -1295,6 +1295,10 @@ class ModelView(View):
 
 
 	def get_filtered_queryset(self, request, pk=None, include_annotations=None):
+		"""
+		Returns a scoped queryset with filtering and sorting applied as
+		specified by the request.
+		"""
 		queryset = self.get_queryset(request)
 		if pk:
 			queryset = queryset.filter(pk=int(pk))
