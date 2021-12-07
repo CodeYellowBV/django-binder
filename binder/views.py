@@ -1294,9 +1294,11 @@ class ModelView(View):
 		return meta
 
 
-	def get(self, request, pk=None, withs=None, include_annotations=None):
-		include_meta = request.GET.get('include_meta', 'total_records').split(',')
-
+	def get_filtered_queryset(self, request, pk=None, include_annotations=None):
+		"""
+		Returns a scoped queryset with filtering and sorting applied as
+		specified by the request.
+		"""
 		queryset = self.get_queryset(request)
 		if pk:
 			queryset = queryset.filter(pk=int(pk))
@@ -1312,6 +1314,7 @@ class ModelView(View):
 		#### annotations
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
+
 		queryset = annotate(queryset, request, include_annotations.get(''))
 
 		#### filters
@@ -1328,6 +1331,16 @@ class ModelView(View):
 			queryset = self.search(queryset, request.GET['search'], request)
 
 		queryset = self.order_by(queryset, request)
+
+		return queryset
+
+
+	def get(self, request, pk=None, withs=None, include_annotations=None):
+		include_meta = request.GET.get('include_meta', 'total_records').split(',')
+		if include_annotations is None:
+			include_annotations = self._parse_include_annotations(request)
+
+		queryset = self.get_filtered_queryset(request, pk, include_annotations)
 
 		meta = self._generate_meta(include_meta, queryset, request, pk)
 
