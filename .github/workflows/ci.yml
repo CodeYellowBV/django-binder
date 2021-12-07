@@ -54,18 +54,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Retrieve cached venv
-        uses: actions/cache@v1
-        id: cache-venv
-        with:
-          path: ./.venv/
-          key: ${{ runner.os }}-${{ matrix.python-version }}-${{ matrix.django-version }}-venv-${{ hashFiles('ci-requirements.txt') }}
-
       - name: Install requirements
         run: |
           python -m venv .venv
           .venv/bin/pip install -qr ci-requirements.txt django==${{ matrix.django-version }}
-        if: steps.cache-venv.outputs.cache-hit != 'true'
 
       - name: Run linting
         run: .venv/bin/flake8 binder

@@ -190,6 +190,42 @@ TODO:
 - permissions
 -- change permission model
 
+### Uploading files together with data
+Often its nice to save the files together with the normal data. Since JSON does
+not support embedded files we have a special request format to do this.
+
+In this case you should send the request as multipart form data. This form data
+should contain a key `data` that contains your normal request data but with all
+files replaced with `null`. Then for every file you will need to add a key
+`file:<path>` where the path is a dot seperated list of keys that indicate the
+path to where the file should be inserted in the data. In this path a backslash
+is seen as an escape character so that it is possible to use dots in the keys
+as well.
+
+Think for example that you would want to do the following request:
+```
+PUT /api/zoo/1/
+Content-Type: application/json
+
+{
+	"name": "New Name",
+	"django_picture": <FILE>
+}
+```
+
+You would have to instead send it like this:
+```
+PUT /api/zoo/1/
+Content-Type: multipart/form-data
+
+data={"name": "New Name", "django_picture": null}
+file:django_picture=<FILE>
+```
+
+When creating a custom endpoint you can easily reuse this data parsing by
+using the `BinderView._get_request_values` method.
+
+
 ## Hacking the API
 
 The standard API should provide most of your common needs, but most
