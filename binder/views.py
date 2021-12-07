@@ -1606,7 +1606,9 @@ class ModelView(View):
 		except model.DoesNotExist:
 			return None
 
-		return getattr(obj, field)
+		value = getattr(obj, field)
+		with value.open('rb') as f:
+			return ContentFile(f.read(), value.name)
 
 
 	def _clean_image_file(self, field, value):
