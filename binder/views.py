@@ -3,7 +3,6 @@ import time
 import io
 import inspect
 import os
-import hashlib
 import datetime
 import mimetypes
 import functools
@@ -30,7 +29,7 @@ from django.db.models.fields.reverse_related import ForeignObjectRel
 from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
-from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField
+from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField, calculate_file_hash
 from .json import JsonResponse, jsonloads
 
 
@@ -2364,10 +2363,7 @@ class ModelView(View):
 				# FIXME: duplicate code
 				if file_field:
 					try:
-						old_hash = hashlib.sha256()
-						for c in file_field.file.chunks():
-							old_hash.update(c)
-						old_hash = old_hash.hexdigest()
+						old_hash = calculate_file_hash(file_field.path)
 					except FileNotFoundError:
 						logger.warning('Old file {} missing!'.format(file_field))
 						old_hash = None
@@ -2378,11 +2374,7 @@ class ModelView(View):
 				# This triggers a save on obj
 				file_field.save(filename, django.core.files.File(file))
 
-				# FIXME: duplicate code
-				new_hash = hashlib.sha256()
-				for c in file_field.file.chunks():
-					new_hash.update(c)
-				new_hash = new_hash.hexdigest()
+				new_hash = calculate_file_hash(file_field.path)
 
 				logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
 				path = self.router.model_route(self.model, obj.id, field)
@@ -2405,12 +2397,7 @@ class ModelView(View):
 			if not file_field:
 				raise BinderIsDeleted()
 
-			# FIXME: duplicate code
-			old_hash = hashlib.sha256()
-			for c in file_field.file.chunks():
-				old_hash.update(c)
-			old_hash = old_hash.hexdigest()
-
+			old_hash = calculate_file_hash(file_field.path)
 			file_field.delete()
 
 			logger.info('DELETEd {}[{}].{}: {}'.format(self._model_name(), pk, file_field_name, old_hash))
