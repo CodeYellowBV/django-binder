@@ -618,17 +618,19 @@ def parse_tuple(content):
 
 	return tuple(values)
 
-def calculate_file_hash(path):
-	with open(path, 'rb') as fh:
-		hasher = hashlib.sha1()
 
+def calculate_file_hash(path):
+	hasher = hashlib.sha1()
+
+	with open(path, 'rb') as fh:
 		while True:
 			chunk = fh.read(4096)
 			if not chunk:
 				break
 			hasher.update(chunk)
 
-		return hasher.hexdigest()
+	return hasher.hexdigest()
+
 
 class BinderFieldFile(FieldFile):
 	"""
