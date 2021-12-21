@@ -646,7 +646,7 @@ class BinderFieldFile(FieldFile):
 			self._content_hash = None
 		elif self._content_hash is None:
 			try:
-				if isinstance(self.file, ContentFile):
+				if isinstance(self._file, ContentFile):
 					fh = self.open('rb')
 					self._content_hash = self.calculate_hash(fh)
 				else:
