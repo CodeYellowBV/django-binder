@@ -12,7 +12,7 @@ from django.db import models
 from django.db.models.fields.files import FieldFile, FileField
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField, DateTimeRangeField as DTRangeField
 from django.core import checks
-from django.core.files.base import File
+from django.core.files.base import File, ContentFile
 from django.core.files.images import ImageFile
 from django.db.models import signals
 from django.core.exceptions import ValidationError
@@ -619,19 +619,6 @@ def parse_tuple(content):
 	return tuple(values)
 
 
-def calculate_file_hash(path):
-	hasher = hashlib.sha1()
-
-	with open(path, 'rb') as fh:
-		while True:
-			chunk = fh.read(4096)
-			if not chunk:
-				break
-			hasher.update(chunk)
-
-	return hasher.hexdigest()
-
-
 class BinderFieldFile(FieldFile):
 	"""
 	An extended FieldFile that also stores the content hash and content type
@@ -642,21 +629,37 @@ class BinderFieldFile(FieldFile):
 		self._content_hash = content_hash
 		self._content_type = content_type
 
+	def calculate_hash(self, fh):
+		hasher = hashlib.sha1()
+
+		while True:
+			chunk = fh.read(4096)
+			if not chunk:
+				break
+			hasher.update(chunk)
+
+		return hasher.hexdigest()
+
 	@property
 	def content_hash(self):
 		if not self.name:
 			self._content_hash = None
 		elif self._content_hash is None:
 			try:
-				# Don't use self.open, since it then closes self.file. Apparently
-				# Django requires this here:
-				#
-				# https://github.com/django/django/blob/master/django/core/files/uploadedfile.py#L91
-				#
-				# To make sure we have as much compatibility as possible, this is tested in
-				#
-				# test_binder_file_field.test_reusing_same_file_for_multiple_fields
-				self._content_hash = calculate_file_hash(self.path)
+				if isinstance(self.file, ContentFile):
+					fh = self.open('rb')
+					self._content_hash = self.calculate_hash(fh)
+				else:
+					# Don't use self.open, since it then closes self.file. Apparently
+					# Django requires this here:
+					#
+					# https://github.com/django/django/blob/master/django/core/files/uploadedfile.py#L91
+					#
+					# To make sure we have as much compatibility as possible, this is tested in
+					#
+					# test_binder_file_field.test_reusing_same_file_for_multiple_fields
+					with open(self.path, 'rb') as fh:
+						self._content_hash = self.calculate_hash(fh)
 
 			except FileNotFoundError:
 				# In some rare cases, there seems to be a record in the db but the
