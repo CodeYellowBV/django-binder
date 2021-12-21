@@ -12,7 +12,7 @@ from django.db import models
 from django.db.models.fields.files import FieldFile, FileField
 from django.contrib.postgres.fields import CITextField, ArrayField, JSONField, DateTimeRangeField as DTRangeField
 from django.core import checks
-from django.core.files.base import File, ContentFile
+from django.core.files.base import File
 from django.core.files.images import ImageFile
 from django.db.models import signals
 from django.core.exceptions import ValidationError
