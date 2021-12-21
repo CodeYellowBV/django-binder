@@ -223,10 +223,11 @@ class BinderFileFieldTest(TestCase):
 		# is to make sure no warning is triggered. This works, since assertWarns
 		# raises an AssertionError. Basically a `self.assertNotWarns`.
 		with self.assertRaises(AssertionError) as cm:
-			with self.assertWarns(ResourceWarning):
+			with self.assertWarns(ResourceWarning) as cm2:
 				response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
 					'file': ContentFile(PNG_CONTENT, name='foobar.png'),
 				})
+			print(cm2.warning)
 
 		self.assertEqual(str(cm.exception), 'ResourceWarning not triggered')
 
