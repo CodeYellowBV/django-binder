@@ -664,8 +664,9 @@ class BinderFieldFile(FieldFile):
 					# this is tested in:
 					#
 					# test_binder_file_field.test_reusing_same_file_for_multiple_fields
-					with open(self.path, 'rb') as fh:
-						self._content_hash = self.calculate_hash(fh)
+					fh = self.storage.open(self.name, 'rb')
+					self._content_hash = self.calculate_hash(fh)
+					fh.close()
 
 			except FileNotFoundError:
 				# In some rare cases, there seems to be a record in the db but the

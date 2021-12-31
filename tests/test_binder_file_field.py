@@ -227,7 +227,6 @@ class BinderFileFieldTest(TestCase):
 				response = self.client.post('/zoo/%s/binder_picture_custom_extensions/' % zoo.id, data={
 					'file': ContentFile(PNG_CONTENT, name='foobar.png'),
 				})
-			print(cm2.warning)
 
 		self.assertEqual(str(cm.exception), 'ResourceWarning not triggered')
 
