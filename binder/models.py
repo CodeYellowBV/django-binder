@@ -646,20 +646,27 @@ class BinderFieldFile(FieldFile):
 			self._content_hash = None
 		elif self._content_hash is None:
 			try:
-				if isinstance(self.file, ContentFile):
+				# Directly access `self._file` instead of accessor `self.file`
+				# (see the crucial `_`). If you use `self.file`, it will open
+				# the file, see also:
+				#
+				# https://github.com/django/django/blob/b55699968fc9ee985384c64e37f6cc74a0a23683/django/db/models/fields/files.py#L45
+				if isinstance(self._file, ContentFile):
 					fh = self.open('rb')
 					self._content_hash = self.calculate_hash(fh)
 				else:
-					# Don't use self.open, since it then closes self.file. Apparently
-					# Django requires this here:
+					# Don't use self.open, since it then closes self.file.
+					# Apparently Django requires this here:
 					#
 					# https://github.com/django/django/blob/master/django/core/files/uploadedfile.py#L91
 					#
-					# To make sure we have as much compatibility as possible, this is tested in
+					# To make sure we have as much compatibility as possible,
+					# this is tested in:
 					#
 					# test_binder_file_field.test_reusing_same_file_for_multiple_fields
-					with open(self.path, 'rb') as fh:
-						self._content_hash = self.calculate_hash(fh)
+					fh = self.storage.open(self.name, 'rb')
+					self._content_hash = self.calculate_hash(fh)
+					fh.close()
 
 			except FileNotFoundError:
 				# In some rare cases, there seems to be a record in the db but the
