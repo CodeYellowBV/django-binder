@@ -911,8 +911,6 @@ class ModelView(View):
 		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(list))
 		virtual_fields = set()
 
-		Agg = self.AggStrategy
-
 		for field in with_map:
 			vr = self.virtual_relations.get(field, None)
 
@@ -923,12 +921,6 @@ class ModelView(View):
 				for rel, annotations in include_annotations.items()
 				if rel == field or rel.startswith(field + '.')
 			})
-
-			# Model default orders (this sometimes matters)
-			orders = []
-			field_alias = field + '___annotation' if vr else field
-			for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
-				orders.append(prefix_db_expression(o, field_alias))
 
 			# Virtual relation
 			if vr:
@@ -945,45 +937,34 @@ class ModelView(View):
 				# annotations, so allow for fetching of ids, instead.
 				# This does mean you can't filter on this relation
 				# unless you write a custom filter, too.
-				if isinstance(virtual_annotation, Q):
-					annotation = Agg(virtual_annotation, filter=q, ordering=orders)
-				else:
-					try:
-						func = getattr(self, virtual_annotation)
-					except AttributeError:
-						raise BinderRequestError('Annotation for virtual relation {{{}}}.{{{}}} is {{{}}}, but no method by that name exists.'.format(
-							self.model.__name__, field, virtual_annotation
-						))
-					rel_ids_by_field_by_id[field] = func(request, pks, q)
-					continue
+				try:
+					func = getattr(self, virtual_annotation)
+				except AttributeError:
+					raise BinderRequestError('Annotation for virtual relation {{{}}}.{{{}}} is {{{}}}, but no method by that name exists.'.format(
+						self.model.__name__, field, virtual_annotation
+					))
+				rel_ids_by_field_by_id[field] = func(request, pks, q)
 			# Actual relation
 			else:
 				if (getattr(self.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor or
 					not any(f.name == field for f in (list(self.model._meta.many_to_many) + list(self._get_reverse_relations())))):
 					singular_fields.add(field)
 
-				if Agg != GroupConcat: # HACKK (GROUP_CONCAT can't filter and excludes NULL already)
-					q &= Q(**{field+'__pk__isnull': False})
-				annotation = Agg(field+'__pk', filter=q, ordering=orders)
+				# Model default orders (this sometimes matters)
+				orders = []
+				for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
+					orders.append(prefix_db_expression(o, field))
 
-			qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**{field_alias: annotation})
+				query = (
+					self.model.objects
+					.order_by(*orders)
+					.filter(q, pk__in=pks, **{field + '__isnull': False})
+					.values_list('pk', field + '__pk')
+					.distinct()
+				)
 
-			for record in qs:
-				value = record[field_alias]
-
-				# Make the values distinct.  We can't do this in
-				# the Agg() call, because then we get an error
-				# regarding order by and values needing to be the
-				# same :(
-				# We also can't just put it in a set, because we
-				# need to preserve the ordering.  So we use a set
-				# to keep track of what we've seen and only add
-				# new items.
-				seen_values = set()
-				for v in value:
-					if v not in seen_values:
-						rel_ids_by_field_by_id[field][record['pk']].append(v)
-						seen_values.add(v)
+				for pk, rel_pk in query:
+					rel_ids_by_field_by_id[field][pk].append(rel_pk)
 
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model
