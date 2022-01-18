@@ -918,7 +918,6 @@ class ModelView(View):
 	def _get_with_ids(self, pks, request, include_annotations, with_map, where_map):
 		result = {}
 
-		annotations = {}
 		singular_fields = set()
 		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(list))
 		virtual_fields = set()
@@ -958,7 +957,7 @@ class ModelView(View):
 				# This does mean you can't filter on this relation
 				# unless you write a custom filter, too.
 				if isinstance(virtual_annotation, Q):
-					annotations[field_alias] = Agg(virtual_annotation, filter=q, ordering=orders)
+					annotation = Agg(virtual_annotation, filter=q, ordering=orders)
 				else:
 					try:
 						func = getattr(self, virtual_annotation)
@@ -967,6 +966,7 @@ class ModelView(View):
 							self.model.__name__, field, virtual_annotation
 						))
 					rel_ids_by_field_by_id[field] = func(request, pks, q)
+					continue
 			# Actual relation
 			else:
 				if (getattr(self.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor or
@@ -975,33 +975,26 @@ class ModelView(View):
 
 				if Agg != GroupConcat: # HACKK (GROUP_CONCAT can't filter and excludes NULL already)
 					q &= Q(**{field+'__pk__isnull': False})
-				annotations[field_alias] = Agg(field+'__pk', filter=q, ordering=orders)
+				annotation = Agg(field+'__pk', filter=q, ordering=orders)
 
+			qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**{field_alias: annotation})
 
-		qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**annotations)
-		for record in qs:
-			for field in with_map:
-				field_alias = field+'___annotation' if field in virtual_fields else field
+			for record in qs:
+				value = record[field_alias]
 
-				if field_alias in annotations:
-					value = record[field_alias]
-
-					# Make the values distinct.  We can't do this in
-					# the Agg() call, because then we get an error
-					# regarding order by and values needing to be the
-					# same :(
-					# We also can't just put it in a set, because we
-					# need to preserve the ordering.  So we use a set
-					# to keep track of what we've seen and only add
-					# new items.
-					seen_values = set()
-					distinct_values = []
-					for v in value:
-						if v not in seen_values:
-							distinct_values.append(v)
+				# Make the values distinct.  We can't do this in
+				# the Agg() call, because then we get an error
+				# regarding order by and values needing to be the
+				# same :(
+				# We also can't just put it in a set, because we
+				# need to preserve the ordering.  So we use a set
+				# to keep track of what we've seen and only add
+				# new items.
+				seen_values = set()
+				for v in value:
+					if v not in seen_values:
+						rel_ids_by_field_by_id[field][record['pk']].append(v)
 						seen_values.add(v)
-
-					rel_ids_by_field_by_id[field][record['pk']] += distinct_values
 
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model
