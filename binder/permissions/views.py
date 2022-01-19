@@ -39,6 +39,77 @@ class Scope(Enum):
 	DELETE = 'delete'
 
 
+def is_q_child_always_true(child):
+	return (
+		child == ('pk__isnull', False) or
+		(
+			isinstance(child, Q) and
+			child.negated and
+			child.connector == Q.AND and
+			child.children == [('pk__in', [])]
+		)
+	)
+
+
+def is_q_stricter(lhs, rhs):
+	"""
+	For 2 Q-objects, lhs and rhs, returns if lhs is by definition always
+	stricter than or equally as strict as rhs.
+
+	This function is not complete. It is guaranteed that it will never give
+	false positives, but false negatives can and will happen.
+	"""
+	# We treat everything as a non negated AND
+	if lhs.connector == Q.AND and not lhs.negated:
+		lchildren = lhs.children
+	else:
+		lchildren = [lhs]
+	if rhs.connector == Q.AND and not rhs.negated:
+		rchildren = rhs.children
+	else:
+		rchildren = [rhs]
+
+	# Filter out filters that are always true since they dont matter
+	lchildren = (c for c in lchildren if not is_q_child_always_true(c))
+	rchildren = (c for c in rchildren if not is_q_child_always_true(c))
+
+	# If every filter of rhs is also in lhs, then lhs is by definition a
+	# stricter version or rhs
+	return all(c in lchildren for c in rchildren)
+
+
+def smart_q_or(*qs):
+	"""
+	This function combines any amount of Q-objects into one Q-object with an
+	OR. But does some smart optimizations when doing so by omitting some
+	redundant Q-objects. This can then in turn lead to the omission of
+	redundant joins which can lead to significant performance gains.
+	"""
+
+	# We filter out all Q-objects that are just a stricter version of one
+	# of the other Q-objects
+	filtered_qs = []
+	for new in qs:
+		if any(is_q_stricter(new, old) for old in filtered_qs):
+			continue
+		filtered_qs = [
+			*(old for old in filtered_qs if not is_q_stricter(old, new)),
+			new,
+		]
+
+	# We combine all filtered Q-objects into one
+	try:
+		combined_q, *filtered_qs = filtered_qs
+	except ValueError:
+		# So apparantly we have no Q-objects, then we just return an Q-object
+		# that is always False
+		combined_q = Q(pk__in=[])
+	else:
+		for q in filtered_qs:
+			combined_q |= q
+
+	return combined_q
+
 
 class PermissionView(ModelView):
 	@property
@@ -299,7 +370,7 @@ class PermissionView(ModelView):
 			qs = reduce(lambda scope_qs, qs: qs.union(scope_qs), scope_querysets)
 			scope_queries.append(Q(pk__in=qs))
 
-		subfilter = reduce(lambda scope_query, q: q | scope_query, scope_queries)
+		subfilter = smart_q_or(*scope_queries)
 
 		self._save_scope(request, Scope.VIEW)
 
