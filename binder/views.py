@@ -256,16 +256,29 @@ def prefix_db_expression(value, prefix):
 # Prefix a q expression by adding a prefix to all filters. You can also supply
 # an 'antiprefix', if the filter starts with this value it will be removed
 # instead of the prefix being added. This is useful for reversed fields.
-def prefix_q_expression(value, prefix, antiprefix=None):
+def prefix_q_expression(value, prefix, antiprefix=None, model=None):
 	children = []
 	for child in value.children:
 		if isinstance(child, Q):
-			children.append(prefix_q_expression(child, prefix, antiprefix))
+			children.append(prefix_q_expression(child, prefix, antiprefix, model))
+		# pk__in with empty list is often used for identity values since django
+		# doesnt properly support them
+		elif child[0] == 'pk__in' and child[1] == []:
+			children.append(child)
+		elif antiprefix is not None and child[0] == antiprefix:
+			children.append(('pk', child[1]))
 		elif antiprefix is not None and child[0].startswith(antiprefix + '__'):
-			children.append((child[0][len(antiprefix) + 2:], child[1]))
+			key = child[0][len(antiprefix) + 2:]
+			head = key.split('__', 1)[0]
+			if head != 'pk':
+				try:
+					model._meta.get_field(head)
+				except FieldDoesNotExist:
+					key = 'pk__' + key
+			children.append((key, child[1]))
 		else:
 			children.append((prefix + '__' + child[0], child[1]))
-	return Q(*children, _negated=value.negated)
+	return Q(*children, _connector=value.connector, _negated=value.negated)
 
 
 class ModelView(View):
@@ -970,7 +983,7 @@ class ModelView(View):
 					rev_field = f.remote_field.name
 					query = (
 						view.model.objects
-						.filter(prefix_q_expression(q, rev_field, field), **{rev_field + '__in': pks})
+						.filter(prefix_q_expression(q, rev_field, field, view.model), **{rev_field + '__in': pks})
 						.values_list(rev_field + '__pk', 'pk')
 						.distinct()
 					)
