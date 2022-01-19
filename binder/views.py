@@ -253,6 +253,21 @@ def prefix_db_expression(value, prefix):
 		raise ValueError('Unknown expression type, cannot apply db prefix: %s', value)
 
 
+# Prefix a q expression by adding a prefix to all filters. You can also supply
+# an 'antiprefix', if the filter starts with this value it will be removed
+# instead of the prefix being added. This is useful for reversed fields.
+def prefix_q_expression(value, prefix, antiprefix=None):
+	children = []
+	for child in value.children:
+		if isinstance(child, Q):
+			children.append(prefix_q_expression(child, prefix, antiprefix))
+		elif antiprefix is not None and child[0].startswith(antiprefix + '__'):
+			children.append((child[0][len(antiprefix) + 2:], child[1]))
+		else:
+			children.append((prefix + '__' + child[0], child[1]))
+	return Q(*children, _negated=value.negated)
+
+
 class ModelView(View):
 	# Model this is a view for. Use None for views not tied to a particular model.
 	model = None
@@ -946,22 +961,31 @@ class ModelView(View):
 				rel_ids_by_field_by_id[field] = func(request, pks, q)
 			# Actual relation
 			else:
-				if (getattr(self.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor or
-					not any(f.name == field for f in (list(self.model._meta.many_to_many) + list(self._get_reverse_relations())))):
+				f = self.model._meta.get_field(field)
+
+				if f.one_to_one or f.many_to_one:
 					singular_fields.add(field)
 
-				# Model default orders (this sometimes matters)
-				orders = []
-				for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
-					orders.append(prefix_db_expression(o, field))
-
-				query = (
-					self.model.objects
-					.order_by(*orders)
-					.filter(q, pk__in=pks, **{field + '__isnull': False})
-					.values_list('pk', field + '__pk')
-					.distinct()
-				)
+				if any(f.name == field for f in self._get_reverse_relations()):
+					rev_field = f.remote_field.name
+					query = (
+						view.model.objects
+						.filter(prefix_q_expression(q, rev_field, field), **{rev_field + '__in': pks})
+						.values_list(rev_field + '__pk', 'pk')
+						.distinct()
+					)
+				else:
+					# Model default orders (this sometimes matters)
+					orders = []
+					for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
+						orders.append(prefix_db_expression(o, field))
+					query = (
+						self.model.objects
+						.order_by(*orders)
+						.filter(q, pk__in=pks, **{field + '__isnull': False})
+						.values_list('pk', field + '__pk')
+						.distinct()
+					)
 
 				for pk, rel_pk in query:
 					rel_ids_by_field_by_id[field][pk].append(rel_pk)
