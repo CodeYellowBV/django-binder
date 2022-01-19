@@ -257,6 +257,21 @@ def prefix_db_expression(value, prefix):
 		raise ValueError('Unknown expression type, cannot apply db prefix: %s', value)
 
 
+# Prefix a q expression by adding a prefix to all filters. You can also supply
+# an 'antiprefix', if the filter starts with this value it will be removed
+# instead of the prefix being added. This is useful for reversed fields.
+def prefix_q_expression(value, prefix, antiprefix=None):
+	children = []
+	for child in value.children:
+		if isinstance(child, Q):
+			children.append(prefix_q_expression(child, prefix, antiprefix))
+		elif antiprefix is not None and child[0].startswith(antiprefix + '__'):
+			children.append((child[0][len(antiprefix) + 2:], child[1]))
+		else:
+			children.append((prefix + '__' + child[0], child[1]))
+	return Q(*children, _negated=value.negated)
+
+
 class ModelView(View):
 	# Model this is a view for. Use None for views not tied to a particular model.
 	model = None
@@ -918,12 +933,9 @@ class ModelView(View):
 	def _get_with_ids(self, pks, request, include_annotations, with_map, where_map):
 		result = {}
 
-		annotations = {}
 		singular_fields = set()
 		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(list))
 		virtual_fields = set()
-
-		Agg = self.AggStrategy
 
 		for field in with_map:
 			vr = self.virtual_relations.get(field, None)
@@ -935,12 +947,6 @@ class ModelView(View):
 				for rel, annotations in include_annotations.items()
 				if rel == field or rel.startswith(field + '.')
 			})
-
-			# Model default orders (this sometimes matters)
-			orders = []
-			field_alias = field + '___annotation' if vr else field
-			for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
-				orders.append(prefix_db_expression(o, field_alias))
 
 			# Virtual relation
 			if vr:
@@ -957,51 +963,43 @@ class ModelView(View):
 				# annotations, so allow for fetching of ids, instead.
 				# This does mean you can't filter on this relation
 				# unless you write a custom filter, too.
-				if isinstance(virtual_annotation, Q):
-					annotations[field_alias] = Agg(virtual_annotation, filter=q, ordering=orders)
-				else:
-					try:
-						func = getattr(self, virtual_annotation)
-					except AttributeError:
-						raise BinderRequestError('Annotation for virtual relation {{{}}}.{{{}}} is {{{}}}, but no method by that name exists.'.format(
-							self.model.__name__, field, virtual_annotation
-						))
-					rel_ids_by_field_by_id[field] = func(request, pks, q)
+				try:
+					func = getattr(self, virtual_annotation)
+				except AttributeError:
+					raise BinderRequestError('Annotation for virtual relation {{{}}}.{{{}}} is {{{}}}, but no method by that name exists.'.format(
+						self.model.__name__, field, virtual_annotation
+					))
+				rel_ids_by_field_by_id[field] = func(request, pks, q)
 			# Actual relation
 			else:
-				if (getattr(self.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor or
-					not any(f.name == field for f in (list(self.model._meta.many_to_many) + list(self._get_reverse_relations())))):
+				f = self.model._meta.get_field(field)
+
+				if f.one_to_one or f.many_to_one:
 					singular_fields.add(field)
 
-				if Agg != GroupConcat: # HACKK (GROUP_CONCAT can't filter and excludes NULL already)
-					q &= Q(**{field+'__pk__isnull': False})
-				annotations[field_alias] = Agg(field+'__pk', filter=q, ordering=orders)
+				if any(f.name == field for f in self._get_reverse_relations()):
+					rev_field = f.remote_field.name
+					query = (
+						view.model.objects
+						.filter(prefix_q_expression(q, rev_field, field), **{rev_field + '__in': pks})
+						.values_list(rev_field + '__pk', 'pk')
+						.distinct()
+					)
+				else:
+					# Model default orders (this sometimes matters)
+					orders = []
+					for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
+						orders.append(prefix_db_expression(o, field))
+					query = (
+						self.model.objects
+						.order_by(*orders)
+						.filter(q, pk__in=pks, **{field + '__isnull': False})
+						.values_list('pk', field + '__pk')
+						.distinct()
+					)
 
-
-		qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**annotations)
-		for record in qs:
-			for field in with_map:
-				field_alias = field+'___annotation' if field in virtual_fields else field
-
-				if field_alias in annotations:
-					value = record[field_alias]
-
-					# Make the values distinct.  We can't do this in
-					# the Agg() call, because then we get an error
-					# regarding order by and values needing to be the
-					# same :(
-					# We also can't just put it in a set, because we
-					# need to preserve the ordering.  So we use a set
-					# to keep track of what we've seen and only add
-					# new items.
-					seen_values = set()
-					distinct_values = []
-					for v in value:
-						if v not in seen_values:
-							distinct_values.append(v)
-						seen_values.add(v)
-
-					rel_ids_by_field_by_id[field][record['pk']] += distinct_values
+				for pk, rel_pk in query:
+					rel_ids_by_field_by_id[field][pk].append(rel_pk)
 
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model
@@ -1635,7 +1633,9 @@ class ModelView(View):
 		except model.DoesNotExist:
 			return None
 
-		return getattr(obj, field)
+		value = getattr(obj, field)
+		with value.open('rb') as f:
+			return ContentFile(f.read(), value.name)
 
 
 	def _clean_image_file(self, field, value):

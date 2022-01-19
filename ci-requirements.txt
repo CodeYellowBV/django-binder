@@ -1,4 +1,4 @@
-psycopg2
+psycopg2<2.9
 mysqlclient
 Pillow
 django-request-id
@@ -6,3 +6,5 @@ requests
 flake8
 codecov
 coverage
+django-hijack<3.0.0
+openpyxl

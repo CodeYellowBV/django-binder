@@ -1,6 +1,9 @@
 import json
 import mimetypes
+from contextlib import contextmanager
+from unittest import mock
 
+from django.db import DEFAULT_DB_ALIAS
 from django.test import TestCase, Client
 from django.test.client import encode_multipart
 from django.core.files import File
@@ -10,6 +13,25 @@ from binder.json import jsonloads
 
 from .testapp.models import Animal, Zoo
 from .utils import temp_imagefile
+
+
+@contextmanager
+def immediate_on_commit(using=None):
+	"""
+	Context manager executing transaction.on_commit() hooks immediately as
+	if the connection was in auto-commit mode. This is required when
+	using a subclass of django.test.TestCase as all tests are wrapped in
+	a transaction that never gets committed.
+	"""
+	immediate_using = DEFAULT_DB_ALIAS if using is None else using
+
+	def on_commit(func, using=None):
+		using = DEFAULT_DB_ALIAS if using is None else using
+		if using == immediate_using:
+			func()
+
+	with mock.patch('django.db.transaction.on_commit', side_effect=on_commit) as patch:
+		yield patch
 
 
 class FileUploadTest(TestCase):
@@ -320,6 +342,28 @@ class FileUploadTest(TestCase):
 		data = jsonloads(response.content)
 		zoo2 = Zoo.objects.get(pk=data['id'])
 
+		# Make sure they are the same
 		self.assertIsNotNone(zoo2.floor_plan.name)
 		with zoo1.floor_plan.open() as f1, zoo2.floor_plan.open() as f2:
-			self.assertEqual(f1.read(), f2.read())
+			zoo1_content = f1.read()
+			self.assertEqual(zoo1_content, f2.read())
+
+		# Make sure we leave the floor plan of zoo1 intact if we now update zoo2
+		with temp_imagefile(500, 500, 'jpeg') as uploaded_file:
+			boundary = 'my-boundary'
+			content_type = 'multipart/form-data; boundary=' + boundary
+			data = encode_multipart(boundary, {
+				'data': json.dumps({'floor_plan': None}),
+				'file:floor_plan': uploaded_file,
+			})
+		# We need the on commit hook to delete the old path
+		with immediate_on_commit():
+			response = self.client.put(f'/zoo/{zoo2.pk}/', content_type=content_type, data=data)
+		self.assertEqual(response.status_code, 200)
+
+		zoo1.refresh_from_db()
+		zoo2.refresh_from_db()
+
+		with zoo1.floor_plan.open() as f:
+			self.assertEqual(f.read(), zoo1_content)
+
