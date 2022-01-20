@@ -43,8 +43,8 @@ def is_q_child_equal(lchild, rchild):
 	if isinstance(lchild, Q) and isinstance(rchild, Q):
 		return (
 			lchild.negated == rchild.negated and
+			lchild.connector == rchild.connector and
 			len(lchild.children) == len(rchild.children) and
-			(len(lchild.children) == 1 or lchild.connector == rchild.connector) and
 			all(
 				is_q_child_equal(lsubchild, rsubchild)
 				for lsubchild, rsubchild in zip(lchild.children, rchild.children)
@@ -60,25 +60,44 @@ def is_q_child_always_true(child):
 
 
 def q_normalize(q):
-	# All we do is remove top level connected negates
-	if not q.negated or len(q.children) == 1:
-		return q
+	children = q.children
+	connector = q.connector
+	negated = q.negated
 
-	inverted_children = []
-	for child in q.children:
-		if isinstance(child, Q):
-			inverted_children.append(Q(
+	# Always use AND for 1 child
+	if len(children) == 1:
+		connector = Q.AND
+
+	# If we have a negated q with multiple children push all negates to the
+	# children
+	if negated and len(children) != 1:
+		children = [
+			Q(
 				*child.children,
 				_connector=child.connector,
 				_negated=not child.negated,
-			))
+			)
+			if isinstance(child, Q) else
+			Q(child, _negated=True)
+			for child in q.children
+		]
+		connector = {Q.AND: Q.OR, Q.OR: Q.AND}[connector]
+		negated = False
+
+	# Normalize and flatten children
+	flat_children = []
+	for child in children:
+		if isinstance(child, Q):
+			child = q_normalize(q)
+		if isinstance(child, Q) and child.connector == connector and not child.negated:
+			flat_children.extend(child.children)
 		else:
-			inverted_children.append(Q(child, _negated=True))
+			flat_children.append(child)
 
-	return Q(*inverted_children, _connector={Q.AND: Q.OR, Q.OR: Q.AND}[q.connector])
+	return Q(*flat_children, _connector=connector, _negated=negated)
 
 
-def is_q_stricter(lhs, rhs):
+def is_q_stricter(lhs, rhs, *, normalize=True):
 	"""
 	For 2 Q-objects, lhs and rhs, returns if lhs is by definition always
 	stricter than or equally as strict as rhs.
@@ -86,8 +105,9 @@ def is_q_stricter(lhs, rhs):
 	This function is not complete. It is guaranteed that it will never give
 	false positives, but false negatives can and will happen.
 	"""
-	lhs = q_normalize(lhs)
-	rhs = q_normalize(rhs)
+	if normalize:
+		lhs = q_normalize(lhs)
+		rhs = q_normalize(rhs)
 
 	# We treat everything as a non negated AND
 	if lhs.connector != Q.AND or lhs.negated:
@@ -115,10 +135,9 @@ def smart_q_or(*qs):
 	redundant joins which can lead to significant performance gains.
 	"""
 
-	# We flatten all Q-objects that are already ors in a big list
+	# We flatten and normalize all Q-objects
 	flat_qs = []
-	for q in qs:
-		q = q_normalize(q)
+	for q in map(q_normalize, qs):
 		if q.connector == Q.OR and not q.negated:
 			flat_qs.extend(q.children)
 		else:
@@ -128,10 +147,17 @@ def smart_q_or(*qs):
 	# of the other Q-objects
 	filtered_qs = []
 	for new in flat_qs:
-		if any(is_q_stricter(new, old) for old in filtered_qs):
+		if any(
+			is_q_stricter(new, old, normalize=False)
+			for old in filtered_qs
+		):
 			continue
 		filtered_qs = [
-			*(old for old in filtered_qs if not is_q_stricter(old, new)),
+			*(
+				old
+				for old in filtered_qs
+				if not is_q_stricter(old, new, normalize=False)
+			),
 			new,
 		]
 
