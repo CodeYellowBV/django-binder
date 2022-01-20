@@ -715,15 +715,6 @@ class IsQStricterTest(TestCase):
 		self.assertFalse(is_q_stricter(bar, foo))
 		self.assertTrue(is_q_stricter(bar, bar))
 
-	def test_pk_not_null(self):
-		pk_not_null = Q(pk__isnull=False)
-		foo = Q(foo=1)
-
-		self.assertTrue(is_q_stricter(pk_not_null, pk_not_null))
-		self.assertFalse(is_q_stricter(pk_not_null, foo))
-		self.assertTrue(is_q_stricter(foo, pk_not_null))
-		self.assertTrue(is_q_stricter(foo, foo))
-
 	def test_pk_not_in_empty_list(self):
 		pk_not_in_empty_list = ~Q(pk__in=[])
 		foo = Q(foo=1)
@@ -749,13 +740,6 @@ class SmartQOrTest(TestCase):
 
 		combined = smart_q_or(foo, bar)
 		self.assertEqual(combined, foo | bar)
-
-	def test_pk_not_null(self):
-		pk_not_null = Q(pk__isnull=False)
-		foo = Q(foo=1)
-
-		combined = smart_q_or(pk_not_null, foo)
-		self.assertEqual(combined, pk_not_null)
 
 	def test_pk_not_in_empty_list(self):
 		pk_not_in_empty_list = ~Q(pk__in=[])
