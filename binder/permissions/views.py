@@ -139,7 +139,10 @@ def smart_q_or(*qs):
 	flat_qs = []
 	for q in map(q_normalize, qs):
 		if q.connector == Q.OR and not q.negated:
-			flat_qs.extend(q.children)
+			for child in q.children:
+				if not isinstance(child, Q):
+					child = Q(child)
+				flat_qs.append(child)
 		else:
 			flat_qs.append(q)
 
