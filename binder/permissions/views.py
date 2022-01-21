@@ -88,7 +88,7 @@ def q_normalize(q):
 	flat_children = []
 	for child in children:
 		if isinstance(child, Q):
-			child = q_normalize(q)
+			child = q_normalize(child)
 		if isinstance(child, Q) and child.connector == connector and not child.negated:
 			flat_children.extend(child.children)
 		else:

@@ -783,3 +783,24 @@ class SmartQOrTest(TestCase):
 
 		combined = smart_q_or(pk_not_in_empty_list, foo)
 		self.assertEqual(combined, pk_not_in_empty_list)
+
+	def test_stricter_top_level_or(self):
+		foo = Q(foo=1)
+		foo_and_bar = Q(foo=1, bar=2)
+
+		combined = smart_q_or(foo | foo_and_bar)
+		self.assertEqual(combined, foo)
+
+	def test_distinct_top_level_or(self):
+		foo = Q(foo=1)
+		bar = Q(bar=2)
+
+		combined = smart_q_or(foo | bar)
+		self.assertEqual(combined, foo | bar)
+
+	def test_pk_not_in_empty_list_top_level_or(self):
+		pk_not_in_empty_list = ~Q(pk__in=[])
+		foo = Q(foo=1)
+
+		combined = smart_q_or(pk_not_in_empty_list | foo)
+		self.assertEqual(combined, pk_not_in_empty_list)
