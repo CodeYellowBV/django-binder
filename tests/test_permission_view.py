@@ -3,13 +3,14 @@ from .compare import assert_json, EXTRA
 from unittest.mock import MagicMock
 
 from django.test import TestCase, Client,  override_settings
+from django.db.models import Q
 
 from binder.json import jsonloads, jsondumps
+from binder.permissions.views import is_q_stricter, smart_q_or
 
 from .testapp.models import Zoo, ZooEmployee, Country, City, PermanentCity, CityState, Animal
 from .testapp.urls import router
 
-from binder.json import jsondumps
 from django.contrib.auth.models import User, Group
 
 class TestWithoutPerm(TestCase):
@@ -382,318 +383,318 @@ class TestWithCustomPerm(TestCase):
 
 
 class TestPutRelationScoping(TestCase):
-    def setUp(self):
-        super().setUp()
+	def setUp(self):
+		super().setUp()
 
-        group = Group.objects.get()
+		group = Group.objects.get()
 
-        u = User(username='testuser', is_active=True, is_superuser=False)
-        u.set_password('test')
-        u.save()
-        u.groups.add(group)
+		u = User(username='testuser', is_active=True, is_superuser=False)
+		u.set_password('test')
+		u.save()
+		u.groups.add(group)
 
-        self.client = Client()
-        r = self.client.login(username='testuser', password='test')
-        self.assertTrue(r)
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.change_country', 'all'),
-            ('testapp.view_city', 'all')
-        ]
-    })
-    def test_cannot_delete_on_multiput_without_delete_permission(self):
-        country = Country.objects.create(name='Nederland')
-        city1 = City.objects.create(country=country, name='Amsterdam')
-        city2 = City.objects.create(country=country, name='Leeuwarden')
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.change_country', 'all'),
+			('testapp.view_city', 'all')
+		]
+	})
+	def test_cannot_delete_on_multiput_without_delete_permission(self):
+		country = Country.objects.create(name='Nederland')
+		city1 = City.objects.create(country=country, name='Amsterdam')
+		city2 = City.objects.create(country=country, name='Leeuwarden')
 
-        # Now suppose Friesland is finally going to separate
+		# Now suppose Friesland is finally going to separate
 
-        res = self.client.put('/country/', data=jsondumps({
-            'data': [{
-                'id': country.pk,
-                'name': 'Nederland',
-                'cities': [city1.pk]
-            }]
-        }))
+		res = self.client.put('/country/', data=jsondumps({
+			'data': [{
+				'id': country.pk,
+				'name': 'Nederland',
+				'cities': [city1.pk]
+			}]
+		}))
 
-        # This is not ok
-        self.assertEquals(403, res.status_code)
+		# This is not ok
+		self.assertEquals(403, res.status_code)
 
-        content = jsonloads(res.content)
-        self.assertEquals('testapp.delete_city',  content['required_permission'])
+		content = jsonloads(res.content)
+		self.assertEquals('testapp.delete_city',  content['required_permission'])
 
-        # City 2 still exists!
-        city2.refresh_from_db()
-        self.assertEquals(country, city2.country) # And belongs to the nederlands
+		# City 2 still exists!
+		city2.refresh_from_db()
+		self.assertEquals(country, city2.country) # And belongs to the nederlands
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.change_country', 'all'),
-            ('testapp.view_city', 'all'),
-            ('testapp.delete_city', 'all'),
-        ]
-    })
-    def test_delete_scoping_on_multiput_with_delete_permission(self):
-        country = Country.objects.create(name='Nederland')
-        city1 = City.objects.create(country=country, name='Amsterdam')
-        city2 = City.objects.create(country=country, name='Leeuwarden')
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.change_country', 'all'),
+			('testapp.view_city', 'all'),
+			('testapp.delete_city', 'all'),
+		]
+	})
+	def test_delete_scoping_on_multiput_with_delete_permission(self):
+		country = Country.objects.create(name='Nederland')
+		city1 = City.objects.create(country=country, name='Amsterdam')
+		city2 = City.objects.create(country=country, name='Leeuwarden')
 
-        # Now suppose Friesland is finally going to separate
+		# Now suppose Friesland is finally going to separate
 
-        res = self.client.put('/country/', data=jsondumps({
-            'data': [{
-                'id': country.pk,
-                'name': 'Nederland',
-                'cities': [city1.pk]
-            }]
-        }))
+		res = self.client.put('/country/', data=jsondumps({
+			'data': [{
+				'id': country.pk,
+				'name': 'Nederland',
+				'cities': [city1.pk]
+			}]
+		}))
 
-        self.assertEquals(200, res.status_code)
+		self.assertEquals(200, res.status_code)
 
-        # City 2 must not exist.
-        with self.assertRaises(City.DoesNotExist):
-            city2.refresh_from_db()
-        self.assertEquals(1, country.cities.count())
+		# City 2 must not exist.
+		with self.assertRaises(City.DoesNotExist):
+			city2.refresh_from_db()
+		self.assertEquals(1, country.cities.count())
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.change_country', 'all')
-        ]
-    })
-    def test_cannot_change_on_multiput_without_change_permission(self):
-        country = Country.objects.create(name='Nederland')
-        city1 = City.objects.create(country=country, name='Amsterdam')
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.change_country', 'all')
+		]
+	})
+	def test_cannot_change_on_multiput_without_change_permission(self):
+		country = Country.objects.create(name='Nederland')
+		city1 = City.objects.create(country=country, name='Amsterdam')
 
-        res = self.client.put('/country/', data=jsondumps({
-            'data': [{
-                'id': country.pk,
-                'name': 'Nederland',
-                'cities': [city1.pk]
-            }],
-            'with': {
-                'city': [{
-                    'id': city1.pk,
-                    'name': 'Rotterdam',
-                }]
-            }
-        }))
+		res = self.client.put('/country/', data=jsondumps({
+			'data': [{
+				'id': country.pk,
+				'name': 'Nederland',
+				'cities': [city1.pk]
+			}],
+			'with': {
+				'city': [{
+					'id': city1.pk,
+					'name': 'Rotterdam',
+				}]
+			}
+		}))
 
-        # This is not ok
-        self.assertEquals(403, res.status_code)
-        content = jsonloads(res.content)
-        self.assertEquals('testapp.change_city', content['required_permission'])
+		# This is not ok
+		self.assertEquals(403, res.status_code)
+		content = jsonloads(res.content)
+		self.assertEquals('testapp.change_city', content['required_permission'])
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-            ('testapp.change_country', 'all'),
-            ('testapp.view_city', 'all'),
-        ]
-    })
-    def test_cannot_delete_on_put_without_delete_permission(self):
-        country = Country.objects.create(name='Nederland')
-        city1 = City.objects.create(country=country, name='Amsterdam')
-        city2 = City.objects.create(country=country, name='Leeuwarden')
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.change_country', 'all'),
+			('testapp.view_city', 'all'),
+		]
+	})
+	def test_cannot_delete_on_put_without_delete_permission(self):
+		country = Country.objects.create(name='Nederland')
+		city1 = City.objects.create(country=country, name='Amsterdam')
+		city2 = City.objects.create(country=country, name='Leeuwarden')
 
-        # Now suppose Friesland is finally going to separate
+		# Now suppose Friesland is finally going to separate
 
-        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
-            'id': country.pk,
-            'name': 'Nederland',
-            'cities': [city1.pk]
-        }))
+		res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+			'id': country.pk,
+			'name': 'Nederland',
+			'cities': [city1.pk]
+		}))
 
-        # This is not ok
-        self.assertEquals(res.status_code, 403)
+		# This is not ok
+		self.assertEquals(res.status_code, 403)
 
-        content = jsonloads(res.content)
-        self.assertEquals('testapp.delete_city', content['required_permission'])
+		content = jsonloads(res.content)
+		self.assertEquals('testapp.delete_city', content['required_permission'])
 
-        # City 2 still exists!
-        city2.refresh_from_db()
-        self.assertEquals(country, city2.country)
+		# City 2 still exists!
+		city2.refresh_from_db()
+		self.assertEquals(country, city2.country)
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-            ('testapp.change_country', 'all'),
-            ('testapp.view_city', 'all'),
-            ('testapp.delete_city', 'all')
-        ]
-    })
-    def test_can_delete_on_put_with_delete_permission(self):
-        country = Country.objects.create(name='Nederland')
-        city1 = City.objects.create(country=country, name='Amsterdam')
-        city2 = City.objects.create(country=country, name='Leeuwarden')
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.change_country', 'all'),
+			('testapp.view_city', 'all'),
+			('testapp.delete_city', 'all')
+		]
+	})
+	def test_can_delete_on_put_with_delete_permission(self):
+		country = Country.objects.create(name='Nederland')
+		city1 = City.objects.create(country=country, name='Amsterdam')
+		city2 = City.objects.create(country=country, name='Leeuwarden')
 
-        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
-            'id': country.pk,
-            'name': 'Nederland',
-            'cities': [city1.pk]
-        }))
+		res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+			'id': country.pk,
+			'name': 'Nederland',
+			'cities': [city1.pk]
+		}))
 
-        self.assertEquals(200, res.status_code)
+		self.assertEquals(200, res.status_code)
 
-        with self.assertRaises(City.DoesNotExist):
-            city2.refresh_from_db()
-        self.assertEquals(1, country.cities.count())
+		with self.assertRaises(City.DoesNotExist):
+			city2.refresh_from_db()
+		self.assertEquals(1, country.cities.count())
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-            ('testapp.change_country', 'all'),
-            ('testapp.view_permanentcity', 'all'),
-            ('testapp.delete_permanentcity', 'all')
-        ]
-    })
-    def test_softdelete_on_put_with_delete_permission_softdeletable(self):
-        country = Country.objects.create(name='Nederland')
-        city1 = PermanentCity.objects.create(country=country, name='Rotterdam', deleted=False)
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.change_country', 'all'),
+			('testapp.view_permanentcity', 'all'),
+			('testapp.delete_permanentcity', 'all')
+		]
+	})
+	def test_softdelete_on_put_with_delete_permission_softdeletable(self):
+		country = Country.objects.create(name='Nederland')
+		city1 = PermanentCity.objects.create(country=country, name='Rotterdam', deleted=False)
 
-        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
-            'id': country.pk,
-            'name': 'Nederland',
-            'permanent_cities': []
-        }))
+		res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+			'id': country.pk,
+			'name': 'Nederland',
+			'permanent_cities': []
+		}))
 
-        self.assertEquals(200,  res.status_code)
-        city1.refresh_from_db()
-        self.assertTrue(city1.deleted)
+		self.assertEquals(200,  res.status_code)
+		city1.refresh_from_db()
+		self.assertTrue(city1.deleted)
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-            ('testapp.change_country', 'all'),
-            ('testapp.view_permanentcity', 'all'),
-        ]
-    })
-    def test_softdelete_on_put_without_softdelete_permission_fails(self):
-        country = Country.objects.create(name='Nederland')
-        city1 = PermanentCity.objects.create(country=country, name='Rotterdam', deleted=False)
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.change_country', 'all'),
+			('testapp.view_permanentcity', 'all'),
+		]
+	})
+	def test_softdelete_on_put_without_softdelete_permission_fails(self):
+		country = Country.objects.create(name='Nederland')
+		city1 = PermanentCity.objects.create(country=country, name='Rotterdam', deleted=False)
 
-        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
-            'id': country.pk,
-            'name': 'Nederland',
-            'permanent_cities': []
-        }))
+		res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+			'id': country.pk,
+			'name': 'Nederland',
+			'permanent_cities': []
+		}))
 
-        self.assertEquals(res.status_code, 403)
-        content = jsonloads(res.content)
-        self.assertEquals('testapp.delete_permanentcity', content['required_permission'])
+		self.assertEquals(res.status_code, 403)
+		content = jsonloads(res.content)
+		self.assertEquals('testapp.delete_permanentcity', content['required_permission'])
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-            ('testapp.change_country', 'all'),
-            ('testapp.view_citystate', 'all'),
-            ('testapp.change_citystate', 'all'),
-        ]
-    })
-    def test_related_object_nullable_on_delete_is_set_to_null(self):
-        country = Country.objects.create(name='Belgium')
-        city1 = CityState.objects.create(country=country, name='Brussels')
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.change_country', 'all'),
+			('testapp.view_citystate', 'all'),
+			('testapp.change_citystate', 'all'),
+		]
+	})
+	def test_related_object_nullable_on_delete_is_set_to_null(self):
+		country = Country.objects.create(name='Belgium')
+		city1 = CityState.objects.create(country=country, name='Brussels')
 
-        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
-            'id': country.pk,
-            'name': 'Belgium',
-            'city_states': []
-        }))
-        self.assertEquals(200, res.status_code)
+		res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+			'id': country.pk,
+			'name': 'Belgium',
+			'city_states': []
+		}))
+		self.assertEquals(200, res.status_code)
 
-        city1.refresh_from_db()
+		city1.refresh_from_db()
 
-        self.assertIsNone(city1.country)
+		self.assertIsNone(city1.country)
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-            ('testapp.change_country', 'all'),
-            ('testapp.view_citystate', 'all'),
-        ]
-    })
-    def test_related_object_nullable_on_delete_no_change_permission_not_allowed(self):
-        country = Country.objects.create(name='Belgium')
-        city1 = CityState.objects.create(country=country, name='Brussels')
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.change_country', 'all'),
+			('testapp.view_citystate', 'all'),
+		]
+	})
+	def test_related_object_nullable_on_delete_no_change_permission_not_allowed(self):
+		country = Country.objects.create(name='Belgium')
+		city1 = CityState.objects.create(country=country, name='Brussels')
 
-        res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
-            'id': country.pk,
-            'name': 'Belgium',
-            'city_states': []
-        }))
+		res = self.client.put('/country/{}/'.format(country.pk), data=jsondumps({
+			'id': country.pk,
+			'name': 'Belgium',
+			'city_states': []
+		}))
 
-        self.assertEquals(403, res.status_code)
+		self.assertEquals(403, res.status_code)
 
-        content = jsonloads(res.content)
-        self.assertEquals('testapp.change_citystate', content['required_permission'])
+		content = jsonloads(res.content)
+		self.assertEquals('testapp.change_citystate', content['required_permission'])
 
-        city1.refresh_from_db()
+		city1.refresh_from_db()
 
-        self.assertEquals(country.pk, country.pk)
+		self.assertEquals(country.pk, country.pk)
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-            ('testapp.delete_country', 'all'),
-        ],
-    })
-    def test_multiput_deletions(self):
-        country = Country.objects.create(name='Netherlands')
-        res = self.client.put('/country/'.format(country.pk), data=jsondumps({
-            'deletions': [country.pk],
-        }))
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.delete_country', 'all'),
+		],
+	})
+	def test_multiput_deletions(self):
+		country = Country.objects.create(name='Netherlands')
+		res = self.client.put('/country/'.format(country.pk), data=jsondumps({
+			'deletions': [country.pk],
+		}))
 
-        self.assertEquals(200, res.status_code)
+		self.assertEquals(200, res.status_code)
 
-        with self.assertRaises(Country.DoesNotExist):
-            country.refresh_from_db()
+		with self.assertRaises(Country.DoesNotExist):
+			country.refresh_from_db()
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-        ],
-    })
-    def test_multiput_deletions_no_perm(self):
-        country = Country.objects.create(name='Netherlands')
-        res = self.client.put('/country/'.format(country.pk), data=jsondumps({
-            'deletions': [country.pk],
-        }))
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+		],
+	})
+	def test_multiput_deletions_no_perm(self):
+		country = Country.objects.create(name='Netherlands')
+		res = self.client.put('/country/'.format(country.pk), data=jsondumps({
+			'deletions': [country.pk],
+		}))
 
-        self.assertEquals(403, res.status_code)
+		self.assertEquals(403, res.status_code)
 
-        country.refresh_from_db()
+		country.refresh_from_db()
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-            ('testapp.delete_country', 'all'),
-        ],
-    })
-    def test_multiput_with_deletions(self):
-        country = Country.objects.create(name='Netherlands')
-        res = self.client.put('/city/'.format(country.pk), data=jsondumps({
-            'with_deletions': {'country': [country.pk]},
-        }))
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.delete_country', 'all'),
+		],
+	})
+	def test_multiput_with_deletions(self):
+		country = Country.objects.create(name='Netherlands')
+		res = self.client.put('/city/'.format(country.pk), data=jsondumps({
+			'with_deletions': {'country': [country.pk]},
+		}))
 
-        self.assertEquals(200, res.status_code)
+		self.assertEquals(200, res.status_code)
 
-        with self.assertRaises(Country.DoesNotExist):
-            country.refresh_from_db()
+		with self.assertRaises(Country.DoesNotExist):
+			country.refresh_from_db()
 
-    @override_settings(BINDER_PERMISSION={
-        'testapp.view_country': [
-            ('testapp.view_country', 'all'),
-        ],
-    })
-    def test_multiput_with_deletions_no_perm(self):
-        country = Country.objects.create(name='Netherlands')
-        res = self.client.put('/city/'.format(country.pk), data=jsondumps({
-            'with_deletions': {'country': [country.pk]},
-        }))
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+		],
+	})
+	def test_multiput_with_deletions_no_perm(self):
+		country = Country.objects.create(name='Netherlands')
+		res = self.client.put('/city/'.format(country.pk), data=jsondumps({
+			'with_deletions': {'country': [country.pk]},
+		}))
 
-        self.assertEquals(403, res.status_code)
+		self.assertEquals(403, res.status_code)
 
-        country.refresh_from_db()
+		country.refresh_from_db()
 
 
 class ViewScopeTest(TestCase):
@@ -728,3 +729,78 @@ class ViewScopeTest(TestCase):
 
 		zoos = list(zoo_view.get_queryset(request).values_list('pk', flat=True))
 		self.assertEqual(zoos, [self.zoo.pk])
+
+
+class IsQStricterTest(TestCase):
+
+	def test_stricter(self):
+		foo = Q(foo=1)
+		foo_and_bar = Q(foo=1, bar=2)
+
+		self.assertTrue(is_q_stricter(foo, foo))
+		self.assertFalse(is_q_stricter(foo, foo_and_bar))
+		self.assertTrue(is_q_stricter(foo_and_bar, foo))
+		self.assertTrue(is_q_stricter(foo_and_bar, foo_and_bar))
+
+	def test_distinct(self):
+		foo = Q(foo=1)
+		bar = Q(bar=2)
+
+		self.assertTrue(is_q_stricter(foo, foo))
+		self.assertFalse(is_q_stricter(foo, bar))
+		self.assertFalse(is_q_stricter(bar, foo))
+		self.assertTrue(is_q_stricter(bar, bar))
+
+	def test_pk_not_in_empty_list(self):
+		pk_not_in_empty_list = ~Q(pk__in=[])
+		foo = Q(foo=1)
+
+		self.assertTrue(is_q_stricter(pk_not_in_empty_list, pk_not_in_empty_list))
+		self.assertFalse(is_q_stricter(pk_not_in_empty_list, foo))
+		self.assertTrue(is_q_stricter(foo, pk_not_in_empty_list))
+		self.assertTrue(is_q_stricter(foo, foo))
+
+
+class SmartQOrTest(TestCase):
+
+	def test_stricter(self):
+		foo = Q(foo=1)
+		foo_and_bar = Q(foo=1, bar=2)
+
+		combined = smart_q_or(foo, foo_and_bar)
+		self.assertEqual(combined, foo)
+
+	def test_distinct(self):
+		foo = Q(foo=1)
+		bar = Q(bar=2)
+
+		combined = smart_q_or(foo, bar)
+		self.assertEqual(combined, foo | bar)
+
+	def test_pk_not_in_empty_list(self):
+		pk_not_in_empty_list = ~Q(pk__in=[])
+		foo = Q(foo=1)
+
+		combined = smart_q_or(pk_not_in_empty_list, foo)
+		self.assertEqual(combined, pk_not_in_empty_list)
+
+	def test_stricter_top_level_or(self):
+		foo = Q(foo=1)
+		foo_and_bar = Q(foo=1, bar=2)
+
+		combined = smart_q_or(foo | foo_and_bar)
+		self.assertEqual(combined, foo)
+
+	def test_distinct_top_level_or(self):
+		foo = Q(foo=1)
+		bar = Q(bar=2)
+
+		combined = smart_q_or(foo | bar)
+		self.assertEqual(combined, foo | bar)
+
+	def test_pk_not_in_empty_list_top_level_or(self):
+		pk_not_in_empty_list = ~Q(pk__in=[])
+		foo = Q(foo=1)
+
+		combined = smart_q_or(pk_not_in_empty_list | foo)
+		self.assertEqual(combined, pk_not_in_empty_list)

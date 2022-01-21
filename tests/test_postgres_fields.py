@@ -2,6 +2,7 @@ import os
 
 import unittest
 
+import django
 from django.test import TestCase, Client
 
 from binder.json import jsonloads
@@ -14,6 +15,15 @@ from psycopg2.extras import DateTimeTZRange
 if os.environ.get('BINDER_TEST_MYSQL', '0') == '0':
 	from .testapp.models import FeedingSchedule, Animal, Zoo
 	from .testapp.models import TimeTable
+
+
+if tuple(map(int, django.__version__.split('.'))) < (3, 0):
+	lquote = '\''
+	rquote = '\''
+else:
+	lquote = '“'
+	rquote = '”'
+
 
 # TODO: Currently these only really test filtering.  Move to test/filters?
 @unittest.skipIf(
@@ -470,7 +480,7 @@ class TestDateTimeRangeField(TestCase):
 		self.assertSetEqual(set(['daterange']), set(ve.exception.error_dict.keys()))
 		errors = ve.exception.message_dict['daterange']
 		self.assertEqual(1, len(errors))
-		self.assertEqual('“%s” value has an invalid format. It must be in YYYY-MM-DD HH:MM[:ss[.uuuuuu]][TZ] format.' % upper, str(errors[0]))
+		self.assertEqual('%s%s%s value has an invalid format. It must be in YYYY-MM-DD HH:MM[:ss[.uuuuuu]][TZ] format.' % (lquote, upper, rquote), str(errors[0]))
 
 
 	# This case should not happen (http payloads are always interpreted as strings)
@@ -550,7 +560,7 @@ class TestDateTimeRangeField(TestCase):
 		self.assertSetEqual(set(['daterange']), set(ve.exception.error_dict.keys()))
 		errors = ve.exception.message_dict['daterange']
 		self.assertEqual(1, len(errors))
-		self.assertEqual('“%s” value has an invalid format. It must be in YYYY-MM-DD HH:MM[:ss[.uuuuuu]][TZ] format.' % upper, str(errors[0]))
+		self.assertEqual('%s%s%s value has an invalid format. It must be in YYYY-MM-DD HH:MM[:ss[.uuuuuu]][TZ] format.' % (lquote, upper, rquote), str(errors[0]))
 
 
 	# This case should not happen (http payloads are always interpreted as strings)
@@ -630,7 +640,7 @@ class TestDateTimeRangeField(TestCase):
 		self.assertSetEqual(set(['daterange']), set(ve.exception.error_dict.keys()))
 		errors = ve.exception.message_dict['daterange']
 		self.assertEqual(1, len(errors))
-		self.assertEqual('“%s” value has an invalid format. It must be in YYYY-MM-DD HH:MM[:ss[.uuuuuu]][TZ] format.' % upper, str(errors[0]))
+		self.assertEqual('%s%s%s value has an invalid format. It must be in YYYY-MM-DD HH:MM[:ss[.uuuuuu]][TZ] format.' % (lquote, upper, rquote), str(errors[0]))
 
 
 	# This case should not happen (http payloads are always interpreted as strings)
