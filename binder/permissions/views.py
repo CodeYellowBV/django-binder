@@ -39,19 +39,65 @@ class Scope(Enum):
 	DELETE = 'delete'
 
 
-def is_q_child_always_true(child):
-	return (
-		child == ('pk__isnull', False) or
-		(
-			isinstance(child, Q) and
-			child.negated and
-			child.connector == Q.AND and
-			child.children == [('pk__in', [])]
+def is_q_child_equal(lchild, rchild):
+	if isinstance(lchild, Q) and isinstance(rchild, Q):
+		return (
+			lchild.negated == rchild.negated and
+			lchild.connector == rchild.connector and
+			len(lchild.children) == len(rchild.children) and
+			all(
+				is_q_child_equal(lsubchild, rsubchild)
+				for lsubchild, rsubchild in zip(lchild.children, rchild.children)
+			)
 		)
-	)
+	else:
+		return lchild == rchild
 
 
-def is_q_stricter(lhs, rhs):
+def is_q_child_always_true(child):
+	return is_q_child_equal(child, ~Q(pk__in=[]))
+
+
+
+def q_normalize(q):
+	children = q.children
+	connector = q.connector
+	negated = q.negated
+
+	# Always use AND for 1 child
+	if len(children) == 1:
+		connector = Q.AND
+
+	# If we have a negated q with multiple children push all negates to the
+	# children
+	if negated and len(children) != 1:
+		children = [
+			Q(
+				*child.children,
+				_connector=child.connector,
+				_negated=not child.negated,
+			)
+			if isinstance(child, Q) else
+			Q(child, _negated=True)
+			for child in q.children
+		]
+		connector = {Q.AND: Q.OR, Q.OR: Q.AND}[connector]
+		negated = False
+
+	# Normalize and flatten children
+	flat_children = []
+	for child in children:
+		if isinstance(child, Q):
+			child = q_normalize(q)
+		if isinstance(child, Q) and child.connector == connector and not child.negated:
+			flat_children.extend(child.children)
+		else:
+			flat_children.append(child)
+
+	return Q(*flat_children, _connector=connector, _negated=negated)
+
+
+def is_q_stricter(lhs, rhs, *, normalize=True):
 	"""
 	For 2 Q-objects, lhs and rhs, returns if lhs is by definition always
 	stricter than or equally as strict as rhs.
@@ -59,23 +105,26 @@ def is_q_stricter(lhs, rhs):
 	This function is not complete. It is guaranteed that it will never give
 	false positives, but false negatives can and will happen.
 	"""
-	# We treat everything as a non negated AND
-	if lhs.connector == Q.AND and not lhs.negated:
-		lchildren = lhs.children
-	else:
-		lchildren = [lhs]
-	if rhs.connector == Q.AND and not rhs.negated:
-		rchildren = rhs.children
-	else:
-		rchildren = [rhs]
+	if normalize:
+		lhs = q_normalize(lhs)
+		rhs = q_normalize(rhs)
 
-	# Filter out filters that are always true since they dont matter
-	lchildren = (c for c in lchildren if not is_q_child_always_true(c))
-	rchildren = (c for c in rchildren if not is_q_child_always_true(c))
+	# We treat everything as a non negated AND
+	if lhs.connector != Q.AND or lhs.negated:
+		lhs = Q(lhs)
+	if rhs.connector != Q.AND or rhs.negated:
+		rhs = Q(rhs)
 
 	# If every filter of rhs is also in lhs, then lhs is by definition a
 	# stricter version or rhs
-	return all(c in lchildren for c in rchildren)
+	return all(
+		any(
+			is_q_child_equal(lchild, rchild)
+			for lchild in lhs.children
+		)
+		for rchild in rhs.children
+		if not is_q_child_always_true(rchild)
+	)
 
 
 def smart_q_or(*qs):
@@ -86,14 +135,32 @@ def smart_q_or(*qs):
 	redundant joins which can lead to significant performance gains.
 	"""
 
+	# We flatten and normalize all Q-objects
+	flat_qs = []
+	for q in map(q_normalize, qs):
+		if q.connector == Q.OR and not q.negated:
+			for child in q.children:
+				if not isinstance(child, Q):
+					child = Q(child)
+				flat_qs.append(child)
+		else:
+			flat_qs.append(q)
+
 	# We filter out all Q-objects that are just a stricter version of one
 	# of the other Q-objects
 	filtered_qs = []
-	for new in qs:
-		if any(is_q_stricter(new, old) for old in filtered_qs):
+	for new in flat_qs:
+		if any(
+			is_q_stricter(new, old, normalize=False)
+			for old in filtered_qs
+		):
 			continue
 		filtered_qs = [
-			*(old for old in filtered_qs if not is_q_stricter(old, new)),
+			*(
+				old
+				for old in filtered_qs
+				if not is_q_stricter(old, new, normalize=False)
+			),
 			new,
 		]
 
@@ -243,7 +310,7 @@ class PermissionView(ModelView):
 
 
 	def _scope_view_all(self, request):
-		return Q(pk__isnull=False)
+		return ~Q(pk__in=[])
 
 
 
