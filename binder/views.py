@@ -1359,9 +1359,12 @@ class ModelView(View):
 
 		#### with
 		# parse wheres from request
-		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(queryset, withs, request=request, include_annotations=include_annotations)
-
 		data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
+
+		pks = [obj['id'] for obj in data]
+
+		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(pks, withs, request=request, include_annotations=include_annotations)
+
 		for obj in data:
 			self._annotate_obj_with_related_withs(obj, field_results)
 
