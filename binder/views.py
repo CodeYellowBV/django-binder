@@ -35,6 +35,14 @@ from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotat
 from .json import JsonResponse, jsonloads
 
 
+def q_get_flat_filters(q):
+	for child in q.children:
+		if isinstance(child, Q):
+			yield from q_get_flat_filters(child)
+		else:
+			yield child[0]
+
+
 def split_par_aware(content):
 	start = 0
 	depth = 0
@@ -1239,13 +1247,21 @@ class ModelView(View):
 
 
 
-	def order_by(self, queryset, request):
+	def _order_by_base(self, queryset, request, annotations):
 		#### order_by
 		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
 
 		orders = []
 		if order_bys:
 			for o in order_bys:
+				head = re.match(r'^-?(.*?)(__nulls_last|__nulls_first)?$', o).group(1)
+				try:
+					expr = annotations.pop(head)
+				except KeyError:
+					pass
+				else:
+					queryset = queryset.annotate(**{head: expr})
+
 				if o.startswith('-'):
 					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], request, partial='-')
 				else:
@@ -1278,6 +1294,11 @@ class ModelView(View):
 			orders += BinderModel.Meta.ordering
 		queryset = queryset.order_by(*orders)
 
+		return queryset, annotations
+
+
+	def order_by(self, queryset, request):
+		queryset, _ = self._order_by_base(queryset, request, {})
 		return queryset
 
 
@@ -1300,16 +1321,11 @@ class ModelView(View):
 			# Only 'pk' values should reduce DB server memory a (little?) bit, making
 			# things faster.  Not prefetching related models here makes it faster still.
 			# See also https://code.djangoproject.com/ticket/23771 and related tickets.
-			meta['total_records'] = queryset.prefetch_related(None).values('pk').count()
+			meta['total_records'] = queryset.order_by().prefetch_related(None).values('pk').count()
 
 		return meta
 
-
-	def get_filtered_queryset(self, request, pk=None, include_annotations=None):
-		"""
-		Returns a scoped queryset with filtering and sorting applied as
-		specified by the request.
-		"""
+	def _get_filtered_queryset_base(self, request, pk=None, include_annotations=None):
 		queryset = self.get_queryset(request)
 		if pk:
 			queryset = queryset.filter(pk=int(pk))
@@ -1326,13 +1342,27 @@ class ModelView(View):
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
 
-		queryset = annotate(queryset, request, include_annotations.get(''))
+		annotations = {
+			name: value['expr']
+			for name, value in get_annotations(queryset.model,  request, include_annotations.get('')).items()
+		}
 
 		#### filters
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
 		for field, values in filters.items():
+
 			for v in values:
 				q, distinct = self._parse_filter(field, v, request, include_annotations)
+
+				for filter in q_get_flat_filters(q):
+					head = filter.split('__', 1)[0]
+					try:
+						expr = annotations.pop(head)
+					except KeyError:
+						pass
+					else:
+						queryset = queryset.annotate(**{head: expr})
+
 				queryset = queryset.filter(q)
 				if distinct:
 					queryset = queryset.distinct()
@@ -1341,28 +1371,41 @@ class ModelView(View):
 		if 'search' in request.GET:
 			queryset = self.search(queryset, request.GET['search'], request)
 
+		return queryset, annotations
+
+	def get_filtered_queryset(self, request, *args, **kwargs):
+		"""
+		Returns a scoped queryset with filtering and sorting applied as
+		specified by the request.
+		"""
+		queryset, annotations = self._get_filtered_queryset_base(request, *args, **kwargs)
+		queryset = queryset.annotate(**annotations)
 		queryset = self.order_by(queryset, request)
-
 		return queryset
-
 
 	def get(self, request, pk=None, withs=None, include_annotations=None):
 		include_meta = request.GET.get('include_meta', 'total_records').split(',')
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
 
-		queryset = self.get_filtered_queryset(request, pk, include_annotations)
+		queryset, annotations = self._get_filtered_queryset_base(request, pk, include_annotations)
 
 		meta = self._generate_meta(include_meta, queryset, request, pk)
 
+		queryset, annotations = self._order_by_base(queryset, request, annotations)
 		queryset = self._paginate(queryset, request)
+
+		pks = list(queryset.values_list('pk', flat=True))
+
+		queryset = self.model.objects.filter(pk__in=pks)
+		queryset = annotate(queryset, request, include_annotations.get(''))
+		data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
+
+		pk_index = {pk: index for index, pk in enumerate(pks)}
+		data.sort(key=lambda obj: pk_index[obj['id']])
 
 		#### with
 		# parse wheres from request
-		data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
-
-		pks = [obj['id'] for obj in data]
-
 		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(pks, withs, request=request, include_annotations=include_annotations)
 
 		for obj in data:
