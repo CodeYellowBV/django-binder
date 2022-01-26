@@ -1163,10 +1163,9 @@ class ModelView(View):
 		return (queryset, partial + head, nulls_last)
 
 
-
-	def search(self, queryset, search, request):
+	def _search_base(self, search, request):
 		if not search:
-			return queryset
+			return ~Q(pk__in=[])
 
 		if not (self.searches or self.transformed_searches):
 			raise BinderRequestError('No search fields defined for this view.')
@@ -1180,7 +1179,12 @@ class ModelView(View):
 				q |= Q(**{s: transform(search)})
 			except ValueError:
 				pass
-		return queryset.filter(q)
+
+		return q
+
+
+	def search(self, queryset, search, request):
+		return queryset.filter(self._search_base(search, request))
 
 
 	def filter_deleted(self, queryset, pk, deleted, request):
@@ -1319,6 +1323,19 @@ class ModelView(View):
 
 		return meta
 
+	def _apply_q_with_possible_annotations(self, queryset, q, annotations):
+		for filter in q_get_flat_filters(q):
+			head = filter.split('__', 1)[0]
+			try:
+				expr = annotations.pop(head)
+			except KeyError:
+				pass
+			else:
+				queryset = queryset.annotate(**{head: expr})
+
+		return queryset.filter(q)
+
+
 	def _get_filtered_queryset_base(self, request, pk=None, include_annotations=None):
 		queryset = self.get_queryset(request)
 		if pk:
@@ -1347,23 +1364,14 @@ class ModelView(View):
 
 			for v in values:
 				q, distinct = self._parse_filter(field, v, request, include_annotations)
-
-				for filter in q_get_flat_filters(q):
-					head = filter.split('__', 1)[0]
-					try:
-						expr = annotations.pop(head)
-					except KeyError:
-						pass
-					else:
-						queryset = queryset.annotate(**{head: expr})
-
-				queryset = queryset.filter(q)
+				queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 				if distinct:
 					queryset = queryset.distinct()
 
 		#### search
 		if 'search' in request.GET:
-			queryset = self.search(queryset, request.GET['search'], request)
+			q = self._search_base(request.GET['search'], request)
+			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 
 		return queryset, annotations
 
