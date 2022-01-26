@@ -1395,11 +1395,14 @@ class ModelView(View):
 		queryset, annotations = self._order_by_base(queryset, request, annotations)
 		queryset = self._paginate(queryset, request)
 
-		pks = list(queryset.values_list('pk', flat=True))
-
-		queryset = self.model.objects.filter(pk__in=pks)
-		queryset = annotate(queryset, request, include_annotations.get(''))
-		data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
+		if annotations:
+			pks = list(queryset.values_list('pk', flat=True))
+			queryset = self.model.objects.filter(pk__in=pks)
+			queryset = annotate(queryset, request, include_annotations.get(''))
+			data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
+		else:
+			data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
+			pks = [obj['id'] for obj in data]
 
 		pk_index = {pk: index for index, pk in enumerate(pks)}
 		data.sort(key=lambda obj: pk_index[obj['id']])
