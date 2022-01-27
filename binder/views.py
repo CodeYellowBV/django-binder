@@ -1298,12 +1298,11 @@ class ModelView(View):
 			orders += BinderModel.Meta.ordering
 		queryset = queryset.order_by(*orders)
 
-		return queryset, annotations
+		return queryset
 
 
 	def order_by(self, queryset, request):
-		queryset, _ = self._order_by_base(queryset, request, {})
-		return queryset
+		return self._order_by_base(queryset, request, {})
 
 
 	def _annotate_obj_with_related_withs(self, obj, field_results):
@@ -1400,7 +1399,7 @@ class ModelView(View):
 
 		meta = self._generate_meta(include_meta, queryset, request, pk)
 
-		queryset, annotations = self._order_by_base(queryset, request, annotations)
+		queryset = self._order_by_base(queryset, request, annotations)
 		queryset = self._paginate(queryset, request)
 
 		if annotations:
@@ -1408,12 +1407,12 @@ class ModelView(View):
 			queryset = self.model.objects.filter(pk__in=pks)
 			queryset = annotate(queryset, request, include_annotations.get(''))
 			data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
+
+			pk_index = {pk: index for index, pk in enumerate(pks)}
+			data.sort(key=lambda obj: pk_index[obj['id']])
 		else:
 			data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
 			pks = [obj['id'] for obj in data]
-
-		pk_index = {pk: index for index, pk in enumerate(pks)}
-		data.sort(key=lambda obj: pk_index[obj['id']])
 
 		#### with
 		# parse wheres from request
