@@ -130,16 +130,26 @@ class M2MStoreErrorsTest(TestCase):
 			'name': 'Scooby Dooooooooooooooooooooooooooooooooooooooooooooooooooooooooo',
 		}
 
-		
 		zoo_data = {
 			"data": [
 				{
 					"id": -4,
-					'name': 'Test zoo',
+					'name': 2,
+					'most_popular_animals': [],
+					"contacts": [],
+					'opening_time': 'time validation error'
+				}
+			]
+		}
+
+		zoo_data_with_animal = {
+			"data": [
+				{
+					"id": -4,
+					'name': 2,
 					'most_popular_animals': [-65],
 					"contacts": [],
-					'opening_time': '08:00'
-
+					'opening_time': 'time validation error'
 				}
 			],
 			"with": {
@@ -155,6 +165,11 @@ class M2MStoreErrorsTest(TestCase):
 			'/animal/', data=json.dumps(animal_data), content_type='application/json')
 		response_zoo = self.client.put(
 			'/zoo/', data=json.dumps(zoo_data), content_type='application/json')
-			
+		response_zoo_with_animal = self.client.put(
+			'/zoo/', data=json.dumps(zoo_data_with_animal), content_type='application/json')
+
 		self.assertEqual(response_zoo.status_code, 400)
-		self.assertIn(str(response_animal.content), str(response_zoo.content))
+		self.assertIn(str(response_animal.content),
+                    str(response_zoo_with_animal.content))
+		self.assertIn(str(response_zoo.content), str(
+			response_zoo_with_animal.content))

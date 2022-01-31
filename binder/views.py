@@ -1405,8 +1405,6 @@ class ModelView(View):
 				ignored_fields.append(field)
 			except BinderValidationError as e:
 				validation_errors.append(e)
-			except BinderFieldTypeError:
-				raise
 
 		if validation_errors:
 			raise sum(validation_errors, None)
