@@ -552,7 +552,7 @@ class ModelView(View):
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_objs(self, queryset, request, annotations=None):
+	def _get_objs(self, queryset, request, annotations=None, annotation_sets=[]):
 		datas = []
 		datas_by_id = {} # Save datas so we can annotate m2m fields later (avoiding a query)
 		objs_by_id = {} # Same for original objects
@@ -610,6 +610,18 @@ class ModelView(View):
 			datas.append(data) # order matters!
 			datas_by_id[obj.pk] = data
 			objs_by_id[obj.pk] = obj
+
+		for _, set_annotations in annotation_sets:
+			for set_values in (
+				self.model.objects
+				.filter(pk__in=datas_by_id)
+				.annotate(**set_annotations)
+				.values('pk', *set_annotations)
+			):
+				pk_ = set_values.pop('pk')
+				for name, value in set_values.items():
+					datas_by_id[pk_][name] = value
+					setattr(objs_by_id[pk_], name, value)
 
 		self._annotate_objs(datas_by_id, objs_by_id)
 
@@ -1470,21 +1482,16 @@ class ModelView(View):
 		objs_annotations = include_annotations.get('')
 		if objs_annotations is None:
 			objs_annotations = get_default_annotations(self.model)
-		data = self._get_objs(queryset, request=request, annotations=set(objs_annotations) - set(annotations))
+		data = self._get_objs(
+			queryset,
+			request=request,
+			annotations=set(objs_annotations) - set(annotations),
+			annotation_sets=annotation_sets,
+		)
 
 		# Now we add all remaining annotations to this data
 		data_by_pk = {obj['id']: obj for obj in data}
 		pks = set(data_by_pk)
-
-		for _, set_annotations in annotation_sets:
-			for set_values in (
-				self.model.objects
-				.filter(pk__in=pks)
-				.annotate(**set_annotations)
-				.values('pk', *set_annotations)
-			):
-				pk_ = set_values.pop('pk')
-				data_by_pk[pk_].update(set_values)
 
 		#### with
 		# parse wheres from request
