@@ -30,18 +30,36 @@ class RoomController(object):
         return rooms
 
 
+def singleton(get_instance):
+    instance = None
+
+    def get_singleton():
+        nonlocal instance
+        if instance is None:
+            instance = get_instance()
+        return instance
+
+    return get_singleton
+
+
+@singleton
+def get_channel():
+    import pika
+    connection_credentials = pika.PlainCredentials(
+        settings.HIGH_TEMPLAR['rabbitmq']['username'],
+        settings.HIGH_TEMPLAR['rabbitmq']['password'],
+    )
+    connection_parameters = pika.ConnectionParameters(
+        settings.HIGH_TEMPLAR['rabbitmq']['host'],
+        credentials=connection_credentials,
+    )
+    connection = pika.BlockingConnection(parameters=connection_parameters)
+    return connection.channel()
+
+
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
-        import pika
-        from pika import BlockingConnection
-
-        connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
-                                                       settings.HIGH_TEMPLAR['rabbitmq']['password'])
-        connection_parameters = pika.ConnectionParameters(settings.HIGH_TEMPLAR['rabbitmq']['host'],
-                                                          credentials=connection_credentials)
-        connection = BlockingConnection(parameters=connection_parameters)
-        channel = connection.channel()
-
+        channel = get_channel()
         channel.basic_publish('hightemplar', routing_key='*', body=jsondumps({
             'data': data,
             'rooms': rooms,
