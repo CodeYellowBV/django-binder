@@ -35,6 +35,17 @@ from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotat
 from .json import JsonResponse, jsonloads
 
 
+def get_joins_from_queryset(queryset):
+	compiler = queryset.query.get_compiler(queryset.db)
+	connection = connections[queryset.db]
+	lines = set()
+	for alias in queryset.query.alias_map.values():
+		line, params = alias.as_sql(compiler, connection)
+		assert not params
+		lines.add(line)
+	return lines
+
+
 def q_get_flat_filters(q):
 	for child in q.children:
 		if isinstance(child, Q):
@@ -1417,6 +1428,44 @@ class ModelView(View):
 				if key in self.shown_annotations
 			}
 
+		# So now we will divide annotations based on the joins they do
+		base_joins = get_joins_from_queryset(queryset)
+		annotation_sets = []
+
+		for name, expr in list(annotations.items()):
+			annotation_joins = get_joins_from_queryset(
+				self.model.objects.annotate(**{name: expr})
+			)
+			annotation_annotations = {name: expr}
+			# First check if the queryset already does all joins, in that case
+			# we can just add it to the main queryset without any performance
+			# hits
+			if annotation_joins <= base_joins:
+				queryset = queryset.annotate(**annotation_annotations)
+				annotations.pop(name)
+				continue
+			# Then try to merge it into the annotation sets
+			i = 0
+			while i < len(annotation_sets):
+				set_joins, set_annotations = annotation_sets[i]
+				# If our joins are a subset of the annotation set we just add
+				# our annotation to the set and break
+				if annotation_joins <= set_joins:
+					set_annotations.update(annotation_annotations)
+					break
+				# If our joins are a superset of the annotation set we take its
+				# annotations and add it to ours
+				elif set_joins <= annotation_joins:
+					annotation_annotations.update(set_annotations)
+					annotation_sets.pop(i)
+				# Go on to the next
+				else:
+					i += 1
+			# If no annotation set existed that matched our joins we create a
+			# new one
+			else:
+				annotation_sets.append((annotation_joins, annotation_annotations))
+
 		# We fetch the data with only the currently applied annotations
 		objs_annotations = include_annotations.get('')
 		if objs_annotations is None:
@@ -1427,14 +1476,15 @@ class ModelView(View):
 		data_by_pk = {obj['id']: obj for obj in data}
 		pks = set(data_by_pk)
 
-		for name, expr in annotations.items():
-			for pk_, value in (
+		for _, set_annotations in annotation_sets:
+			for set_values in (
 				self.model.objects
 				.filter(pk__in=pks)
-				.annotate(**{name: expr})
-				.values_list('pk', name)
+				.annotate(**set_annotations)
+				.values('pk', *set_annotations)
 			):
-				data_by_pk[pk_][name] = value
+				pk_ = set_values.pop('pk')
+				data_by_pk[pk_].update(set_values)
 
 		#### with
 		# parse wheres from request
