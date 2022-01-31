@@ -1402,17 +1402,39 @@ class ModelView(View):
 		queryset = self._order_by_base(queryset, request, annotations)
 		queryset = self._paginate(queryset, request)
 
-		if annotations:
-			pks = list(queryset.values_list('pk', flat=True))
-			queryset = self.model.objects.filter(pk__in=pks)
-			queryset = annotate(queryset, request, include_annotations.get(''))
-			data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
-
-			pk_index = {pk: index for index, pk in enumerate(pks)}
-			data.sort(key=lambda obj: pk_index[obj['id']])
+		# So now annotations are only being used for showing, so we filter out
+		# all that do not have to be shown
+		if self.shown_annotations is None:
+			annotations = {
+				key: value
+				for key, value in annotations.items()
+				if key not in self.hidden_annotations
+			}
 		else:
-			data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
-			pks = [obj['id'] for obj in data]
+			annotations = {
+				key: value
+				for key, value in annotations.items()
+				if key in self.shown_annotations
+			}
+
+		# We fetch the data with only the currently applied annotations
+		objs_annotations = include_annotations.get('')
+		if objs_annotations is None:
+			objs_annotations = get_default_annotations(self.model)
+		data = self._get_objs(queryset, request=request, annotations=objs_annotations - set(annotations))
+
+		# Now we add all remaining annotations to this data
+		data_by_pk = {obj['id']: obj for obj in data}
+		pks = set(data_by_pk)
+
+		for name, expr in annotations.items():
+			for pk, value in (
+				self.model.objects
+				.filter(pk__in=pks)
+				.annotate(**{name: expr})
+				.values_list('pk', name)
+			):
+				data_by_pk[pk][name] = value
 
 		#### with
 		# parse wheres from request
