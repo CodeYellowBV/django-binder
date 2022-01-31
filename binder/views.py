@@ -1421,20 +1421,20 @@ class ModelView(View):
 		objs_annotations = include_annotations.get('')
 		if objs_annotations is None:
 			objs_annotations = get_default_annotations(self.model)
-		data = self._get_objs(queryset, request=request, annotations=objs_annotations - set(annotations))
+		data = self._get_objs(queryset, request=request, annotations=set(objs_annotations) - set(annotations))
 
 		# Now we add all remaining annotations to this data
 		data_by_pk = {obj['id']: obj for obj in data}
 		pks = set(data_by_pk)
 
 		for name, expr in annotations.items():
-			for pk, value in (
+			for pk_, value in (
 				self.model.objects
 				.filter(pk__in=pks)
 				.annotate(**{name: expr})
 				.values_list('pk', name)
 			):
-				data_by_pk[pk][name] = value
+				data_by_pk[pk_][name] = value
 
 		#### with
 		# parse wheres from request
