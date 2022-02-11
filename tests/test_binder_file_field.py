@@ -19,6 +19,7 @@ JPG_CONTENT = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00
 PNG_CONTENT = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc0*K\x01\x00\x01\xea\x01\r1\x93\xfe`\x00\x00\x00\x00IEND\xaeB`\x82'
 JPG_HASH = '7f6262521ea97a0dca86703b5fc90d648303f877'
 PNG_HASH = '1888ce8ba1019738482c8dc3e30bea871b4e47e7'
+UNKNOWN_TYPE_HASH = 'da39a3ee5e6b4b0d3255bfef95601890afd80709'
 
 
 class BinderFileFieldTest(TestCase):
@@ -144,6 +145,25 @@ class BinderFileFieldTest(TestCase):
 		self.assertEqual(
 			data['data']['binder_picture'],
 			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, JPG_HASH, filename),
+		)
+
+	def test_get_unknown_extension(self):
+		filename = 'pic.unknown'
+		zoo = Zoo(name='Apenheul')
+		zoo.binder_picture = ContentFile('', name=filename)
+		zoo.save()
+
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+
+		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+		zoo.refresh_from_db()
+		filename = basename(zoo.binder_picture.name) # Without folders foo/bar/
+
+		self.assertEqual(
+			data['data']['binder_picture'],
+			'/zoo/{}/binder_picture/?h={}&content_type=&filename={}'.format(zoo.pk, UNKNOWN_TYPE_HASH, filename),
 		)
 
 	def test_setting_blank(self):

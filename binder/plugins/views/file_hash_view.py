@@ -48,7 +48,7 @@ class FileHashView:
         if field in file_type_fields:
             if field_file.name:
                 content_type = guess_type(field_file.name)[0]
-                params.append('content_type=' + content_type)
+                params.append('content_type=' + content_type if content_type is not None else '')
 
         if not params:
             return ''
