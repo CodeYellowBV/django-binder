@@ -709,10 +709,15 @@ class ModelView(View):
 	def _get_obj(self, pk, request, include_annotations=None):
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
+		annotations = include_annotations.get('')
 		results = self._get_objs(
-			annotate(self.get_queryset(request).filter(pk=pk), request, include_annotations.get('')),
+			self.get_queryset(request).filter(pk=pk),
 			request=request,
-			annotations=include_annotations.get(''),
+			annotations=annotations,
+			to_annotate={
+				name: value['expr']
+				for name, value in get_annotations(self.model,  request, annotations).items()
+			},
 		)
 		if results:
 			return results[0]
@@ -884,9 +889,13 @@ class ModelView(View):
 			view.router = self.router
 			for annotations, with_pks in annotation_ids.items():
 				objs = view._get_objs(
-					annotate(view.get_queryset(request).filter(pk__in=with_pks), request, annotations),
+					view.get_queryset(request).filter(pk__in=with_pks),
 					request=request,
 					annotations=annotations,
+					to_annotate={
+						name: value['expr']
+						for name, value in get_annotations(view.model,  request, annotations).items()
+					},
 				)
 				for obj in objs:
 					view._annotate_obj_with_related_withs(obj, withs_per_model[model_name])
@@ -1622,10 +1631,15 @@ class ModelView(View):
 
 		# Permission checks are done at this point, so we can avoid get_queryset()
 		include_annotations = self._parse_include_annotations(request)
+		annotations = include_annotations.get('')
 		data = self._get_objs(
-			annotate(self.model.objects.filter(pk=obj.pk), request, include_annotations.get('')),
+			self.model.objects.filter(pk=obj.pk),
 			request=request,
-			annotations=include_annotations.get(''),
+			annotations=annotations,
+			to_annotate={
+				name: value['expr']
+				for name, value in get_annotations(self.model,  request, annotations).items()
+			},
 		)[0]
 		data['_meta'] = {'ignored_fields': ignored_fields}
 		return data
@@ -2491,10 +2505,15 @@ class ModelView(View):
 			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
 			# Permission checks are done at this point, so we can avoid get_queryset()
 			include_annotations = self._parse_include_annotations(request)
+			annotations = include_annotations.get('')
 			old = self._get_objs(
-				annotate(self.model.objects.filter(pk=int(pk)), request, include_annotations.get('')),
-				request,
-				include_annotations.get(''),
+				self.model.objects.filter(pk=int(pk)),
+				request=request,
+				annotations=annotations,
+				to_annotate={
+					name: value['expr']
+					for name, value in get_annotations(self.model,  request, annotations).items()
+				},
 			)[0]
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
