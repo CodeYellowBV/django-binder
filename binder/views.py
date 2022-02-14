@@ -552,7 +552,7 @@ class ModelView(View):
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_objs(self, queryset, request, annotations=None, annotation_sets=[]):
+	def _get_objs(self, queryset, request, annotations=None, to_annotate={}):
 		datas = []
 		datas_by_id = {} # Save datas so we can annotate m2m fields later (avoiding a query)
 		objs_by_id = {} # Same for original objects
@@ -569,6 +569,52 @@ class ModelView(View):
 			annotations -= set(self.hidden_annotations)
 		else:
 			annotations &= set(self.shown_annotations)
+
+		# So now annotations are only being used for showing, so we filter out
+		# all that do not have to be shown
+		to_annotate = {
+			key: value
+			for key, value in to_annotate.items()
+			if key in annotations
+		}
+
+		# So now we will divide annotations based on the joins they do
+		base_joins = get_joins_from_queryset(queryset)
+		annotation_sets = []
+
+		for name, expr in list(to_annotate.items()):
+			annotation_joins = get_joins_from_queryset(
+				self.model.objects.annotate(**{name: expr})
+			)
+			annotation_annotations = {name: expr}
+			# First check if the queryset already does all joins, in that case
+			# we can just add it to the main queryset without any performance
+			# hits
+			if annotation_joins <= base_joins:
+				queryset = queryset.annotate(**annotation_annotations)
+				to_annotate.pop(name)
+				continue
+			# Then try to merge it into the annotation sets
+			i = 0
+			while i < len(annotation_sets):
+				set_joins, set_annotations = annotation_sets[i]
+				# If our joins are a subset of the annotation set we just add
+				# our annotation to the set and break
+				if annotation_joins <= set_joins:
+					set_annotations.update(annotation_annotations)
+					break
+				# If our joins are a superset of the annotation set we take its
+				# annotations and add it to ours
+				elif set_joins <= annotation_joins:
+					annotation_annotations.update(set_annotations)
+					annotation_sets.pop(i)
+				# Go on to the next
+				else:
+					i += 1
+			# If no annotation set existed that matched our joins we create a
+			# new one
+			else:
+				annotation_sets.append((annotation_joins, annotation_annotations))
 
 		for obj in queryset:
 			# So we tend to make binder call queryset.distinct when necessary
@@ -599,7 +645,8 @@ class ModelView(View):
 					data[f.name] = getattr(obj, f.attname)
 
 			for a in annotations:
-				data[a] = getattr(obj, a)
+				if a not in to_annotate:
+					data[a] = getattr(obj, a)
 
 			for prop in self.shown_properties:
 				data[prop] = getattr(obj, prop)
@@ -1425,68 +1472,12 @@ class ModelView(View):
 		queryset = self._order_by_base(queryset, request, annotations)
 		queryset = self._paginate(queryset, request)
 
-		# So now annotations are only being used for showing, so we filter out
-		# all that do not have to be shown
-		if self.shown_annotations is None:
-			annotations = {
-				key: value
-				for key, value in annotations.items()
-				if key not in self.hidden_annotations
-			}
-		else:
-			annotations = {
-				key: value
-				for key, value in annotations.items()
-				if key in self.shown_annotations
-			}
-
-		# So now we will divide annotations based on the joins they do
-		base_joins = get_joins_from_queryset(queryset)
-		annotation_sets = []
-
-		for name, expr in list(annotations.items()):
-			annotation_joins = get_joins_from_queryset(
-				self.model.objects.annotate(**{name: expr})
-			)
-			annotation_annotations = {name: expr}
-			# First check if the queryset already does all joins, in that case
-			# we can just add it to the main queryset without any performance
-			# hits
-			if annotation_joins <= base_joins:
-				queryset = queryset.annotate(**annotation_annotations)
-				annotations.pop(name)
-				continue
-			# Then try to merge it into the annotation sets
-			i = 0
-			while i < len(annotation_sets):
-				set_joins, set_annotations = annotation_sets[i]
-				# If our joins are a subset of the annotation set we just add
-				# our annotation to the set and break
-				if annotation_joins <= set_joins:
-					set_annotations.update(annotation_annotations)
-					break
-				# If our joins are a superset of the annotation set we take its
-				# annotations and add it to ours
-				elif set_joins <= annotation_joins:
-					annotation_annotations.update(set_annotations)
-					annotation_sets.pop(i)
-				# Go on to the next
-				else:
-					i += 1
-			# If no annotation set existed that matched our joins we create a
-			# new one
-			else:
-				annotation_sets.append((annotation_joins, annotation_annotations))
-
 		# We fetch the data with only the currently applied annotations
-		objs_annotations = include_annotations.get('')
-		if objs_annotations is None:
-			objs_annotations = get_default_annotations(self.model)
 		data = self._get_objs(
 			queryset,
 			request=request,
-			annotations=set(objs_annotations) - set(annotations),
-			annotation_sets=annotation_sets,
+			annotations=include_annotations.get(''),
+			to_annotate=annotations,
 		)
 
 		# Now we add all remaining annotations to this data
