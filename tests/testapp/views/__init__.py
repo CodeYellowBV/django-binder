@@ -15,10 +15,8 @@ if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
 from .gate import GateView
 from .lion import LionView
 from .nickname import NicknameView
-from .picture import PictureView, PictureBookView
+from .picture import PictureView
 from .user import UserView
 from .zoo import ZooView
 from .zoo_employee import ZooEmployeeView
 from .web_page import WebPageView
-from .donor import DonorView
-from .pet import PetView
