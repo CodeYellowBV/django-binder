@@ -4,7 +4,7 @@ import warnings
 
 from django.db import models
 from django.http import HttpResponse
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.dispatch import Signal
 
@@ -214,7 +214,7 @@ def view_changesets(request, changesets):
 			userids.add(cs.user_id)
 
 	users = []
-	for u in User.objects.filter(id__in=userids):
+	for u in get_user_model().objects.filter(id__in=userids):
 		users.append({'id': u.id, 'username': u.username, 'email': u.email, 'first_name': u.first_name, 'last_name': u.last_name})
 
 	return JsonResponse({'data': data, 'with': {'user': users}})
