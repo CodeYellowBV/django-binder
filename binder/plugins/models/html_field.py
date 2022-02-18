@@ -13,6 +13,7 @@ def link_validator(tag, attribute_name, attribute_value):
 			},
 		)
 
+
 class HtmlValidator(HTMLParser):
 	allowed_tags = [
 		# General setup
@@ -42,8 +43,6 @@ class HtmlValidator(HTMLParser):
 		'invalid_attribute': 'Attribute %(attribute)s not allowed for tag %(tag)s'
 	}
 
-
-
 	def handle_starttag(self, tag: str, attrs: list) -> None:
 		if tag not in self.allowed_tags:
 			raise exceptions.ValidationError(
@@ -54,7 +53,7 @@ class HtmlValidator(HTMLParser):
 				},
 			)
 
-		allowed_attributes_for_tag = self.allowed_attributes.get(tag,[])
+		allowed_attributes_for_tag = self.allowed_attributes.get(tag, [])
 
 		for (attribute_name, attribute_content) in attrs:
 			if attribute_name not in allowed_attributes_for_tag:
@@ -68,7 +67,6 @@ class HtmlValidator(HTMLParser):
 				)
 			if (tag, attribute_name) in self.special_validators:
 				self.special_validators[(tag, attribute_name)](tag, attribute_name, attribute_content)
-
 
 
 class HtmlField(TextField):
