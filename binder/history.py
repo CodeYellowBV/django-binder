@@ -22,7 +22,7 @@ class Changeset(models.Model):
 
 	def __str__(self):
 		uuid = self.uuid[:8] if self.uuid else None
-		username = self.user.username if self.user else None
+		username = self.user.get_username() if self.user else None
 		return '{}/{} by {} on {}'.format(self.id, uuid, username, self.date.strftime('%Y%m%d-%H%M%S'))
 
 	class Meta:
@@ -215,7 +215,7 @@ def view_changesets(request, changesets):
 
 	users = []
 	for u in get_user_model().objects.filter(id__in=userids):
-		users.append({'id': u.id, 'username': u.username, 'email': u.email, 'first_name': u.first_name, 'last_name': u.last_name})
+		users.append({'id': u.id, 'username': u.get_username(), 'email': u.email, 'first_name': u.first_name, 'last_name': u.last_name})
 
 	return JsonResponse({'data': data, 'with': {'user': users}})
 
@@ -224,7 +224,7 @@ def view_changesets(request, changesets):
 def view_changesets_debug(request, changesets):
 	body = ['<html>', '<head>', '<style type="text/css">td {padding: 0px 20px;} th {padding: 0px 20px;}</style>', '</head>', '<body>']
 	for cs in changesets:
-		username = cs.user.username if cs.user else None
+		username = cs.user.get_username() if cs.user else None
 		body.append('<h3>Changeset {} by {}: {} on {} {{{}}}'.format(cs.id, cs.source, username, cs.date.strftime('%Y-%m-%d %H:%M:%S'), cs.uuid))
 		body.append('<br><br>')
 		body.append('<table>')
