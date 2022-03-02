@@ -72,7 +72,7 @@ class HtmlValidator(HTMLParser):
 
 class HtmlField(TextField):
 	"""
-	Determine a safe way to save "secure" user provided HTML input, and prevent
+	Determine a safe way to save "secure" user provided HTML input, and prevent XSS injections
 	"""
 
 	def validate(self, value, _):
