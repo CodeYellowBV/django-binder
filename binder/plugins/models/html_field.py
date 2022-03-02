@@ -1,12 +1,13 @@
 from django.db.models import TextField
 from html.parser import HTMLParser
 from django.core import exceptions
+from django.utils.translation import gettext as _
 
 
 def link_validator(tag, attribute_name, attribute_value):
 	if not attribute_value.startswith('http://') and not attribute_value.startswith('https://'):
 		raise exceptions.ValidationError(
-			'Link is not valid',
+			_('Link is not valid'),
 			code='invalid_tag',
 			params={
 				'tag': tag,
@@ -39,8 +40,8 @@ class HtmlValidator(HTMLParser):
 	}
 
 	error_messages = {
-		'invalid_tag': 'Tag %(tag)s is not allowed',
-		'invalid_attribute': 'Attribute %(attribute)s not allowed for tag %(tag)s'
+		'invalid_tag': _('Tag %(tag)s is not allowed'),
+		'invalid_attribute': _('Attribute %(attribute)s not allowed for tag %(tag)s'),
 	}
 
 	def handle_starttag(self, tag: str, attrs: list) -> None:
