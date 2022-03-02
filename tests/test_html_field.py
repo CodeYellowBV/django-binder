@@ -21,6 +21,8 @@ class HtmlFieldTestCase(TestCase):
 
 		self.webpage = WebPage.objects.create(zoo=self.zoo, content='')
 
+
+
 	def test_save_normal_text_ok(self):
 		response = self.client.put(f'/web_page/{self.webpage.id}/', data=json.dumps({'content': 'Artis'}))
 		self.assertEqual(response.status_code, 200)
@@ -35,6 +37,10 @@ class HtmlFieldTestCase(TestCase):
 								   data=json.dumps({'content': '<b onclick="">test</b>'}))
 		self.assertEqual(response.status_code, 400)
 
+		parsed_response = json.loads(response.content)
+		self.assertEqual('ValidationError', parsed_response['code'])
+		self.assertEqual('invalid_attribute', parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][0]['code'])
+
 	def test_simple_link_is_ok(self):
 		response = self.client.put(f'/web_page/{self.webpage.id}/', data=json.dumps(
 			{'content': '<a href="https://www.artis.nl/en/">Visit artis website</a>'}))
@@ -46,12 +52,31 @@ class HtmlFieldTestCase(TestCase):
 													   'content': '<a href="javascrt:alert(document.cookie)">Visit artis website</a>'}))
 		self.assertEqual(response.status_code, 400)
 
+		parsed_response = json.loads(response.content)
+		self.assertEqual('ValidationError', parsed_response['code'])
+		self.assertEqual('invalid_attribute', parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][0]['code'])
+
 
 
 	def test_script_is_not_ok(self):
 		response = self.client.put(f'/web_page/{self.webpage.id}/',
 								   data=json.dumps({'content': '<script>alert(\'hoi\');</script>'}))
+
 		self.assertEqual(response.status_code, 400)
+
+		parsed_response = json.loads(response.content)
+		self.assertEqual('ValidationError', parsed_response['code'])
+		self.assertEqual('invalid_tag', parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][0]['code'])
+
+	def test_script_is_not_ok_nested(self):
+		response = self.client.put(f'/web_page/{self.webpage.id}/',
+								   data=json.dumps({'content': '<b><script>alert(\'hoi\');</script></b>'}))
+		self.assertEqual(response.status_code, 400)
+
+		parsed_response = json.loads(response.content)
+		self.assertEqual('ValidationError', parsed_response['code'])
+		self.assertEqual('invalid_tag', parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][0]['code'])
+
 
 	def test_can_handle_reallife_data(self):
 		"""

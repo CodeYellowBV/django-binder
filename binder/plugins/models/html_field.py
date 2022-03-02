@@ -8,7 +8,7 @@ def link_validator(tag, attribute_name, attribute_value):
 	if not attribute_value.startswith('http://') and not attribute_value.startswith('https://'):
 		raise exceptions.ValidationError(
 			_('Link is not valid'),
-			code='invalid_tag',
+			code='invalid_attribute',
 			params={
 				'tag': tag,
 			},
@@ -60,7 +60,7 @@ class HtmlValidator(HTMLParser):
 			if attribute_name not in allowed_attributes_for_tag:
 				raise exceptions.ValidationError(
 					self.error_messages['invalid_attribute'],
-					code='invalid_tag',
+					code='invalid_attribute',
 					params={
 						'tag': tag,
 						'attribute': attribute_name
