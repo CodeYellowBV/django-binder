@@ -36,21 +36,46 @@ from .json import JsonResponse, jsonloads
 
 
 def get_joins_from_queryset(queryset):
+	"""
+	Given a queryset returns a set of lines that are used to determine which
+	tables will be joined and how. In essence this is the FROM-statement and
+	every JOIN-statement in a set as a string.
+
+	This is useful to compare the joins between querysets.
+	"""
+	# So to generate sql we need the compiler and connection for the right db
 	compiler = queryset.query.get_compiler(queryset.db)
 	connection = connections[queryset.db]
+	# Now we will just go through all tables in the alias_map
 	lines = set()
 	for alias in queryset.query.alias_map.values():
 		line, params = alias.as_sql(compiler, connection)
+		# We assert we have no params for now, you need to do custom stuff for
+		# these to appear in joins and substituting params into the sql
+		# is not something we can easily do safely for now, just passing them
+		# along with the str will make use potentially have unhashable lines
+		# which will ruin the set.
 		assert not params
 		lines.add(line)
 	return lines
 
 
 def q_get_flat_filters(q):
+	"""
+	Given a Q-object returns an iterator of all filters used in this Q-object.
+
+	So for example for Q(foo=1, bar=2) this would yield 'foo' and 'bar', but it
+	will also work for more complicated nested Q-objects.
+
+	This is useful to detect which fields are used in a Q-object.
+	"""
 	for child in q.children:
 		if isinstance(child, Q):
+			# If the child is another Q-object we can just yield recursively
 			yield from q_get_flat_filters(child)
 		else:
+			# So now the child is a 2-tuple of filter & value, we just need the
+			# filter so we yield that
 			yield child[0]
 
 
@@ -1337,6 +1362,8 @@ class ModelView(View):
 		orders = []
 		if order_bys:
 			for o in order_bys:
+				# We split of a leading - (descending sorting) and the
+				# suffixes nulls_last and nulls_first
 				head = re.match(r'^-?(.*?)(__nulls_last|__nulls_first)?$', o).group(1)
 				try:
 					expr = annotations.pop(head)
