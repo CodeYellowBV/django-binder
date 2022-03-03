@@ -87,3 +87,19 @@ class HtmlFieldTestCase(TestCase):
 								   data=json.dumps({'content': content}))
 
 		self.assertEqual(response.status_code, 200)
+
+	def test_multiple_errors(self):
+		response = self.client.put(f'/web_page/{self.webpage.id}/',
+								   data=json.dumps({
+									   'content': '<foo><bar>Visit artis website</foo></bar>'}))
+		self.assertEqual(response.status_code, 400)
+
+		parsed_response = json.loads(response.content)
+		self.assertEqual('ValidationError', parsed_response['code'])
+
+
+		self.assertEqual('invalid_tag',
+						 parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][0]['code'])
+		self.assertEqual('invalid_tag',
+						 parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][1]['code'])
+
