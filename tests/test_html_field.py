@@ -43,17 +43,21 @@ class HtmlFieldTestCase(TestCase):
 
 	def test_simple_link_is_ok(self):
 		response = self.client.put(f'/web_page/{self.webpage.id}/', data=json.dumps(
-			{'content': '<a href="https://www.artis.nl/en/">Visit artis website</a>'}))
+			{'content': '<a href="https://www.artis.nl/en/" rel="noreferrer noopener">Visit artis website</a>'}))
+
 		self.assertEqual(response.status_code, 200)
+
+
 
 	def test_javascript_link_is_not_ok(self):
 		response = self.client.put(f'/web_page/{self.webpage.id}/',
 								   data=json.dumps({
-													   'content': '<a href="javascrt:alert(document.cookie)">Visit artis website</a>'}))
+													   'content': '<a href="javascrt:alert(document.cookie)" rel="noreferrer noopener">Visit artis website</a>'}))
 		self.assertEqual(response.status_code, 400)
 
 		parsed_response = json.loads(response.content)
 		self.assertEqual('ValidationError', parsed_response['code'])
+
 		self.assertEqual('invalid_attribute', parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][0]['code'])
 
 
@@ -103,3 +107,36 @@ class HtmlFieldTestCase(TestCase):
 		self.assertEqual('invalid_tag',
 						 parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][1]['code'])
 
+
+	def test_link_no_rel_errors(self):
+		response = self.client.put(f'/web_page/{self.webpage.id}/',
+								   data=json.dumps({'content': '<a href="https://codeyellow.nl">bla</a>'}))
+		self.assertEqual(response.status_code, 400)
+
+		parsed_response = json.loads(response.content)
+
+		self.assertEqual('ValidationError', parsed_response['code'])
+		self.assertEqual('missing_attribute',
+						 parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][0]['code'])
+
+	def test_link_noopener_required(self):
+		response = self.client.put(f'/web_page/{self.webpage.id}/',
+								   data=json.dumps({'content': '<a href="https://codeyellow.nl" rel="noreferrer">bla</a>'}))
+		self.assertEqual(response.status_code, 400)
+
+		parsed_response = json.loads(response.content)
+
+		self.assertEqual('ValidationError', parsed_response['code'])
+		self.assertEqual('invalid_attribute',
+						 parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][0]['code'])
+
+	def test_link_noreferrer_required(self):
+		response = self.client.put(f'/web_page/{self.webpage.id}/',
+								   data=json.dumps({'content': '<a href="https://codeyellow.nl" rel="noopener">bla</a>'}))
+		self.assertEqual(response.status_code, 400)
+
+		parsed_response = json.loads(response.content)
+
+		self.assertEqual('ValidationError', parsed_response['code'])
+		self.assertEqual('invalid_attribute',
+						 parsed_response['errors']['web_page'][f'{self.webpage.id}']['content'][0]['code'])
