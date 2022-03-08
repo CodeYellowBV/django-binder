@@ -1,4 +1,3 @@
-from functools import reduce
 from typing import List
 
 from django.db.models import TextField
