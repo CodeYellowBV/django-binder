@@ -993,11 +993,7 @@ class ModelView(View):
 					rev_field = f.remote_field.name
 					query = (
 						view.model.objects
-<<<<<<< HEAD
-						.filter(prefix_q_expression(q, rev_field, field), **{rev_field + '__in': pks})
-=======
 						.filter(prefix_q_expression(q, rev_field, field, view.model), **{rev_field + '__in': pks})
->>>>>>> master
 						.values_list(rev_field + '__pk', 'pk')
 						.distinct()
 					)
