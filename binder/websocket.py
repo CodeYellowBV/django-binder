@@ -53,7 +53,7 @@ def get_channel():
         settings.HIGH_TEMPLAR['rabbitmq']['host'],
         credentials=connection_credentials,
     )
-    connection = pika.BlockingConnection(parameters=connection_parameters)
+    connection = pika.SelectConnection(parameters=connection_parameters)
     return connection.channel()
 
 
