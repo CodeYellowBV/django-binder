@@ -30,36 +30,60 @@ class RoomController(object):
         return rooms
 
 
-def singleton(get_instance):
-    instance = None
+#def singleton(get_instance):
+#    instance = None
+#
+#    def get_singleton():
+#        nonlocal instance
+#        if instance is None:
+#            instance = get_instance()
+#        return instance
+#
+#    return get_singleton
+#
+#
+#@singleton
+#def get_channel():
+#    import pika
+#    connection_credentials = pika.PlainCredentials(
+#        settings.HIGH_TEMPLAR['rabbitmq']['username'],
+#        settings.HIGH_TEMPLAR['rabbitmq']['password'],
+#    )
+#    connection_parameters = pika.ConnectionParameters(
+#        settings.HIGH_TEMPLAR['rabbitmq']['host'],
+#        credentials=connection_credentials,
+#    )
+#    connection = pika.BlockingConnection(parameters=connection_parameters)
+#    return connection.channel()
 
-    def get_singleton():
-        nonlocal instance
-        if instance is None:
-            instance = get_instance()
-        return instance
+_connection = None 
+def get_rabbitmq_connection(force_refresh=False):
+    global _connection
+    if not _connection or force_refresh:
+        import pika
+        connection_credentials = pika.PlainCredentials(
+            settings.HIGH_TEMPLAR['rabbitmq']['username'],
+            settings.HIGH_TEMPLAR['rabbitmq']['password'],
+        )
+        connection_parameters = pika.ConnectionParameters(
+            settings.HIGH_TEMPLAR['rabbitmq']['host'],
+            credentials=connection_credentials,
+        )
+        _connection = pika.BlockingConnection(parameters=connection_parameters)
 
-    return get_singleton
+    return _connection
 
 
-@singleton
-def get_channel():
-    import pika
-    connection_credentials = pika.PlainCredentials(
-        settings.HIGH_TEMPLAR['rabbitmq']['username'],
-        settings.HIGH_TEMPLAR['rabbitmq']['password'],
-    )
-    connection_parameters = pika.ConnectionParameters(
-        settings.HIGH_TEMPLAR['rabbitmq']['host'],
-        credentials=connection_credentials,
-    )
-    connection = pika.SelectConnection(parameters=connection_parameters)
-    return connection.channel()
+    
+
 
 
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
-        channel = get_channel()
+        connection = get_rabbitmq_connection()
+        if 
+        connection.process_data_events()
+        channel = connection.channel()
         channel.basic_publish('hightemplar', routing_key='*', body=jsondumps({
             'data': data,
             'rooms': rooms,
