@@ -80,12 +80,12 @@ def get_rabbitmq_connection(force_refresh=False):
 
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
-        from pika.exceptions import ConnnectionClosed
+        from pika.exceptions import ConnectionClosed
         try:
             connection = get_rabbitmq_connection()
             # Handle heartbeat
             connection.process_data_events()
-        except ConnnectionClosed:
+        except ConnectionClosed:
             connection= get_rabbitmq_connection(force_refresh=True)
 
         channel = connection.channel()
