@@ -80,9 +80,14 @@ def get_rabbitmq_connection(force_refresh=False):
 
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
-        connection = get_rabbitmq_connection()
-        if 
-        connection.process_data_events()
+        from pika.exceptions import ConnnectionClosed
+        try:
+            connection = get_rabbitmq_connection()
+            # Handle heartbeat
+            connection.process_data_events()
+        except ConnnectionClosed:
+            connection= get_rabbitmq_connection(force_refresh=True)
+
         channel = connection.channel()
         channel.basic_publish('hightemplar', routing_key='*', body=jsondumps({
             'data': data,
