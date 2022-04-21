@@ -19,3 +19,4 @@ from .picture import PictureView, PictureBookView
 from .user import UserView
 from .zoo import ZooView
 from .zoo_employee import ZooEmployeeView
+from .web_page import WebPageView
