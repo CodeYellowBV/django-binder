@@ -1,4 +1,3 @@
-from msilib.schema import Error
 from time import sleep
 from django.conf import settings
 
@@ -73,7 +72,7 @@ def get_channel():
         sleep(0.5)
 
     if state['value'] != 1:
-        raise Error('Failed to open pika SelectConnection')
+        raise RuntimeError('Failed to open pika SelectConnection')
         # TODO Test this approach
     return connection.channel()
 
