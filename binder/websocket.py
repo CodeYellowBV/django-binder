@@ -1,3 +1,4 @@
+from time import sleep
 from django.conf import settings
 
 from .json import jsondumps
@@ -53,7 +54,26 @@ def get_channel():
         settings.HIGH_TEMPLAR['rabbitmq']['host'],
         credentials=connection_credentials,
     )
-    connection = pika.SelectConnection(parameters=connection_parameters)
+    state = { 'value': 0 }
+
+    def on_open():
+        state['value'] = 1
+
+    def on_fail_open():
+        state['value'] = -1
+    
+    connection = pika.SelectConnection(
+        parameters=connection_parameters,
+        on_open_callback=on_open,
+        on_open_error_callback=on_fail_open
+    )
+
+    while state['value'] == 0:
+        sleep(0.5)
+
+    if state['value'] != 1:
+        raise RuntimeError('Failed to open pika SelectConnection')
+        # TODO Test this approach
     return connection.channel()
 
 
