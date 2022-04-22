@@ -8,9 +8,9 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.7", "3.8"]
-        django-version: ["2.1.1", "3.1.4"]
-        database-engine: ["postgres", "mysql"]
+        python-version: [ "3.7", "3.8" ]
+        django-version: [ "2.1.1", "3.1.4" ]
+        database-engine: [ "postgres", "mysql", "mssql"]
 
     services:
       postgres:
@@ -36,6 +36,14 @@ jobs:
           --health-retries 5
         ports:
           - 3306:3306
+
+
+      mssqldb:
+        image: mcr.microsoft.com/mssql/server:2017-latest
+       env:
+        ACCEPT_EULA: y
+        SA_PASSWORD: Test
+
 
     steps:
       - name: Checkout code

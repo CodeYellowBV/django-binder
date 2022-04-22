@@ -103,7 +103,7 @@ class ExcelFileAdapter(ExportFileAdapter):
 		# self.writer = self.pandas.ExcelWriter(self.response)
 
 		self.work_book = self.openpyxl.Workbook()
-		self.sheet = self.work_book.create_sheet()
+		self.sheet = self.work_book._sheets[0]
 
 		# The row number we are currently writing to
 		self._row_number = 0
@@ -285,7 +285,12 @@ class CsvExportView:
 					else:
 						# Assume that we have a mapping now
 						fk_ids = data[head_key]
-						if type(fk_ids) != list:
+
+						if fk_ids is None:
+							# This case happens if we have a nullable foreign key that is null. Treat this as a many
+							# to one relation with no values. 
+							fk_ids = []
+						elif type(fk_ids) != list:
 							fk_ids = [fk_ids]
 
 						# if head_key not in key_mapping:
