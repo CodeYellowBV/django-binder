@@ -1,4 +1,5 @@
 from time import sleep
+from threading import Thread
 from django.conf import settings
 
 from .json import jsondumps
@@ -61,18 +62,23 @@ def get_channel():
 
     def on_fail_open():
         state['value'] = -1
+
+    def on_close():
+        state['value'] = -2
     
     connection = pika.SelectConnection(
         parameters=connection_parameters,
         on_open_callback=on_open,
-        on_open_error_callback=on_fail_open
+        on_open_error_callback=on_fail_open,
+        on_close_callback=on_close
     )
+    Thread(target=connection.ioloop.start).start()
 
     while state['value'] == 0:
         sleep(0.5)
 
     if state['value'] != 1:
-        raise RuntimeError('Failed to open pika SelectConnection')
+        raise RuntimeError('Failed to open pika SelectConnection: ' + str(state['value']))
         # TODO Test this approach
     return connection.channel()
 
