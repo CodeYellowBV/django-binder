@@ -46,7 +46,7 @@ def singleton(get_instance):
 
 @singleton
 def get_channel():
-    log = 'Calling get_channel...'
+    log = ['Calling get_channel...']
     import pika
     connection_credentials = pika.PlainCredentials(
         settings.HIGH_TEMPLAR['rabbitmq']['username'],
@@ -59,15 +59,15 @@ def get_channel():
     state = { 'value': 0 }
 
     def on_open():
-        log += "Opened connection"
+        log[0] += "Opened connection"
         state['value'] = 1
 
     def on_fail_open():
-        log += "Failed to open connection"
+        log[0] += "Failed to open connection"
         state['value'] = -1
 
     def on_close():
-        log += "Closed connection"
+        log[0] += "Closed connection"
         state['value'] = -2
     
     connection = pika.SelectConnection(
@@ -78,13 +78,13 @@ def get_channel():
     )
 
     def test_start_loop():
-        print("Starting ioloop...")
+        log[0] += "Starting ioloop..."
         connection.ioloop.start()
-        print("Finished ioloop")
+        log[0] += "Finished ioloop"
     
-    log += "Starting ioloop thread..."
+    log[0] += "Starting ioloop thread..."
     Thread(target=test_start_loop).start()
-    log += "Started ioloop thread"
+    log[0] += "Started ioloop thread"
 
     counter = 0
 
@@ -92,8 +92,8 @@ def get_channel():
         sleep(0.5)
         counter += 1
         if (counter == 10):
-            log += 'final state is ' + str(state['value'])
-            raise RuntimeError('Failed to open pika SelectConnection: ' + log)
+            log[0] += 'final state is ' + str(state['value'])
+            raise RuntimeError('Failed to open pika SelectConnection: ' + log[0])
 
     if state['value'] != 1:
         raise RuntimeError('Failed to open pika SelectConnection: ' + str(state['value']))
