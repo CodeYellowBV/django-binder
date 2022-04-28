@@ -56,13 +56,15 @@ def use_channel(use_function):
                 for use_function in use_channel_queue:
                     use_function(channel)
                 use_channel_queue.clear()
-                connection.sleep(0.5)
+                connection.sleep(0.1)
 
         connection_thread = Thread(target=connection_thread_function)
         connection_thread.setDaemon(True)
         connection_thread.start()
 
     use_channel_queue.append(use_function)
+    while len(use_channel_queue) > 0:
+        sleep(0.11)
 
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
@@ -72,11 +74,6 @@ def trigger(data, rooms):
                 'rooms': rooms,
             }))
         use_channel(use_function)
-        global use_channel_queue
-        log = 'Original queue is ' + str(len(use_channel_queue))
-        sleep(5)
-        log += 'New queue is ' + str(len(use_channel_queue))
-        raise RuntimeError('Log is ' + log)
         
     if getattr(settings, 'HIGH_TEMPLAR_URL', None):
         url = getattr(settings, 'HIGH_TEMPLAR_URL')
