@@ -69,15 +69,18 @@ def get_channel():
     def on_close():
         log[0] += "Closed connection"
         state['value'] = -2
+
+    p_connection = [None]
     
-    connection = pika.SelectConnection(
-        parameters=connection_parameters,
-        on_open_callback=on_open,
-        on_open_error_callback=on_fail_open,
-        on_close_callback=on_close
-    )
 
     def test_start_loop():
+        connection = pika.SelectConnection(
+            parameters=connection_parameters,
+            on_open_callback=on_open,
+            on_open_error_callback=on_fail_open,
+            on_close_callback=on_close
+        )
+        p_connection[0] = connection
         log[0] += "Starting ioloop..."
         connection.ioloop.start()
         log[0] += "Finished ioloop"
@@ -98,7 +101,7 @@ def get_channel():
     if state['value'] != 1:
         raise RuntimeError('Failed to open pika SelectConnection: ' + str(state['value']))
         # TODO Test this approach
-    return connection.channel()
+    return p_connection[0].channel()
 
 
 def trigger(data, rooms):
