@@ -76,8 +76,14 @@ def get_channel():
         on_open_error_callback=on_fail_open,
         on_close_callback=on_close
     )
+
+    def test_start_loop():
+        print("Starting ioloop...")
+        connection.ioloop.start()
+        print("Finished ioloop")
+    
     log += "Starting ioloop thread..."
-    Thread(target=connection.ioloop.start).start()
+    Thread(target=test_start_loop).start()
     log += "Started ioloop thread"
 
     counter = 0
