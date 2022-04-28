@@ -72,6 +72,11 @@ def trigger(data, rooms):
                 'rooms': rooms,
             }))
         use_channel(use_function)
+        global use_channel_queue
+        log = 'Original queue is ' + str(len(use_channel_queue))
+        sleep(5)
+        log += 'New queue is ' + str(len(use_channel_queue))
+        raise RuntimeError('Log is ' + log)
         
     if getattr(settings, 'HIGH_TEMPLAR_URL', None):
         url = getattr(settings, 'HIGH_TEMPLAR_URL')
