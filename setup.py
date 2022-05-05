@@ -41,6 +41,8 @@ setup(
 		'Pillow >= 3.2.0',
 		'django-request-id >= 1.0.0',
 		'requests >= 2.13.0',
+		'fasteners >= 0.17.3',
+		'pika >= 1.1.0'
 	],
 	tests_require=[
 		'django-hijack >= 2.1.10, < 3.0.0',
