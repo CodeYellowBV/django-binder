@@ -41,7 +41,7 @@ def use_channel(use_function):
     global finished_channel_task_semaphore
 
     if use_channel_function is None:
-        use_channel_function = []
+        use_channel_function = [None]
 
         def connection_thread_function():
             import pika
