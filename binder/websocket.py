@@ -1,5 +1,4 @@
-from time import sleep
-from threading import Thread
+from threading import Semaphore, Thread
 from django.conf import settings
 
 from .json import jsondumps
@@ -32,12 +31,17 @@ class RoomController(object):
         return rooms
 
 
-use_channel_queue = None
-def use_channel(use_function):
-    global use_channel_queue
+use_channel_function = None
+sent_channel_task_semaphore = Semaphore(0)
+finished_channel_task_semaphore = Semaphore(0)
 
-    if use_channel_queue is None:
-        use_channel_queue = []
+def use_channel(use_function):
+    global use_channel_function
+    global sent_channel_task_semaphore
+    global finished_channel_task_semaphore
+
+    if use_channel_function is None:
+        use_channel_function = []
 
         def connection_thread_function():
             import pika
@@ -53,18 +57,19 @@ def use_channel(use_function):
             channel = connection.channel()
 
             while True:
-                for use_function in use_channel_queue:
-                    use_function(channel)
-                use_channel_queue.clear()
-                connection.sleep(0.1)
+                has_task = sent_channel_task_semaphore.acquire(timeout=0.01)
+                if has_task:
+                    use_channel_function[0](channel)
+                    finished_channel_task_semaphore.release()
+                connection.process_data_events(0)
 
         connection_thread = Thread(target=connection_thread_function)
         connection_thread.setDaemon(True)
         connection_thread.start()
 
-    use_channel_queue.append(use_function)
-    while len(use_channel_queue) > 0:
-        sleep(0.11)
+    use_channel_function[0] = use_function
+    sent_channel_task_semaphore.release()
+    finished_channel_task_semaphore.acquire()
 
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
