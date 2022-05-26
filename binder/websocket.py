@@ -64,7 +64,6 @@ def use_channel(use_function):
                 connection.process_data_events(0)
 
         connection_thread = Thread(target=connection_thread_function)
-        connection_thread.setDaemon(True)
         connection_thread.start()
 
     use_channel_function[0] = use_function
