@@ -153,6 +153,8 @@ class FieldFilter(object):
 	fields = []
 	# The list of allowed qualifiers
 	allowed_qualifiers = []
+	# The mapping of allowed chain qualifiers to the relevant Field
+	allowed_chain_qualifiers = {}
 
 	def __init__(self, field):
 		self.field = field
@@ -192,12 +194,65 @@ class FieldFilter(object):
 					.format(qualifier, self.__class__.__name__, self.field_description()))
 
 
+	# This returns a (cached) filterclass for a field class.
+	def get_field_filter(self, field_class, reset=False):
+		f = not reset and getattr(self, '_field_filters', None)
 
-	def get_q(self, qualifier, value, invert, partial=''):
-		self.check_qualifier(qualifier)
-		qualifier, cleaned_value = self.clean_qualifier(qualifier, value)
+		if not f:
+			f = {}
+			for field_filter_cls in FieldFilter.__subclasses__():
+				for field_cls in field_filter_cls.fields:
+					if f.get(field_cls):
+						raise ValueError('Field-Filter mapping conflict: {} vs {}'.format(field_filter_cls.name, field_cls.name))
+					else:
+						f[field_cls] = field_filter_cls
 
-		suffix = '__' + qualifier if qualifier else ''
+			self._field_filters = f
+
+		return f.get(field_class)
+
+
+
+	def get_q(self, qualifiers, value, invert, partial=''):
+		i = 0
+		field_filter = self
+
+		# First we try to handle chain qualifiers
+		while (
+			# If its not the last qualifier it has to be a chain qualifier
+			i < len(qualifiers) - 1 or
+			# For the last one we check if it is in chain qualifiers
+			(i < len(qualifiers) and qualifiers[i] in field_filter.allowed_chain_qualifiers)
+		):
+			chain_qualifier = qualifiers[i]
+			i += 1
+
+			field_cls = field_filter.allowed_chain_qualifiers[chain_qualifier]
+			if field_cls is None:
+				raise BinderRequestError(
+					'Qualifier {} not supported for type {} ({}).'
+					.format(chain_qualifier, field_filter.__class__.__name__, field_filter.field_description())
+				)
+
+			field = field_cls()
+			field.model = self.field.model
+			field.name = self.field.name + ':' + chain_qualifier
+
+			field_filter_cls = self.get_field_filter(field_cls)
+			field_filter = field_filter_cls(field)
+
+		try:
+			qualifier = qualifiers[i]
+		except IndexError:
+			qualifier = None
+
+		field_filter.check_qualifier(qualifier)
+		qualifier, cleaned_value = field_filter.clean_qualifier(qualifier, value)
+
+		if 0 <= i < len(qualifiers):
+			qualifiers[i] = qualifier
+
+		suffix = ''.join('__' + qualifier for qualifier in qualifiers)
 		if invert:
 			return ~Q(**{partial + self.field.name + suffix: cleaned_value})
 		else:
@@ -254,6 +309,7 @@ class DateTimeFieldFilter(FieldFilter):
 	fields = [models.DateTimeField]
 	# Maybe allow __startswith? And __year etc?
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
+	allowed_chain_qualifiers = {'date': models.DateField}
 
 	def clean_value(self, qualifier, v):
 		if re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?([A-Za-z]+|[+-][0-9]{1,4})$', v):
@@ -275,6 +331,7 @@ class DateTimeFieldFilter(FieldFilter):
 		else:
 			value_type = type(cleaned_value)
 
+		# [TODO] Support for chained qualifiers is added, still needed for backwards compat
 		if issubclass(value_type, date) and not issubclass(value_type, datetime):
 			if qualifier is None:
 				qualifier = 'date'
@@ -337,6 +394,7 @@ class BooleanFieldFilter(FieldFilter):
 class TextFieldFilter(FieldFilter):
 	fields = [models.CharField, models.TextField]
 	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'isnull']
+	allowed_chain_qualifiers = {'unaccent': models.TextField}
 
 	# Always valid(?)
 	def clean_value(self, qualifier, v):
@@ -356,22 +414,6 @@ class UUIDFieldFilter(FieldFilter):
 class ArrayFieldFilter(FieldFilter):
 	fields = [ArrayField]
 	allowed_qualifiers = [None, 'contains', 'contained_by', 'overlap', 'isnull']
-
-	# Some copy/pasta involved....
-	def get_field_filter(self, field_class, reset=False):
-		f = not reset and getattr(self, '_field_filter', None)
-
-		if not f:
-			f = None
-			for field_filter_cls in FieldFilter.__subclasses__():
-				for field_cls in field_filter_cls.fields:
-					if field_cls == field_class:
-						f = field_filter_cls
-						break
-			self._field_filter = f
-
-		return f
-
 
 	def clean_value(self, qualifier, v):
 		Filter = self.get_field_filter(self.field.base_field.__class__)

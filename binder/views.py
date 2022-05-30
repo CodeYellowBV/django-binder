@@ -1052,18 +1052,12 @@ class ModelView(View):
 
 		if not tail:
 			invert = False
-			try:
-				head, qualifier = head.split(':', 1)
-				if qualifier == 'not':
-					qualifier = None
-					invert = True
-				elif qualifier.startswith('not:'):
-					qualifier = qualifier[4:]
-					invert = True
-			except ValueError:
-				qualifier = None
+			head, *qualifiers = head.split(':')
+			if qualifiers and qualifiers[0] == 'not':
+				qualifiers = qualifiers[1:]
+				invert = True
 
-			q = self._filter_field(head, qualifier, value, invert, request, include_annotations, partial)
+			q = self._filter_field(head, qualifiers, value, invert, request, include_annotations, partial)
 		else:
 			q = Q()
 
@@ -1095,7 +1089,7 @@ class ModelView(View):
 
 
 
-	def _filter_field(self, field_name, qualifier, value, invert, request, include_annotations, partial=''):
+	def _filter_field(self, field_name, qualifiers, value, invert, request, include_annotations, partial=''):
 		try:
 			if field_name in self.hidden_fields:
 				raise FieldDoesNotExist()
@@ -1108,7 +1102,7 @@ class ModelView(View):
 			if partial:
 				# NOTE: This creates a subquery; try to avoid this!
 				qs = annotate(self.model.objects.all(), request, annotations)
-				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request, {
+				qs = qs.filter(self._filter_field(field_name, qualifiers, value, invert, request, {
 					rel_[len(rel) + 1:]: annotations
 					for rel_, annotations in include_annotations.items()
 					if rel_ == rel or rel_.startswith(rel + '.')
@@ -1121,7 +1115,7 @@ class ModelView(View):
 			if filter_class:
 				filter = filter_class(field)
 				try:
-					return filter.get_q(qualifier, value, invert, partial)
+					return filter.get_q(qualifiers, value, invert, partial)
 				except ValidationError as e:
 					# TODO: Maybe convert to a BinderValidationError later?
 					raise BinderRequestError(e.message)
