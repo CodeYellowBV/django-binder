@@ -1048,7 +1048,7 @@ class ModelView(View):
 		result = {}
 
 		singular_fields = set()
-		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(list))
+		rel_ids_by_field_by_id = {}
 		virtual_fields = set()
 
 		for field in with_map:
@@ -1083,7 +1083,7 @@ class ModelView(View):
 					raise BinderRequestError('Annotation for virtual relation {{{}}}.{{{}}} is {{{}}}, but no method by that name exists.'.format(
 						self.model.__name__, field, virtual_annotation
 					))
-				rel_ids_by_field_by_id[field] = func(request, pks, q)
+				field_rel_ids = func(request, pks, q)
 			# Actual relation
 			else:
 				f = self.model._meta.get_field(field)
@@ -1112,8 +1112,16 @@ class ModelView(View):
 						.distinct()
 					)
 
+				field_rel_ids = defaultdict(list)
 				for pk, rel_pk in query:
-					rel_ids_by_field_by_id[field][pk].append(rel_pk)
+					field_rel_ids[pk].append(rel_pk)
+
+			# Make sure we always have a result which has exactly the requested
+			# pks as keys
+			rel_ids_by_field_by_id[field] = {
+				pk: list(field_rel_ids.get(pk, []))
+				for pk in pks
+			}
 
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model
@@ -1413,14 +1421,15 @@ class ModelView(View):
 
 	def _annotate_obj_with_related_withs(self, obj, field_results):
 		for (w, (view, ids_dict, is_singular)) in field_results.items():
-			if '.' not in w:
-				if is_singular:
-					try:
-						obj[w] = list(ids_dict[obj['id']])[0]
-					except IndexError:
-						obj[w] = None
+			if '.' not in w and obj['id'] in ids_dict:
+				if not is_singular:
+					obj[w] = ids_dict[obj['id']]
+				elif len(ids_dict[obj['id']]) == 0:
+					obj[w] = None
+				elif len(ids_dict[obj['id']]) == 1:
+					obj[w] = ids_dict[obj['id']][0]
 				else:
-					obj[w] = list(ids_dict[obj['id']])
+					raise ValueError(f'multiple values for singular relation {w}: {obj["id"]} -> {ids_dict[obj["id"]]}')
 
 
 	def _generate_meta(self, include_meta, queryset, request, pk=None):
