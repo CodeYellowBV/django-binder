@@ -1,4 +1,4 @@
-from django import setup
+import django
 from django.conf import settings
 from django.core.management import call_command
 import os
@@ -55,6 +55,7 @@ settings.configure(**{
 		'binder.plugins.token_auth',
 		'tests',
 		'tests.testapp',
+		'binder.stored',
 	],
 	'MIGRATION_MODULES': {
 		'testapp': None,
@@ -111,7 +112,7 @@ settings.configure(**{
 	}
 })
 
-setup()
+django.setup()
 
 # Do the dance to ensure the models are synched to the DB.
 # This saves us from having to include migrations
