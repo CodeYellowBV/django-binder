@@ -48,6 +48,7 @@ class LoadedValuesMixin:
 
 
     def get_old_value(self, field):
+        field = type(self)._meta.get_field(field).name
         try:
             return self.__loaded_values[field]
         except KeyError:

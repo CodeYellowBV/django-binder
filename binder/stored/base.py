@@ -127,11 +127,8 @@ class Stored:
 
 
 def update_queryset(queryset, name, expr):
-	updates = []
-	for obj in queryset.annotate(updated_value=expr):
-		setattr(obj, name, obj.updated_value)
-		updates.append(obj)
-	queryset.model.objects.bulk_update(updates, [name])
+	for pk, value in queryset.annotate(value=expr).values_list('pk', 'value'):
+		queryset.model.objects.filter(pk=pk).update(**{name: value})
 
 
 def register_init(model, name, expr):
