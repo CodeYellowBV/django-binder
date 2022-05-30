@@ -1,7 +1,9 @@
 from contextlib import contextmanager
+import json
 
-from django.test import TestCase
 from django.db import connection
+from django.test import TestCase
+from django.contrib.auth.models import User
 
 from .testapp.models import Zoo, Animal
 
@@ -68,3 +70,27 @@ class StoredTest(TestCase):
 		with collect_queries() as queries:
 			animal.save()
 		self.assertGreater(len(queries), 1)
+
+	def test_cannot_update_through_api(self):
+		user = User(username='test', is_superuser=True)
+		user.set_password('test')
+		user.save()
+
+		zoo = Zoo.objects.create(name='Zoo')
+
+		zoo.refresh_from_db()
+		self.assertEqual(zoo.stored_animal_count, 0)
+
+		self.assertTrue(self.client.login(username='test', password='test'))
+		res = self.client.put(
+			f'/zoo/{zoo.pk}/',
+			data={'stored_animal_count': 1337},
+			content_type='application/json',
+		)
+		self.assertEqual(res.status_code, 200)
+		res = json.loads(res.content)
+		self.assertEqual(res['stored_animal_count'], 0)
+		self.assertIn('stored_animal_count', res['_meta']['ignored_fields'])
+
+		zoo.refresh_from_db()
+		self.assertEqual(zoo.stored_animal_count, 0)

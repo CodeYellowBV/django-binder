@@ -105,7 +105,7 @@ class Stored:
 		kwargs['blank'] = True
 		kwargs['null'] = True
 		field = type(field)(*args, **kwargs)
-		field.__binder_stored_expr = self.expr
+		field._binder_stored_expr = self.expr
 
 		# Add the field
 		def add_field(**kwargs):

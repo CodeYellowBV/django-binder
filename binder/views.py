@@ -1892,6 +1892,9 @@ class ModelView(View):
 		# Regular fields and FKs
 		for f in self.model._meta.fields:
 			if f.name == field:
+				if hasattr(f, '_binder_stored_expr'):
+					raise BinderReadOnlyFieldError(self.model.__name__, field)
+
 				if isinstance(f, models.ForeignKey):
 					if not (value is None or isinstance(value, int)):
 						raise BinderFieldTypeError(self.model.__name__, field)
