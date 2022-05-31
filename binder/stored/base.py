@@ -88,28 +88,28 @@ class Stored:
 		# We dont actually want this to be the attribute
 		delattr(model, name)
 
-		# Get field
-		fix_output_field(self.expr, model)
-		if isinstance(self.expr, F):
-			field = self.expr._output_field_or_none
-		elif isinstance(self.expr, BaseExpression):
-			field = self.expr.field
-		else:
-			raise ValueError(
-				'{}.{} is not a valid django query expression'
-				.format(model.__name__, name)
-			)
-
-		# Make blank & nullable copy of field
-		_, _, args, kwargs = field.deconstruct()
-		kwargs['blank'] = True
-		kwargs['null'] = True
-		field = type(field)(*args, **kwargs)
-		field._binder_stored_expr = self.expr
-
 		# Add the field
 		def add_field(**kwargs):
 			class_prepared.disconnect(add_field, sender=model)
+
+			# Get field
+			fix_output_field(self.expr, model)
+			if isinstance(self.expr, F):
+				field = self.expr._output_field_or_none
+			elif isinstance(self.expr, BaseExpression):
+				field = self.expr.field
+			else:
+				raise ValueError(
+					'{}.{} is not a valid django query expression'
+					.format(model.__name__, name)
+				)
+
+			# Make blank & nullable copy of field
+			_, _, args, kwargs = field.deconstruct()
+			kwargs['blank'] = True
+			kwargs['null'] = True
+			field = type(field)(*args, **kwargs)
+			field._binder_stored_expr = self.expr
 
 			model.add_to_class(name, field)
 
