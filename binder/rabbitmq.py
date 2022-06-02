@@ -2,7 +2,6 @@ import pathlib
 import pika
 
 from django.conf import settings
-from inter_process_producers_consumer import try_run_consumer
 from threading import Semaphore, Thread
 
 
@@ -50,6 +49,8 @@ def _consume(consumer, payload):
     consumed_payload_semaphore.acquire()
 
 def main():
+    from inter_process_producers_consumer import try_run_consumer
+
     try_run_consumer('rabbitmq-consumer.lock', _consumer_setup, _consume)
 
 if __name__ == '__main__':
