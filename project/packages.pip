@@ -5,3 +5,4 @@ psycopg2
 requests
 openpyxl
 fasteners
+pika
