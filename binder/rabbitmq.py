@@ -1,9 +1,12 @@
+import pathlib
 import pika
 
 from django.conf import settings
-from binder.inter_process_producers_consumer import produce
-from binder.json import jsondumps
+from inter_process_producers_consumer import try_run_consumer
 from threading import Semaphore, Thread
+
+
+RABBITMQ_CONSUMER_PATH = pathlib.Path(__file__).absolute()
 
 
 def _rabbitmq_thread_function(consumer):
@@ -46,8 +49,8 @@ def _consume(consumer, payload):
     produced_payload_semaphore.release()
     consumed_payload_semaphore.acquire()
 
-def _consumer_shutdown():
-    pass
+def main():
+    try_run_consumer('rabbitmq-consumer.lock', _consumer_setup, _consume)
 
-def basic_publish(data, rooms):
-    produce(jsondumps({ 'data': data, 'rooms': rooms }), 'rabbitmq-consumer.lock', _consumer_setup, _consume, _consumer_shutdown)
+if __name__ == '__main__':
+    main()

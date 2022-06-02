@@ -1,7 +1,8 @@
 from django.conf import settings
 
 from .json import jsondumps
-from binder.rabbitmq import basic_publish
+from binder.inter_process_producers_consumer import produce
+from binder.rabbitmq import RABBITMQ_CONSUMER_PATH
 import requests
 from requests.exceptions import RequestException
 
@@ -33,7 +34,7 @@ class RoomController(object):
 
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
-        basic_publish(data, rooms)
+        produce(jsondumps({ 'data': data, 'rooms': rooms }), RABBITMQ_CONSUMER_PATH)
     if getattr(settings, 'HIGH_TEMPLAR_URL', None):
         url = getattr(settings, 'HIGH_TEMPLAR_URL')
         try:
