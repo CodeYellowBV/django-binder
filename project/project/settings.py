@@ -41,6 +41,7 @@ INSTALLED_APPS = [
 	'binder.plugins.token_auth',
 	'binder.plugins.my_filters',
 	'testapp',
+	'binder.stored',
 ]
 
 MIDDLEWARE = [
