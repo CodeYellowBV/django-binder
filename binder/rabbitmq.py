@@ -1,8 +1,8 @@
 import pika
 
 from django.conf import settings
-from inter_process_producers_consumer import produce
-from .json import jsondumps
+from binder.inter_process_producers_consumer import produce
+from binder.json import jsondumps
 from threading import Semaphore, Thread
 
 

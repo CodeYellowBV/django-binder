@@ -1,7 +1,7 @@
 from django.conf import settings
 
 from .json import jsondumps
-from rabbitmq import basic_publish
+from binder.rabbitmq import basic_publish
 import requests
 from requests.exceptions import RequestException
 
