@@ -72,7 +72,7 @@ def _try_produce(payload, consumer_path, consumer_parameters):
             client_socket.sendall(bytes(payload_length, 'utf-8'))
             client_socket.sendall(bytes(payload, 'utf-8'))
             return True
-    except ConnectionRefusedError:
+    except ConnectionRefusedError or TimeoutError:
         return False
 
 def produce(payload, consumer_path, consumer_parameters):

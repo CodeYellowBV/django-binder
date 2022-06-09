@@ -57,7 +57,7 @@ def _consume(consumer, payload):
 def main():
     from inter_process_producers_consumer import try_run_consumer
 
-    try_run_consumer('rabbitmq-consumer.lock', _consumer_setup, _consume)
+    try_run_consumer('/tmp/binder-rabbitmq-consumer.lock', _consumer_setup, _consume)
 
 if __name__ == '__main__':
     main()
