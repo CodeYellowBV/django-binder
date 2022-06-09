@@ -5,12 +5,12 @@ import time
 HOST = '127.0.0.1' # I don't want to expose this anyway, so localhost is fine
 PORT = 22102
 
-def _retry(task, wait_time, num_attempts):
-    for _ in range(num_attempts):
+def _retry(task, min_wait_time, max_wait_time, num_attempts):
+    for attempt_counter in range(num_attempts):
         if task():
             return
         else:
-            time.sleep(wait_time)
+            time.sleep(min_wait_time + (max_wait_time - min_wait_time) * (attempt_counter / num_attempts))
     raise RuntimeError('Reached maximum number of retries')
 
 # 8 characters to encode the length should be more than enough
@@ -68,4 +68,4 @@ def _try_produce(payload, consumer_path, consumer_parameters):
         return False
 
 def produce(payload, consumer_path, consumer_parameters):
-    _retry(lambda: _try_produce(payload, consumer_path, consumer_parameters), 0.01, 10)
+    _retry(lambda: _try_produce(payload, consumer_path, consumer_parameters), 0.01, 1.0, 10)
