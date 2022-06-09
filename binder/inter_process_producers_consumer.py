@@ -58,10 +58,8 @@ def try_run_consumer(lock_path, consumer_setup, consume):
         debug_log('lock_unavailable', 'Failed to get the log')
 
 
-def _try_produce(payload, consumer_path):
-    from binder.utils import debug_log
-
-    consumer_process = os.popen('python3 ' + str(consumer_path.absolute()), mode="w")
+def _try_produce(payload, consumer_path, consumer_parameters):
+    consumer_process = os.popen('python3 ' + str(consumer_path.absolute()) + ' ' + consumer_parameters, mode="w")
     consumer_process.detach()
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
@@ -73,10 +71,9 @@ def _try_produce(payload, consumer_path):
                 payload_length = '0' + payload_length
             client_socket.sendall(bytes(payload_length, 'utf-8'))
             client_socket.sendall(bytes(payload, 'utf-8'))
-            debug_log('try_produce', 'payload is ' + payload)
             return True
     except ConnectionRefusedError:
         return False
 
-def produce(payload, consumer_path):
-    _retry(lambda: _try_produce(payload, consumer_path), 0.01, 10)
+def produce(payload, consumer_path, consumer_parameters):
+    _retry(lambda: _try_produce(payload, consumer_path, consumer_parameters), 0.01, 10)

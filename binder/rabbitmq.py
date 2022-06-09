@@ -1,7 +1,6 @@
 import pathlib
 import pika
 
-from django.conf import settings
 from threading import Semaphore, Thread
 
 
@@ -10,18 +9,20 @@ RABBITMQ_CONSUMER_PATH = pathlib.Path(__file__).absolute()
 
 def _rabbitmq_thread_function(consumer):
     from utils import debug_log
+    from sys import argv
 
     (produced_payload_semaphore, consumed_payload_semaphore, produced_payload) = consumer
     debug_log('rabbitmq_start', 'Started rabbitmq thread')
 
-    connection_credentials = pika.PlainCredentials(
-        settings.HIGH_TEMPLAR['rabbitmq']['username'],
-        settings.HIGH_TEMPLAR['rabbitmq']['password'],
-    )
-    connection_parameters = pika.ConnectionParameters(
-        settings.HIGH_TEMPLAR['rabbitmq']['host'],
-        credentials=connection_credentials,
-    )
+    rabbitmq_username = argv[1]
+    rabbitmq_password = argv[2]
+    rabbitmq_host = argv[3]
+
+    debug_log('rabbitmq_arguments', 'username=' + rabbitmq_username + ' and password=' + rabbitmq_password + ' and host=' + rabbitmq_host)
+
+    connection_credentials = pika.PlainCredentials(rabbitmq_username, rabbitmq_password)
+    connection_parameters = pika.ConnectionParameters(rabbitmq_host, credentials=connection_credentials)
+
     connection = pika.BlockingConnection(parameters=connection_parameters)
     channel = connection.channel()
     debug_log('rabbitmq_open', 'Opened RabbitMQ channel')
