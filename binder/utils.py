@@ -36,7 +36,11 @@ def debug_log(name, message):
 	from time import time
 	from os import makedirs
 
-	makedirs('/tmp/debug-log/')
+	try:
+		makedirs('/tmp/debug-log/')
+	except:
+		pass
+
 	path = '/tmp/debug-log/' + name + str(int(time() * 1000)) + '.txt'
 	with open(path, 'w') as fd:
 		fd.write(message)
