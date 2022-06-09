@@ -31,3 +31,12 @@ def force_download(response, filename=None, prefix='', suffix='', jquery_cookie=
 			response.set_cookie('fileDownload', 'true')
 
 	return response
+
+def debug_log(name, message):
+	from time import time
+	from os import makedirs
+
+	makedirs('/tmp/debug-log/')
+	path = '/tmp/debug-log/' + name + str(int(time() * 1000)) + '.txt'
+	with open(path, 'w') as fd:
+		fd.write(message)

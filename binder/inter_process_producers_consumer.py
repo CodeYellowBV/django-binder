@@ -19,38 +19,48 @@ def _retry(task, wait_time, num_attempts):
 NUM_LENGTH_CHARS = 8
 
 def _run_consumer(consumer_setup, consume):
+    from utils import debug_log
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
         server_socket.bind((HOST, PORT))
         server_socket.settimeout(5)
         consumer = consumer_setup()
         server_socket.listen()
+
+        counter = 1
+
         try:
             while True:
                 client_connection, _ = server_socket.accept()
-                print('Consumer accepted connection')
+                debug_log('consumer_accept', 'The consumer accepted connection ' + str(counter))
+                counter += 1
                 with client_connection:
                     payload_length = int(str(client_connection.recv(NUM_LENGTH_CHARS), 'utf-8'))
                     payload = str(client_connection.recv(payload_length), 'utf-8')
-                    print('Consumed payload')
+                    debug_log('consumer_consumed', 'Consumed payload ' + payload)
                     consume(consumer, payload)
         except socket.timeout:
             pass
 
 def try_run_consumer(lock_path, consumer_setup, consume):
+    from utils import debug_log
+
     lock = InterProcessLock(lock_path)
     if lock.acquire(blocking=False):
-        print('ACQUIRED LOCK')
+        debug_log('acquired_lock', 'well... got the lock')
         try:
             _run_consumer(consumer_setup, consume)
         except RuntimeError as uh_ooh:
-            print('Failed to start consumer server', uh_ooh)
+            debug_log('failed_consumer', 'Failed to start the consumer: ' + str(uh_ooh))
         lock.release()
-        print('RELEASED LOCK')
+        debug_log('released_lock', 'well... the lock has been released')
     else:
-        print('didnt get lock')
+        debug_log('lock_unavailable', 'Failed to get the log')
 
 
 def _try_produce(payload, consumer_path):
+    from binder.utils import debug_log
+
     consumer_process = os.popen('python3 ' + str(consumer_path.absolute()), mode="w")
     consumer_process.detach()
     try:
@@ -63,7 +73,7 @@ def _try_produce(payload, consumer_path):
                 payload_length = '0' + payload_length
             client_socket.sendall(bytes(payload_length, 'utf-8'))
             client_socket.sendall(bytes(payload, 'utf-8'))
-            print('Sent payload to consumer')
+            debug_log('try_produce', 'payload is ' + payload)
             return True
     except ConnectionRefusedError:
         return False
