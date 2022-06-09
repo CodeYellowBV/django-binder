@@ -10,6 +10,7 @@ RABBITMQ_CONSUMER_PATH = pathlib.Path(__file__).absolute()
 
 def _rabbitmq_thread_function(consumer):
     (produced_payload_semaphore, consumed_payload_semaphore, produced_payload) = consumer
+    print('Started rabbitmq thread')
 
     connection_credentials = pika.PlainCredentials(
         settings.HIGH_TEMPLAR['rabbitmq']['username'],
@@ -21,10 +22,12 @@ def _rabbitmq_thread_function(consumer):
     )
     connection = pika.BlockingConnection(parameters=connection_parameters)
     channel = connection.channel()
+    print('Opened RabbitMQ channel')
     while True:
         has_task = produced_payload_semaphore.acquire(timeout=0.01)
         if has_task:
             channel.basic_publish('hightemplar', routing_key='*', body=produced_payload[0])
+            print('Published payload')
             consumed_payload_semaphore.release()
         connection.process_data_events(0)
 

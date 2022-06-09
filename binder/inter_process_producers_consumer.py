@@ -27,9 +27,11 @@ def _run_consumer(consumer_setup, consume):
         try:
             while True:
                 client_connection, _ = server_socket.accept()
+                print('Consumer accepted connection')
                 with client_connection:
                     payload_length = int(str(client_connection.recv(NUM_LENGTH_CHARS), 'utf-8'))
                     payload = str(client_connection.recv(payload_length), 'utf-8')
+                    print('Consumed payload')
                     consume(consumer, payload)
         except socket.timeout:
             pass
@@ -61,6 +63,7 @@ def _try_produce(payload, consumer_path):
                 payload_length = '0' + payload_length
             client_socket.sendall(bytes(payload_length, 'utf-8'))
             client_socket.sendall(bytes(payload, 'utf-8'))
+            print('Sent payload to consumer')
             return True
     except ConnectionRefusedError:
         return False
