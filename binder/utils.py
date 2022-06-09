@@ -38,7 +38,7 @@ def debug_log(name, message):
 
 	try:
 		makedirs('/tmp/debug-log/')
-	except:
+	except FileExistsError:
 		pass
 
 	path = '/tmp/debug-log/' + name + str(int(time() * 1000)) + '.txt'

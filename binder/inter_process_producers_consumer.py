@@ -2,8 +2,6 @@ import os
 import socket
 import time
 
-from fasteners import InterProcessLock
-
 HOST = '127.0.0.1' # I don't want to expose this anyway, so localhost is fine
 PORT = 22102
 
@@ -23,6 +21,7 @@ def _run_consumer(consumer_setup, consume):
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
         server_socket.bind((HOST, PORT))
+        debug_log('consumer_started', 'A consumer managed to bind itself to the port')
         server_socket.settimeout(5)
         consumer = consumer_setup()
         server_socket.listen()
@@ -42,20 +41,13 @@ def _run_consumer(consumer_setup, consume):
         except socket.timeout:
             pass
 
-def try_run_consumer(lock_path, consumer_setup, consume):
+def try_run_consumer(consumer_setup, consume):
     from utils import debug_log
 
-    lock = InterProcessLock(lock_path)
-    if lock.acquire(blocking=False):
-        debug_log('acquired_lock', 'well... got the lock')
-        try:
-            _run_consumer(consumer_setup, consume)
-        except RuntimeError as uh_ooh:
-            debug_log('failed_consumer', 'Failed to start the consumer: ' + str(uh_ooh))
-        lock.release()
-        debug_log('released_lock', 'well... the lock has been released')
-    else:
-        debug_log('lock_unavailable', 'Failed to get the log')
+    try:
+        _run_consumer(consumer_setup, consume)
+    except OSError as error:
+        debug_log('consumer_failed_start', 'Failed to start the consumer: ' + str(error))
 
 
 def _try_produce(payload, consumer_path, consumer_parameters):
