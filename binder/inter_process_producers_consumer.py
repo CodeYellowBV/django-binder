@@ -18,8 +18,13 @@ NUM_LENGTH_CHARS = 8
 
 def _run_consumer(consumer_setup, consume):
     from utils import debug_log
+    from struct import pack
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+        # This sockopt will cause the server socket port to be freed instantly after the server
+        # socket is closed. If we would NOT do this, the entire producer-consumer system would
+        # hang when a payload is produced soon after a consumer has stopped.
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, pack('ii', 1, 0))
         server_socket.bind((HOST, PORT))
         debug_log('consumer_started', 'A consumer managed to bind itself to the port')
         server_socket.settimeout(5)
