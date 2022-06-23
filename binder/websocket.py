@@ -39,7 +39,7 @@ def trigger(data, rooms):
         global mock_trigger_listeners
         if len(mock_trigger_listeners) > 0:
             for trigger_listener in mock_trigger_listeners:
-                trigger_listener(jsondumps({ 'data': data, 'rooms' : rooms }))
+                trigger_listener(jsondumps({ 'data': data, 'rooms': rooms }))
         else:
             rabbitmq_consumer_args = settings.HIGH_TEMPLAR['rabbitmq']['username'] + ' ' + settings.HIGH_TEMPLAR['rabbitmq']['password'] + ' ' + settings.HIGH_TEMPLAR['rabbitmq']['host']
             produce(jsondumps({ 'data': data, 'rooms': rooms }), RABBITMQ_CONSUMER_PATH, rabbitmq_consumer_args)

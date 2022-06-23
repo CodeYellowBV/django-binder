@@ -33,7 +33,7 @@ def _rabbitmq_thread_function(consumer):
 
     connection = pika.BlockingConnection(parameters=connection_parameters)
     channel = connection.channel()
-    
+
     # To communicate a stop message, the length of produced_payload will be set to 0
     while len(produced_payload) == 1:
 
@@ -86,11 +86,11 @@ Sends the stop signal to the RabbitMQ thread
 """
 def _consumer_shutdown(consumer):
     (_, _, produced_payload) = consumer
-    
+
     # This will change the length of produced_payload to zero, which is the stop signal for
     # the RabbitMQ thread
     produced_payload.pop()
-    
+
     # Give the RabbitMQ thread some time to observe the signal and cleanly close the connection
     sleep(0.1)
 

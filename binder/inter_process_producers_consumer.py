@@ -20,7 +20,7 @@ The host at which the consumer will listen for incoming producer connections
 """
 HOST = '127.0.0.1'
 
-# We might want to stop hardcoding the port at some point and use some environment variable instead, 
+# We might want to stop hardcoding the port at some point and use some environment variable instead,
 # but this is not as easy as it looks: the consumer will run in a different process and thus won't
 # be able to read the environment variables, so it will have to be propgated some other way.
 """
@@ -34,11 +34,11 @@ The consumer will stop when it hasn't received anything for *MAX_CONSUMER_WAIT_T
 MAX_CONSUMER_WAIT_TIME = 5
 
 """
-Retries the given *task* *num_attempts* times until it succeeds (returns True). 
+Retries the given *task* *num_attempts* times until it succeeds (returns True).
 
-After each failed attempt, it will wait between *min_wait_time* and *max_wait_time* seconds 
-before doing the next attempt. The time between the first attempt and the second attempt is 
-the shortest, and the time between consecutive attempts will take longer and longer (but never 
+After each failed attempt, it will wait between *min_wait_time* and *max_wait_time* seconds
+before doing the next attempt. The time between the first attempt and the second attempt is
+the shortest, and the time between consecutive attempts will take longer and longer (but never
 longer than *max_wait_time*).
 
 This behavior is nice because it ensures that the first failure is retried quickly while decreasing
@@ -67,10 +67,10 @@ NUM_LENGTH_CHARS = 8
 Tries to start the consumer.
 
 This method will try to open a TCP server socket at port *PORT*. If that succeeds, it will
-call *consumer_setup()*. The result of *consumer_setup()* is the consumer. 
+call *consumer_setup()*. The result of *consumer_setup()* is the consumer.
 
-Then, it will listen for incoming socket connections from the producers. For each incoming 
-connection, it will call *consume(consumer, payload)* where *payload* is the payload received 
+Then, it will listen for incoming socket connections from the producers. For each incoming
+connection, it will call *consume(consumer, payload)* where *payload* is the payload received
 from the incoming connection. (Currently, it allows only 1 payload per producer connection.)
 
 When no incoming connections have been made for *MAX_CONSUMER_WAIT_TIME* seconds, the server
@@ -138,7 +138,7 @@ def _try_produce(payload, consumer_path, consumer_parameters):
 """
 Ensures that the given *payload* is 'consumed' in another process. The *consumer_path* should
 point to a .py file that will call the *try_run_consumer* method of this class. If the consumer
-is not yet running, this method will basically execute "python3 consumer_path consumer_parameters* 
+is not yet running, this method will basically execute "python3 consumer_path consumer_parameters*
 in a new process.
 """
 def produce(payload, consumer_path, consumer_parameters):
