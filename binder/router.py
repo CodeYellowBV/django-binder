@@ -1,6 +1,5 @@
 from importlib import import_module
 
-import django
 from django.apps import apps
 from django.urls import reverse, re_path
 
