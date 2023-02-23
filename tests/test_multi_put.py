@@ -654,3 +654,16 @@ class MultiPutDeletionsTest(TestCase):
 		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 418)
 
+
+	def test_deletions_with_nullable_ordering(self):
+		donor = Donor(name='Frits')
+		donor.save()
+
+		model_data = {
+			'deletions': [donor.id],
+		}
+		response = self.client.put('/donor/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		with self.assertRaises(Donor.DoesNotExist):
+			donor.refresh_from_db()
