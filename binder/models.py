@@ -983,7 +983,7 @@ class BinderImageField(BinderFileField):
 		if not file and not force:
 			return
 
-		dimension_fields_filled = not(
+		dimension_fields_filled = not (
 			(self.width_field and not getattr(instance, self.width_field)) or
 			(self.height_field and not getattr(instance, self.height_field))
 		)
