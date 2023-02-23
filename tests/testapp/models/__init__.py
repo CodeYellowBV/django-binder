@@ -3,6 +3,7 @@ import os
 
 # We have it all, from A to Z!
 from .animal import Animal
+from .donor import Donor
 from .caretaker import Caretaker
 from .contact_person import ContactPerson
 from .costume import Costume
