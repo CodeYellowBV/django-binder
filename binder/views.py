@@ -2885,7 +2885,7 @@ class ModelView(View):
 				else:
 					resp = StreamingHttpResponse(open(file_field.path, 'rb'), content_type=content_type)
 			except FileNotFoundError:
-				logger.error('Expected file {} not found'.format(file_field.path))
+				logger.error('Expected file {} not found'.format(file_field.name))
 				raise BinderNotFound(file_field_name)
 
 			if 'download' in request.GET:
@@ -2937,7 +2937,7 @@ class ModelView(View):
 		try:
 			method = getattr(self, 'filefield_get_name_' + file_field.field.name)
 		except AttributeError:
-			return os.path.basename(file_field.path)
+			return os.path.basename(file_field.name)
 		return method(instance=instance, request=request, file_field=file_field)
 
 

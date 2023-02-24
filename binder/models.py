@@ -717,7 +717,7 @@ class BinderFieldFile(FieldFile):
 		if not self.name:
 			self._content_type = None
 		elif self._content_type is None:
-			self._content_type, _ = mimetypes.guess_type(self.path)
+			self._content_type, _ = mimetypes.guess_type(self.name)
 		return self._content_type
 
 	# So here we have a bunch of methods that might alter the data or name of
