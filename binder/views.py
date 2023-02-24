@@ -2523,10 +2523,10 @@ class ModelView(View):
 			if not file_field:
 				raise BinderNotFound(file_field_name)
 
-			guess = mimetypes.guess_type(file_field.path)
+			guess = mimetypes.guess_type(file_field.name)
 			guess = guess[0] if guess and guess[0] else 'application/octet-stream'
 			try:
-				resp = StreamingHttpResponse(open(file_field.path, 'rb'), content_type=guess)
+				resp = StreamingHttpResponse(file_field.open(), content_type=guess)
 			except FileNotFoundError:
 				logger.error('Expected file {} not found'.format(file_field.path))
 				raise BinderNotFound(file_field_name)
