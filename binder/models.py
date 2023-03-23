@@ -6,6 +6,7 @@ import json
 from collections import defaultdict
 from datetime import date, datetime, time
 from contextlib import suppress
+from decimal import Decimal
 
 from django import forms
 from django.db import models
@@ -234,6 +235,16 @@ class FloatFieldFilter(FieldFilter):
 		except ValueError:
 			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
+
+class DecimalFieldFilter(FieldFilter):
+	fields = [models.DecimalField]
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
+
+	def clean_value(self, qualifier, v):
+		try:
+			return Decimal(v)
+		except ValueError:
+			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
 
 class DateFieldFilter(FieldFilter):
