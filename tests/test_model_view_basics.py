@@ -5,7 +5,8 @@ from binder.json import jsonloads
 from django.contrib.auth.models import User
 
 from .compare import assert_json, EXTRA
-from .testapp.models import Animal, Costume, Zoo, ZooEmployee, Caretaker, Gate
+from .testapp.models import Animal, Costume, Zoo, ZooEmployee, Caretaker, Gate, Donor
+
 
 class ModelViewBasicsTest(TestCase):
 	def setUp(self):
@@ -821,3 +822,40 @@ class ModelViewBasicsTest(TestCase):
 			'meta': {'total_records': 1},
 			EXTRA(): None,  # Debug, meta, with, etc
 		})
+
+class TestModelViewBasicsWithNullableForeignKeyDefaultOrdering(TestCase):
+	def setUp(self):
+		super().setUp()
+		u = User(username='testuser', is_active=True, is_superuser=True)
+		u.set_password('test')
+		u.save()
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
+
+
+	def test_put_model_with_nullable_foreign_key_in_default_ordering(self):
+		donor = Donor.objects.create(name='Frits')
+
+		model_data = {
+			'name': 'Karel'
+		}
+
+		response = self.client.put(
+			'/donor/{}/?with=zoo'.format(donor.id),
+			data=json.dumps(model_data),
+			content_type='application/json'
+		)
+		self.assertEqual(response.status_code, 200)
+
+	def test_delete_model_with_nullable_foreign_key_in_default_ordering(self):
+		donor = Donor.objects.create(name='Frits')
+
+
+		response = self.client.delete(
+			'/donor/{}/?with=zoo'.format(donor.id),
+			data={},
+			content_type='application/json'
+		)
+
+		self.assertEqual(response.status_code, 204)

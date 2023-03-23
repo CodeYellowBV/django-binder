@@ -718,7 +718,7 @@ class ModelView(View):
 			for obj_id, data in datas_by_id.items():
 				# TODO: Don't require OneToOneFields in the m2m_fields list
 				if isinstance(local_field, models.OneToOneRel):
-					assert(len(idmap[obj_id]) <= 1)
+					assert len(idmap[obj_id]) <= 1
 					data[field_name] = idmap[obj_id][0] if len(idmap[obj_id]) == 1 else None
 				else:
 					data[field_name] = idmap[obj_id]
@@ -1634,7 +1634,7 @@ class ModelView(View):
 
 		try:
 			obj.save()
-			assert(obj.pk is not None) # At this point, the object must have been created.
+			assert obj.pk is not None # At this point, the object must have been created.
 		except ValidationError as ve:
 			validation_errors.append(self.binder_validation_error(obj, ve, pk=pk))
 
@@ -2330,7 +2330,7 @@ class ModelView(View):
 			# corresponding view here?  That would make it
 			# more consistent with non-multi-PUT and POST,
 			# also requiring view permissions.
-			qs = model.objects.filter(pk__in=oids).select_for_update()
+			qs = model.objects.filter(pk__in=oids).order_by().select_for_update()
 			for obj in qs:
 				locked_objects[(model, obj.pk)] = obj
 
