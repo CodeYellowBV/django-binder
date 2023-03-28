@@ -1,3 +1,4 @@
+
 ## HEAD
 
 ### BUGFIX csv export with null foreign keys
@@ -48,6 +49,8 @@ plugin.  This should reduce the number of checks done while saving
 objects.  However, it also means that if a non-binder model is saved
 it will no longer be validated.  If you want this to happen you need
 to override `_store` to do some checking.
+
+Django 2 support has been removed.
 
 ### Features
 - TextFields can now be filtered with the `isnull` qualifier (#134).
