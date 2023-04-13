@@ -7,6 +7,7 @@ import hashlib
 import datetime
 import mimetypes
 import functools
+import base64
 from collections import defaultdict, namedtuple
 from contextlib import ExitStack
 
@@ -2272,6 +2273,12 @@ class ModelView(View):
 				if 'prefix' in request.GET:
 					filename = request.GET['prefix'] + ' - ' + filename
 				resp['Content-Disposition'] = 'attachment; filename="{}"'.format(filename)
+			elif 'encode' in request.GET:
+				with open(file_field.path, 'rb') as file_data:
+					header = bytes(f"data:{guess};base64,", encoding='utf-8')
+					data = file_data.read()
+					encoded_data = base64.b64encode(data)
+				return HttpResponse(header+encoded_data)
 			return resp
 
 		if request.method == 'POST':
