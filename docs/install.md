@@ -24,7 +24,7 @@ CSRF_FAILURE_VIEW = 'binder.router.csrf_failure'
 In `urls.py`, add the following:
 
 ```python
-from django.conf.urls import url, include
+from django.urls import re_path, include
 
 import binder.router
 import binder.views
@@ -33,8 +33,8 @@ import binder.models
 router = binder.router.Router().register(binder.views.ModelView)
 
 urlpatterns = [
-	url(r'^', include(router.urls)),
-	url(r'^', binder.views.api_catchall, name='catchall'),
+	re_path(r'^', include(router.urls)),
+	re_path(r'^', binder.views.api_catchall, name='catchall'),
 ]
 
 binder.models.install_history_signal_handlers(binder.models.BinderModel)
