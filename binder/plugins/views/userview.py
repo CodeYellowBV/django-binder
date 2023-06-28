@@ -290,7 +290,7 @@ class UserViewMixIn(UserBaseMixin):
 
 		return HttpResponse(status=204)
 
-	@never_cache
+	@method_decorator(never_cache)
 	@list_route(name='send_activation_email', unauthenticated=True)
 	@no_scoping_required()
 	def send_activation_email(self, request):
@@ -355,7 +355,7 @@ class UserViewMixIn(UserBaseMixin):
 		return response
 
 	@method_decorator(sensitive_post_parameters())
-	@never_cache
+	@method_decorator(never_cache)
 	@detail_route(name='activate', unauthenticated=True)
 	@no_scoping_required()
 	def activate(self, request, pk=None):
@@ -406,7 +406,7 @@ class UserViewMixIn(UserBaseMixin):
 		return self.respond_with_user(request, user.id)
 
 	@method_decorator(sensitive_post_parameters())
-	@never_cache
+	@method_decorator(never_cache)
 	@detail_route(name='reset_password', unauthenticated=True, methods=['PUT'])
 	@no_scoping_required()
 	def reset_password(self, request, pk=None):
@@ -466,7 +466,7 @@ class UserViewMixIn(UserBaseMixin):
 		return self.respond_with_user(request, user.id)
 
 	@method_decorator(sensitive_post_parameters())
-	@never_cache
+	@method_decorator(never_cache)
 	@list_route(name='change_password')
 	@no_scoping_required()
 	def change_password(self, request):
