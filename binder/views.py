@@ -1411,10 +1411,19 @@ class ModelView(View):
 				if is_singular:
 					try:
 						obj[w] = list(ids_dict[obj['id']])[0]
-					except IndexError:
+					except (IndexError):
+						"""
+						Indexerror => no relation is found
+						KeyERror => No relation is known for this model.
+						"""
 						obj[w] = None
+					except KeyError:
+						pass
 				else:
-					obj[w] = list(ids_dict[obj['id']])
+					try:
+						obj[w] = list(ids_dict[obj['id']])
+					except KeyError:
+						pass
 
 
 	def _generate_meta(self, include_meta, queryset, request, pk=None):
