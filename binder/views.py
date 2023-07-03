@@ -1844,7 +1844,7 @@ class ModelView(View):
 
 		# Resize images that are too large.
 		if width > max_width or height > max_height:
-			img.thumbnail((max_width, max_height), Image.ANTIALIAS)
+			img.thumbnail((max_width, max_height), Image.LANCZOS)
 			logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
 			if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
 				img = img.convert("RGB")
