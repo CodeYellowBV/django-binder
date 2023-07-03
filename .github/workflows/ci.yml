@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.7", "3.8"]
-        django-version: ["2.1.1", "3.1.4"]
+        django-version: ["3.1.4"]
         database-engine: ["postgres", "mysql"]
 
     services:

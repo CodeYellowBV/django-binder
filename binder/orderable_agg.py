@@ -1,5 +1,5 @@
 # Taken from https://code.djangoproject.com/ticket/26067
-# To be removed when we depend on Django 2.2
+# Note that this is fixed for Postgres, but not yet Mysql / mssql, and this is thus extendended in other projects
 from django.db.models import TextField
 from django.db.models.expressions import F, OrderBy
 from django.db.models.aggregates import Aggregate
