@@ -29,6 +29,7 @@ class CsvExportTest(TestCase):
 		animal = Animal(name='test')
 		animal.save()
 
+		self.animal = animal
 		self.pictures = []
 
 		for i in range(3):
@@ -123,6 +124,19 @@ class CsvExportTest(TestCase):
 		self.assertEqual(data[1], [str(caretaker_1.id), 'Foo', 'boo!'])
 		self.assertEqual(data[2], [str(caretaker_2.id), 'Bar', 'boo!'])
 		self.assertEqual(data[3], [str(caretaker_3.id), 'Baz', 'boo!'])
+
+	def test_null_foreign_keys_will_not_fail(self):
+		response = self.client.get('/animal/download/')
+		self.assertEqual(200, response.status_code)
+		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
+
+		data = list(response_data)
+
+		# First line needs to be the header
+		self.assertEqual(data[0], ['ID', 'Zoo ID', 'Caretaker ID'])
+
+		# All other data needs to be ordered using the default ordering (by id, asc)
+		self.assertEqual(data[1], [str(self.animal.id), '', ''])
 
 	def test_context_aware_download_xlsx(self):
 		response = self.client.get('/picture/download/?response_type=xlsx')
