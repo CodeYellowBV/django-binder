@@ -11,7 +11,7 @@ from decimal import Decimal
 from django import forms
 from django.db import models
 from django.db.models.fields.files import FieldFile, FileField
-from django.contrib.postgres.fields import CITextField, ArrayField, JSONField, DateTimeRangeField as DTRangeField
+from django.contrib.postgres.fields import CITextField, ArrayField, DateTimeRangeField as DTRangeField
 from django.core import checks
 from django.core.files.base import File, ContentFile
 from django.core.files.images import ImageFile
@@ -395,7 +395,7 @@ class ArrayFieldFilter(FieldFilter):
 
 
 class JSONFieldFilter(FieldFilter):
-	fields = [JSONField]
+	fields = [models.JSONField]
 	# TODO: Element or path-based lookup is not supported yet
 	allowed_qualifiers = [None, 'contains', 'contained_by', 'has_key', 'has_any_keys', 'has_keys', 'isnull']
 
