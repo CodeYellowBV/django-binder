@@ -3,9 +3,12 @@ from django.db.models import Count, Value, Sum
 from binder.views import ModelView, Stat
 
 from ..models import Animal
+from binder.plugins.views import CsvExportView
 
 # From the api docs
-class AnimalView(ModelView):
+
+
+class AnimalView(ModelView, CsvExportView):
 	model = Animal
 	m2m_fields = ['costume']
 	searches = ['name__icontains']
@@ -29,3 +32,11 @@ class AnimalView(ModelView):
 			annotations=['magic_number'],
 		),
 	}
+	csv_settings = CsvExportView.CsvExportSettings(
+		withs=['zoo', 'caretaker'],
+		column_map=[
+			('id', 'ID'),
+			('zoo.id', 'Zoo ID'),
+			('caretaker.id', 'Caretaker ID'),
+		],
+	)

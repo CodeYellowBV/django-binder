@@ -289,7 +289,13 @@ class CsvExportView:
 					else:
 						# Assume that we have a mapping now
 						fk_ids = data[head_key]
-						if not isinstance(fk_ids, list):
+						
+
+						# If foreign key is null don't try to fetch the data and stop
+						if not fk_ids:
+							return
+
+						if type(fk_ids) != list:
 							fk_ids = [fk_ids]
 
 						# if head_key not in key_mapping:
