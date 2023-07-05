@@ -1417,10 +1417,19 @@ class ModelView(View):
 				if is_singular:
 					try:
 						obj[w] = list(ids_dict[obj['id']])[0]
-					except IndexError:
+					except (IndexError):
+						"""
+						Indexerror => no relation is found
+						KeyERror => No relation is known for this model.
+						"""
 						obj[w] = None
+					except KeyError:
+						pass
 				else:
-					obj[w] = list(ids_dict[obj['id']])
+					try:
+						obj[w] = list(ids_dict[obj['id']])
+					except KeyError:
+						pass
 
 
 	def _generate_meta(self, include_meta, queryset, request, pk=None):
@@ -1835,7 +1844,7 @@ class ModelView(View):
 
 		# Resize images that are too large.
 		if width > max_width or height > max_height:
-			img.thumbnail((max_width, max_height), Image.ANTIALIAS)
+			img.thumbnail((max_width, max_height), Image.LANCZOS)
 			logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
 			if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
 				img = img.convert("RGB")
