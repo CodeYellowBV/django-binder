@@ -1,6 +1,30 @@
 
 ## HEAD
 
+### Chained qualifiers
+Chained qualifiers have been added [T35707](https://phabricator.codeyellow.nl/T35707). For more information on how they work and how to use it see [documentation](/docs/api.md)
+
+#### Breaking change
+
+The `_filter_field` method signature has been changed from
+```
+def _filter_field(self, field_name, qualifier, value, invert, request, include_annotations, partial=''):
+```
+to
+```
+def _filter_field(self, field_name, qualifiers, value, invert, request, include_annotations, partial=''):
+```
+
+So it now contains an array of qualifiers instead of THE qualifier. 
+So for the call `api/caretaker?.last_seen:date:range` it will contain both date and range qualifiers.
+
+To get previously used qualifier variable and upgrade previously written code that was overriding `_filter_field` use: 
+```
+qualifier = qualifiers[0]
+```
+See full changes [here](https://github.com/CodeYellowBV/django-binder/pull/206/files#diff-0d5633deb444395cd44b49e7a39f87da98bb86de20666038277730991c62b1a5).
+
+
 ### Breaking changes
 
 The `_filter_field` method now returns a `Q()` object, not a queryset.

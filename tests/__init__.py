@@ -25,7 +25,7 @@ elif os.environ.get('BINDER_TEST_MYSQL', '0') == '1':
 	}
 else:
 	db_settings = {
-		'ENGINE': 'django.db.backends.postgresql_psycopg2',
+		'ENGINE': 'django.db.backends.postgresql',
 		'NAME': 'binder-test',
 		'HOST': 'localhost',
 		'USER': 'postgres',
@@ -51,6 +51,11 @@ settings.configure(**{
 		'django.contrib.auth',
 		'django.contrib.contenttypes',
 		'django.contrib.sessions',
+		*(
+			['django.contrib.postgres']
+			if db_settings['ENGINE'] == 'django.db.backends.postgresql' else
+			[]
+		),
 		'binder',
 		'binder.plugins.token_auth',
 		'tests',
@@ -116,7 +121,7 @@ setup()
 # Do the dance to ensure the models are synched to the DB.
 # This saves us from having to include migrations
 from django.core.management.commands.migrate import Command as MigrationCommand # noqa
-from django.db import connections # noqa
+from django.db import connection, connections # noqa
 from django.db.migrations.executor import MigrationExecutor # noqa
 
 # This is oh so hacky....
@@ -132,3 +137,8 @@ content_type = ContentType.objects.get_or_create(app_label='testapp', model='cou
 Permission.objects.get_or_create(content_type=content_type, codename='view_country')
 call_command('define_groups')
 
+
+# Create postgres extensions
+if db_settings['ENGINE'] == 'django.db.backends.postgresql':
+	with connection.cursor() as cursor:
+		cursor.execute('CREATE EXTENSION IF NOT EXISTS unaccent;')

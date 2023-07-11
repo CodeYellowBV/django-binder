@@ -49,6 +49,13 @@ To use a partial case-insensitive match, you can use `api/animal?.name:icontains
 
 Note that currently, it is not possible to search on many-to-many fields.
 
+#### Chaining multiple qualifiers
+Sometimes there is a need to chain multiple qualifiers in filtering. For example if you want to convert datetime to date and then do a range filtering.
+This can be achieved by using `api/caretaker?.last_seen:date:range`
+
+Other example would be if you want to search for city names, but without using accent in the names. For example search for `Weißenhorn` using term `weiss` or search for `Lünen` using `Lunen`. The syntax for it would be `.city_name:unaccent:icontains`. Take into account that for unaccent to work you need to install postgres `unaccent` extension.
+
+
 #### More advanced searching
 
 Sometimes you want to search on multiple fields at once.

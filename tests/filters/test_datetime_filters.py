@@ -140,6 +140,29 @@ class DateTimeFiltersTest(TestCase):
 		response = self.client.get('/caretaker/', data={'.last_seen:range': '2017-03-23T00:00:00Z,2017-03-24', 'order_by': 'last_seen'})
 		self.assertEqual(response.status_code, 418)
 
+	def test_datetime_filter_syntax_variations_with_chained_qualifiers(self):
+		# Implicitly we add T23:59:59Z here to make this correct.
+		response = self.client.get(
+			'/caretaker/', data={'.last_seen:date:gt': '2017-03-23', 'order_by': 'last_seen'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+
+		# Same as above, but to the range start we add T00:00:00Z
+		response = self.client.get(
+			'/caretaker/', data={'.last_seen:date:range': '2017-03-23,2017-03-23', 'order_by': 'last_seen'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(1, len(result['data']))
+
+		# Just a sanity check
+		response = self.client.get('/caretaker/', data={'.last_seen:date:range': '2017-03-23,2017-03-24', 'order_by': 'last_seen'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		self.assertEqual(2, len(result['data']))
 
 	def test_datetime_filter_syntax_errors_cause_error_response(self):
 		response = self.client.get('/caretaker/', data={'.last_seen': '1838-05'})
