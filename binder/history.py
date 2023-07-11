@@ -11,7 +11,8 @@ from django.dispatch import Signal
 from .json import jsondumps, JsonResponse
 
 
-transaction_commit = Signal(providing_args=['changeset'])
+# Providing args is ['changeset']
+transaction_commit = Signal()
 
 
 class Changeset(models.Model):
