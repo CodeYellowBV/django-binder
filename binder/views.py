@@ -424,6 +424,17 @@ class ModelView(View):
 	#  }
 	virtual_relations = {}
 
+	# A dict that looks like:
+	# {'filter_name': [
+	# 	'field.icontains',
+	# 	'otherField.field:icontains'
+	# ],
+	# }
+	# Allows you to hide multiple filters behind a filter name
+	# see _parse_filter, see api.md > "Filtering by groups (alternative_filters)"
+	# NOTICE: alternative_filters may not contain a field or annotation as key
+	alternative_filters = {}
+
 	@property
 	def AggStrategy(self):
 		if connections[self.model.objects.db].vendor == 'mysql':
@@ -1158,9 +1169,52 @@ class ModelView(View):
 		return FilterDescription(q, need_distinct)
 
 
+	# handle self.alternative_filters as part of _parse_filter
+	def _parse_alternative_filters(self, field, filter_heads, *args, **kwargs):
+		head, tail = re.fullmatch(r'([^.:]*)(.*)', field).groups()
+
+		# split not/any/all of the tail, by default a filter is treated as any
+		#   NOTE: not is_any ==> is_all
+		is_not = bool(re.search(r':not\b', tail))
+
+		is_any = bool(re.match(r':any\b', tail))
+		if is_any:
+			tail = tail[4:]
+		is_all = bool(re.match(r':all\b', tail))
+		if is_all and not is_any:
+			# if both is_any and is_all are true, we want the filter to fail
+			tail = tail[4:]
+
+		alts = []
+		for head in filter_heads:
+			field = head + tail
+			alt = self._parse_filter(field, *args, **kwargs)
+			alts.append(alt)
+		q, needs_distinct = alts[0]
+		for q_, needs_distinct_ in alts[1:]:
+			if is_not == is_all:
+				# :any (default)
+				# :not:all (NOTE that not is maintained inside the filter)
+				q |= q_
+			else:
+				# :all
+				# :not:any (NOTE that not is maintained inside the filter)
+				q &= q_
+			needs_distinct = needs_distinct or needs_distinct_
+		return FilterDescription(q, needs_distinct)
+
 	def _parse_filter(self, field, value, request, include_annotations, partial=''):
 		head, *tail = field.split('.')
 		need_distinct = False
+
+		alt_head = head.split(':')[0]
+		try:
+			# get head without trailing :sorter
+			filter_heads = self.alternative_filters[alt_head]
+		except KeyError:
+			pass
+		else:
+			return self._parse_alternative_filters(field, filter_heads, value, request, include_annotations, partial)
 
 		if not tail:
 			invert = False

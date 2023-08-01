@@ -61,6 +61,32 @@ class AnimalView(ModelView):
 
 After adding the above, you can search on a model by using `api/animal?search=12`, or `api/animal?search=Scooby`.
 
+#### Filtering by groups (alternative_filters)
+
+Sometimes you want to abstract filters for specific parts of the model (name, foreign ids, ...).
+This is a improvement over of `searches`.
+
+```python
+class AnimalView(ModelView):
+	model = Animal
+	alternative_filters = {
+		'name_filter': ['id:startswith', 'name:icontains'],
+		'zoo_history': ['zoo', 'zoo_of_birth'],
+	}
+```
+After adding the above, you can search these fields by using `api/animal?.name_filter=12`, or `api/animal?.zoo_history.name:icontains=Apeldoorn`.
+
+As you can see in above example, selectors like `:icontains` can be within the alternative_filters dict or outside of it
+
+The keys in the `alternative_filters` dictionary may not be fields on the model, or annotations!
+
+##### :any and :all
+You can use `:all` and `:any` in the filter fields. In the example above, using `api/animal?.zoo_history:all=Artis` would require both the `zoo` and `zoo_of_birth` to be equal to Artis, meanwhile `api/animal?.zoo_history:any=Artis` is equivalent to not using `:any` as `api/animal?.zoo_history=Artis`.
+
+Notice that `api/animal?.zoo_history:not:any=Artis` requires that both `zoo` and `zoo_of_birth` are NOT equal to Artis. Meanwhile `api/animal?.zoo_history:not:all=Artis` requires that at least one of `zoo` and `zoo_of_birth` are NOT equal to Artis. Again, one can use `:any` implicitly here, so `api/animal?.zoo_history:not=Artis` is equivalent ot `api/animal?.zoo_history:not:any=Artis`. The order of `:not` and `:any`/`:all` is irrelevant.
+
+It is NOT allowed to use both `:any` and `all` in one filter since this does not make any sense. Also notice that you must first `:all` or `:any`, and only then you can use other filters like `:not:icontains` or `:startswith` etc.
+
 ### Ordering the collection
 Ordering is a simple matter of enumerating the fields in the `order_by` query parameter, eg. `api/animal?order_by=name`.  If you want to make the ordering stable when there are multiple animals sharing the same name, you can separate with commas like `api/animal?order_by=name,id`.  The results will be sorted on name, and where the name is the same, they'll be sorted by `id`.
 

@@ -21,6 +21,12 @@ class ZooView(PermissionView):
     image_format_override = {
         'floor_plan': 'jpeg',
     }
+    alternative_filters={
+        'all_contact_name': [
+            'contacts.name',
+            'name',
+        ],
+    }
 
     # Override this method so we don't have to deal with actual permissions in testing
     def _require_model_perm(self, perm_type, request, pk=None):
