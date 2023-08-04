@@ -280,7 +280,7 @@ class CsvExportView:
 				head_key, subkey = key.split('.', 1)
 				if head_key in data:
 					new_prefix = '{}.{}'.format(prefix, head_key)
-					if type(data[head_key]) == dict:
+					if isinstance(data[head_key], dict):
 						return get_datum(data[head_key], subkey, new_prefix)
 					else:
 						# Assume that we have a mapping now
@@ -290,7 +290,7 @@ class CsvExportView:
 						if not fk_ids:
 							return
 
-						if type(fk_ids) != list:
+						if not isinstance(fk_ids, list):
 							fk_ids = [fk_ids]
 
 						# if head_key not in key_mapping:
@@ -310,7 +310,7 @@ class CsvExportView:
 				if len(col_definition) >= 3:
 					transform_function = col_definition[2]
 					datum = transform_function(datum, row, key_mapping)
-				if type(datum) == list:
+				if isinstance(datum, list):
 					datum = self.csv_settings.multi_value_delimiter.join(datum)
 				data.append(datum)
 			file_adapter.add_row(data)
