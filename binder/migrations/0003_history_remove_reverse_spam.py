@@ -60,12 +60,17 @@ def remove_reverse_spam(apps, schema_editor):
 				ct = 0
 				for change in Change.objects.filter(model=model.__name__, field=field.name):
 					ct += 1
-					before = set(json.loads(change.before))
-					after = set(json.loads(change.after))
-					change.before = json.dumps(sorted(before - after))
-					change.after = json.dumps(sorted(after - before))
-					change.diff = True
-					change.save()
+					try:
+						before = set(json.loads(change.before))
+						after = set(json.loads(change.after))
+						change.before = json.dumps(sorted(before - after))
+						change.after = json.dumps(sorted(after - before))
+						change.diff = True
+						change.save()
+					except TypeError as e:
+						# The above code makes the assumption that changes are always hashable. This is not necessarily
+						# the case. For now, if the change is not hashable, we do not clean up
+						print(f"\t Warning, could not clean up change {change.pk} {e} Before: {before} After: {after} ")
 
 				print('  cleaned {:>7} {}.{}'.format(ct, model.__name__, field.name))
 		print()
