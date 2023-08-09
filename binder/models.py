@@ -510,7 +510,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 			d.pop(field.source_field.name + '_id')
 			d['id'] = d.pop(field.target_field.name + '_id')
 
-		return set(sorted(d.items()) for d in data)
+		return set(tuple(sorted(d.items())) for d in data)
 
 	binder_is_binder_model = True
 
