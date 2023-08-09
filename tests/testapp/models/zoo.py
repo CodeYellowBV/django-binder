@@ -16,12 +16,20 @@ def delete_files(sender, instance=None, **kwargs):
 
 # From the api docs: a zoo with a name.  It also has a founding date,
 # which is nullable (representing "unknown").
+
+class ZooContactPerson(BinderModel):
+	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE)
+	contact_person =  models.ForeignKey('ContactPerson', on_delete=models.CASCADE)
+
 class Zoo(BinderModel):
+	class Binder:
+		history = True
+
 	name = models.TextField()
 	founding_date = models.DateField(null=True, blank=True)
 	floor_plan = models.ImageField(upload_to='floor-plans', null=True, blank=True)
 	# It is important that this m2m relationship is defined on this model, one of the tests depends on this fact
-	contacts = models.ManyToManyField('ContactPerson', blank=True, related_name='zoos')
+	contacts = models.ManyToManyField('ContactPerson', blank=True, related_name='zoos', through='ZooContactPerson')
 	# We assume that a person can only be the director of one zoo, one of the tests depends on this fact
 	director = models.OneToOneField('ContactPerson', on_delete=models.SET_NULL, blank=True, null=True, related_name='managing_zoo')
 	most_popular_animals = models.ManyToManyField('Animal', blank=True, related_name='+')
