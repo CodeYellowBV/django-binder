@@ -1051,6 +1051,38 @@ class ModelView(View):
 		return (RelatedModel(fieldname, related_model, related_field),) + view._follow_related(fieldspec)
 
 
+	# This will pop the *limit* and *offset* parameters from the *where* clauses of requests.
+	# These parameters allow the frontend to limit the amount of data it gets from big relations.
+	# The usage is illustrated by the following fragment of one of our unit tests:
+	# `res = self.client.get('/zoo/', data={'with': 'animals.caretaker', 'where': 'animals(name:contains=lion),animals(#offset=1),animals(#limit=1)'})`
+	#
+	# In our frontend, it can be used by overriding `getDefaultParams` in a class extending `AdminOverview`:
+	# `getDefaultParams() { return { where: 'campaigns(#limit=25)' }; }`
+	def _pop_limit_and_offset(self, field_where_map) -> (int, int):
+		if not field_where_map or 'filters' not in field_where_map:
+			return (None, None)
+		filters = field_where_map['filters']
+
+		limit = None
+		offset = None
+		raw_limit = None
+		raw_offset = None
+		for filter in filters:
+			key, value = filter.split('=')
+			if key == '#limit':
+				limit = int(value)
+				raw_limit = filter
+			if key == '#offset':
+				offset = int(value)
+				raw_offset = filter
+
+		if raw_limit:
+			filters.remove(raw_limit)
+		if raw_offset:
+			filters.remove(raw_offset)
+
+		return (limit, offset)
+
 	# This will return a dictionary of dotted "with string" keys and
 	# tuple values of (view_class, id_dict).  These ids do not require
 	# permission scoping.  This will be done when fetching the actual
@@ -1067,7 +1099,10 @@ class ModelView(View):
 
 			next_relation = self._follow_related(field)[0]
 			view = self.get_model_view(next_relation.model)
-			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None), request, {
+			field_where_map = where_map.get(field, None)
+			limit, offset = self._pop_limit_and_offset(field_where_map)
+
+			q, _ = view._filter_relation(None if vr else next_relation.fieldname, field_where_map, request, {
 				rel[len(field) + 1:]: annotations
 				for rel, annotations in include_annotations.items()
 				if rel == field or rel.startswith(field + '.')
@@ -1122,6 +1157,13 @@ class ModelView(View):
 						.values_list('pk', field + '__pk')
 						.distinct()
 					)
+
+				if limit is not None and offset is not None:
+					query = query[offset:offset + limit]
+				if limit is not None and offset is None:
+					query = query[0:limit]
+				if limit is None and offset is not None:
+					query = query[offset:]
 
 				for pk, rel_pk in query:
 					rel_ids_by_field_by_id[field][pk].append(rel_pk)
