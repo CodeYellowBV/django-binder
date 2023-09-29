@@ -308,6 +308,12 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 
 		self.assertEqual(response.status_code, 400)
 
+		response = self.client.post('/zoo/%s/binder_file_custom_extensions/' % zoo.id, data={
+			'file': ContentFile(b'foobar', name='foobar.md'),
+		})
+
+		self.assertEqual(response.status_code, 400)
+
 	def test_post_without_extension_fails(self):
 		zoo = Zoo(name='Apenheul')
 		zoo.save()
@@ -320,6 +326,15 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 		content = jsonloads(response.content)
 		self.assertEqual(content['code'], 'FileTypeIncorrect')
 		self.assertEqual(content['allowed_types'], [{"extension": "png"}])
+
+		response = self.client.post('/zoo/%s/binder_file_custom_extensions/' % zoo.id, data={
+			'file': ContentFile(b'foobar', name='foobar'),
+		})
+
+		self.assertEqual(response.status_code, 400)
+		content = jsonloads(response.content)
+		self.assertEqual(content['code'], 'FileTypeIncorrect')
+		self.assertEqual(content['allowed_types'], [{"extension": "txt"}])
 
 	def test_post_allowed_extension_success(self):
 		for filename in ['foobar.png', 'foobar.PNG', 'foobar.Png', 'foobar.pNg', 'foobar.pnG']:
@@ -350,4 +365,32 @@ class BinderFileFieldAllowedExtensionTest(TestCase):
 				self.assertEqual(
 					data['data']['binder_picture_custom_extensions'],
 					'/zoo/{}/binder_picture_custom_extensions/?h={}&content_type=image/png&filename={}'.format(zoo.pk, PNG_HASH, filename),
+				)
+
+		for filename in ['foobar.txt', 'foobar.Txt', 'foobar.tXt', 'foobar.txT']:
+			with self.subTest(filename=filename):
+				zoo = Zoo(name='Apenheul')
+				zoo.save()
+
+				response = self.client.post('/zoo/%s/binder_file_custom_extensions/' % zoo.id, data={
+					'file': ContentFile(b'foobar', name=filename),
+				})
+				self.assertEqual(response.status_code, 200)
+				content = jsonloads(response.content)
+
+				# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+				zoo.refresh_from_db()
+				filename = basename(zoo.binder_file_custom_extensions.name) # Without folders foo/bar/
+
+				self.assertIn(
+					'content_type=text/plain&filename={}'.format(filename),
+					content['data']['binder_file_custom_extensions'],
+				)
+
+				response = self.client.get('/zoo/{}/'.format(zoo.pk))
+				self.assertEqual(response.status_code, 200)
+				data = jsonloads(response.content)
+				self.assertIn(
+					'content_type=text/plain&filename={}'.format(filename),
+					content['data']['binder_file_custom_extensions'],
 				)
