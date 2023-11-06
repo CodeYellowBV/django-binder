@@ -184,6 +184,14 @@ class Router(object):
 				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/{}/$'.format(route.route, ff),
 						view.as_view(), {'file_field': ff, 'router': self}, name='{}.{}'.format(name, ff)))
 
+			# Stats endpoint
+			urls.append(re_path(
+				r'^{}/stats/$'.format(route.route),
+				view.as_view(),
+				{'method': 'stats', 'router': self},
+				name='{}.stats'.format(name),
+			))
+
 			# Custom endpoints
 			for m in dir(view):
 				method = getattr(view, m)

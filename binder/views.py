@@ -20,7 +20,7 @@ from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidd
 from django.http.request import RawPostDataException
 from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
-from django.db.models import Q, F
+from django.db.models import Q, F, Count, Sum, Min, Max, Avg
 from django.db.models.lookups import Transform
 from django.utils import timezone
 from django.db import transaction
@@ -32,7 +32,16 @@ from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExc
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField, BinderImageField
-from .json import JsonResponse, jsonloads
+from .json import JsonResponse, jsonloads, jsondumps
+
+
+STAT_AGGREGATES = {
+	'count': Count,
+	'sum': Sum,
+	'min': Min,
+	'max': Max,
+	'average': Avg,
+}
 
 
 class Tuple(Func):
@@ -2896,6 +2905,143 @@ class ModelView(View):
 			return history.view_changesets_debug(request, changesets.order_by('-id'))
 		else:
 			return history.view_changesets(request, changesets.order_by('-id'))
+
+
+	def stats(self, request):
+		# We only apply annotations when used, so we can just pretend everything is included to simplify stuff
+		try:
+			annotations = self.model.Annotations
+		except AttributeError:
+			include_annotations = {'': []}
+		else:
+			include_annotations = {'': [
+				attr
+				for attr in dir(annotations)
+				if not (attr.startswith('__') and attr.endswith('__'))
+			]}
+
+		queryset, annotations = self._get_filtered_queryset_base(request, None, include_annotations)
+
+		try:
+			stats = self._parse_stats(request.GET['stats'], include_annotations[''])
+		except KeyError:
+			raise BinderRequestError('no stats parameter provided')
+
+		return JsonResponse({
+			key: self._get_stat(request, queryset, annotations, include_annotations, **stat)
+			for key, stat in stats.items()
+		})
+
+
+	def _parse_stats(self, stats, annotations):
+		stats = jsonloads(stats)
+
+		if not isinstance(stats, dict):
+			raise BinderRequestError('stats should be a dictionary')
+
+		errors = []
+		for stat, params in stats.items():
+			if not isinstance(params, dict):
+				errors.append(f'stats.{stat} should be a dictionary')
+				continue
+
+			for key, value in params.items():
+				if key == 'field':
+					params['field'] = self._check_field(stat, key, value, annotations, errors)
+
+				elif key == 'aggregate':
+					try:
+						params['aggregate'] = STAT_AGGREGATES[value]
+					except (ValueError, KeyError):
+						errors.append(f'stats.{stat}.aggregate is not a valid aggregate')
+
+				elif key == 'group_by':
+					params['group_by'] = self._check_field(stat, key, value, annotations, errors)
+
+				elif key == 'filters':
+					if not isinstance(params, dict):
+						errors.append(f'stats.{stat}.filters should be a dictionary')
+
+				else:
+					errors.append(f'stats.{stat}.{key} is not a valid key')
+
+		if errors:
+			raise BinderRequestError('\n'.join(errors))
+
+		return stats
+
+	def _check_field(self, stat, key, value, annotations, errors):
+		if not isinstance(value, str):
+			errors.append(f'stats.{stat}.{key} should be a string')
+			return
+
+		model = self.model
+		parts = []
+		while True:
+			try:
+				head, value = value.split('.', 1)
+			except ValueError:
+				break
+
+			try:
+				field = model._meta.get_field(head)
+				assert field.is_relation
+			except (FieldDoesNotExist, AssertionError):
+				errors.append(f'stats.{stat}.{key} references relation {model.__name__}.{head} that does not exist')
+				return
+
+			parts.append(head)
+			if isinstance(field, django.db.models.fields.reverse_related.ForeignObjectRel):
+				model = field.related_model
+			else:
+				model = field.remote_field.model
+
+		try:
+			if parts or value not in annotations:
+				model._meta.get_field(value)
+		except FieldDoesNotExist:
+			errors.append(f'stats.{stat}.{key} references field {model.__name__}.{value} that does not exist')
+			return
+
+		parts.append(value)
+		return '__'.join(parts)
+
+
+	def _get_stat(self, request, queryset, annotations, include_annotations, field='id', aggregate=Count, group_by=None, filters={}):
+		for key, value in filters.items():
+			q, distinct = self._parse_filter(key, value, request, include_annotations)
+			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
+			if distinct:
+				queryset = queryset.distinct()
+		queryset = self._apply_annotations(queryset, annotations, field, group_by)
+
+		if group_by is None:
+			return queryset.aggregate(result=aggregate(field))['result']
+		else:
+			return {
+				key if isinstance(key, str) else jsonloads(jsondumps(key)): value
+				for key, value in (
+					queryset
+					.order_by()
+					.values(group_by)
+					.annotate(_binder_stats_aggregate=aggregate(field))
+					.values_list(group_by, '_binder_stats_aggregate')
+				)
+			}
+
+
+	def _apply_annotations(self, queryset, annotations, *fields):
+		for field in fields:
+			if field is None:
+				continue
+			field = field.split('__', 1)[0]
+			try:
+				annotation = annotations.pop(field)
+			except KeyError:
+				pass
+			else:
+				queryset = queryset.annotate(**{field: annotation})
+		return queryset
 
 
 
