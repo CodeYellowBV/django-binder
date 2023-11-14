@@ -24,7 +24,7 @@ from django.db.models import Q, F
 from django.db.models.lookups import Transform
 from django.utils import timezone
 from django.db import transaction
-from django.db.models.expressions import BaseExpression, Value, CombinedExpression, OrderBy, ExpressionWrapper
+from django.db.models.expressions import BaseExpression, Value, CombinedExpression, OrderBy, ExpressionWrapper, Func
 from django.db.models.fields.reverse_related import ForeignObjectRel
 
 
@@ -33,6 +33,17 @@ from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField, BinderImageField
 from .json import JsonResponse, jsonloads
+
+
+class Tuple(Func):
+	template = '(%(expressions)s)'
+
+
+class GreaterThan(Func):
+	template = '(%(expressions)s)'
+	arg_joiner = ' > '
+	arity = 2
+	output_field = models.BooleanField()
 
 
 def get_joins_from_queryset(queryset):
@@ -1491,6 +1502,7 @@ class ModelView(View):
 
 		return meta
 
+
 	def _apply_q_with_possible_annotations(self, queryset, q, annotations):
 		for filter in q_get_flat_filters(q):
 			head = filter.split('__', 1)[0]
@@ -1502,6 +1514,55 @@ class ModelView(View):
 				queryset = queryset.annotate(**{head: expr})
 
 		return queryset.filter(q)
+
+
+	def _after_expr(self, request, after_id):
+		"""
+		This method given a request and an id returns a boolean	expression that
+		indicates if a record would show up after the provided id for the
+		ordering specified by this request.
+		"""
+		# First we get the object we need to use as our base for our filter
+		try:
+			obj = self.get_queryset(request).get(pk=int(after_id))
+		except (ValueError, self.model.DoesNotExist):
+			raise BinderRequestError(f'invalid value for after_id: {after_id!r}')
+
+		# Now we will build up a comparison expr based on the order by
+		ordering = self.order_by(self.model.objects.all(), request).query.order_by
+		left_exprs = []
+		right_exprs = []
+
+		for field in ordering:
+			# First we have to split of a leading '-' as indicating reverse
+			reverse = field.startswith('-')
+			if reverse:
+				field = field[1:]
+
+			# Then we build 2 exprs for the left hand side (objs in the query)
+			# and the right hand side (the object with the provided after id)
+			left_expr = F(field)
+
+			right_expr = obj
+			for attr in field.split('__'):
+				right_expr = getattr(right_expr, attr)
+			if isinstance(right_expr, models.Model):
+				right_expr = right_expr.pk
+			right_expr = Value(right_expr)
+
+			# To handle reverse we flip the expressions
+			if reverse:
+				left_exprs.append(right_expr)
+				right_exprs.append(left_expr)
+			else:
+				left_exprs.append(left_expr)
+				right_exprs.append(right_expr)
+
+		# Now we turn this into one big comparison
+		if len(ordering) == 1:
+			return GreaterThan(left_exprs[0], right_exprs[0])
+		else:
+			return GreaterThan(Tuple(*left_exprs), Tuple(*right_exprs))
 
 
 	def _get_filtered_queryset_base(self, request, pk=None, include_annotations=None):
@@ -1540,6 +1601,15 @@ class ModelView(View):
 		if 'search' in request.GET:
 			q = self._search_base(request.GET['search'], request)
 			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
+
+		#### after
+		try:
+			after = request.GET['after']
+		except KeyError:
+			pass
+		else:
+			expr = self._after_expr(request, after)
+			queryset = queryset.filter(expr)
 
 		return queryset, annotations
 
