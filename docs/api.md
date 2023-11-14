@@ -87,6 +87,10 @@ Notice that `api/animal?.zoo_history:not:any=Artis` requires that both `zoo` and
 
 It is NOT allowed to use both `:any` and `all` in one filter since this does not make any sense. Also notice that you must first `:all` or `:any`, and only then you can use other filters like `:not:icontains` or `:startswith` etc.
 
+#### Filtering after a certain record
+
+Sometimes you want to filter a request to only return records that come after a certain record. For example you have fetched 25 records already and you want to fetch the next 25. For example if you called `/api/animal/` and the last record had id `1337` you can call `/api/animal/?after=1337` to get the next page of records. This will also respect other filters & ordering.
+
 ### Ordering the collection
 Ordering is a simple matter of enumerating the fields in the `order_by` query parameter, eg. `api/animal?order_by=name`.  If you want to make the ordering stable when there are multiple animals sharing the same name, you can separate with commas like `api/animal?order_by=name,id`.  The results will be sorted on name, and where the name is the same, they'll be sorted by `id`.
 
