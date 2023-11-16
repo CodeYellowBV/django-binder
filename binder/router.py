@@ -188,7 +188,7 @@ class Router(object):
 			urls.append(re_path(
 				r'^{}/stats/$'.format(route.route),
 				view.as_view(),
-				{'method': 'stats', 'router': self},
+				{'method': 'stats_view', 'router': self},
 				name='{}.stats'.format(name),
 			))
 

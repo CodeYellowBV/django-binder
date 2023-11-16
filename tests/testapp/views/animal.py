@@ -1,3 +1,5 @@
+from django.db.models import Count, Value
+
 from binder.views import ModelView
 
 from ..models import Animal
@@ -20,3 +22,16 @@ class AnimalView(ModelView, CsvExportView):
 			('caretaker.id', 'Caretaker ID'),
 		],
 	)
+	
+	stats = {
+		'without_caretaker': {
+			'expr': Count(Value(1)),
+			'filters': {
+				'caretaker:isnull': 'true',
+			},
+		},
+		'by_zoo': {
+			'expr': Count(Value(1)),
+			'group_by': 'zoo.name',
+		},
+	}
