@@ -24,9 +24,9 @@ class StatsTest(TestCase):
 
 		self.assertTrue(self.client.login(username='testuser', password='test'))
 
-	def get_stats(self, params={}, **stats):
+	def get_stats(self, *stats, params={}):
 		res = self.client.get('/animal/stats/', {
-			'stats': json.dumps(stats),
+			'stats': ','.join(stats),
 			**params,
 		})
 		if res.status_code != 200:
@@ -35,41 +35,25 @@ class StatsTest(TestCase):
 		return json.loads(res.content)
 
 	def test_animals_without_caretaker(self):
-		res = self.get_stats(
-			animals_without_caretaker={
-				'filters': {'caretaker:isnull': 'true'},
-			},
-		)
-		self.assertEqual(res, {
-			'animals_without_caretaker': 1,
-		})
+		res = self.get_stats('without_caretaker')
+		self.assertEqual(res, {'without_caretaker': 1})
 
 	def test_animals_by_zoo(self):
-		res = self.get_stats(
-			animals_by_zoo={
-				'group_by': 'zoo.name',
-			},
-		)
-		self.assertEqual(res, {
-			'animals_by_zoo': {
-				'Zoo 1': 1,
-				'Zoo 2': 2,
-			},
-		})
+		res = self.get_stats('by_zoo')
+		self.assertEqual(res, {'by_zoo': {
+			'Zoo 1': 1,
+			'Zoo 2': 2,
+		}})
 
 	def test_stats_filtered(self):
 		res = self.get_stats(
-			total={},
-			animals_without_caretaker={
-				'filters': {'caretaker:isnull': 'true'},
-			},
-			animals_by_zoo={
-				'group_by': 'zoo.name',
-			},
+			'total',
+			'without_caretaker',
+			'by_zoo',
 			params={'.zoo.name': 'Zoo 1'},
 		)
 		self.assertEqual(res, {
 			'total': 1,
-			'animals_without_caretaker': 0,
-			'animals_by_zoo': {'Zoo 1': 1},
+			'without_caretaker': 0,
+			'by_zoo': {'Zoo 1': 1},
 		})

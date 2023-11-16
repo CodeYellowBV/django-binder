@@ -1,3 +1,5 @@
+from django.db.models import Count, Value
+
 from binder.views import ModelView
 
 from ..models import Animal
@@ -8,3 +10,16 @@ class AnimalView(ModelView):
 	m2m_fields = ['costume']
 	searches = ['name__icontains']
 	transformed_searches = {'zoo_id': int}
+
+	stats = {
+		'without_caretaker': {
+			'expr': Count(Value(1)),
+			'filters': {
+				'caretaker:isnull': 'true',
+			},
+		},
+		'by_zoo': {
+			'expr': Count(Value(1)),
+			'group_by': 'zoo.name',
+		},
+	}
