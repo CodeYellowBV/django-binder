@@ -35,12 +35,10 @@ from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotat
 from .json import JsonResponse, jsonloads, jsondumps
 
 
-STAT_AGGREGATES = {
-	'count': Count,
-	'sum': Sum,
-	'min': Min,
-	'max': Max,
-	'average': Avg,
+DEFAULT_STATS = {
+	'total': {
+		'expr': Count(Value(1)),
+	},
 }
 
 
@@ -454,6 +452,19 @@ class ModelView(View):
 	# see _parse_filter, see api.md > "Filtering by groups (alternative_filters)"
 	# NOTICE: alternative_filters may not contain a field or annotation as key
 	alternative_filters = {}
+
+	# A dict that looks like:
+	# {
+	#     name: {
+	#         'expr': an aggregate expr to get the statistic,
+	#         'filter': a dict of filters to filter the queryset with before getting the aggregate, leading dot not included (optional),
+	#         'group_by': a field to group by separated by dots if following relations (optional),
+	#         'annotations': a list of annotation names that have to be applied to the queryset for the expr to work (optional),
+	#     },
+	#     ...
+	# }
+	# These statistics can then be used in the stats view
+	stats = {}
 
 	@property
 	def AggStrategy(self):
@@ -2913,7 +2924,7 @@ class ModelView(View):
 			return history.view_changesets(request, changesets.order_by('-id'))
 
 
-	def stats(self, request):
+	def stats_view(self, request):
 		# We only apply annotations when used, so we can just pretend everything is included to simplify stuff
 		try:
 			annotations = self.model.Annotations
@@ -2929,111 +2940,63 @@ class ModelView(View):
 		queryset, annotations = self._get_filtered_queryset_base(request, None, include_annotations)
 
 		try:
-			stats = self._parse_stats(request.GET['stats'], include_annotations[''])
+			stats = request.GET['stats']
 		except KeyError:
-			raise BinderRequestError('no stats parameter provided')
+			stats = []
+		else:
+			stats = stats.split(',')
 
 		return JsonResponse({
-			key: self._get_stat(request, queryset, annotations, include_annotations, **stat)
-			for key, stat in stats.items()
+			stat: self._get_stat(request, queryset, stat, annotations, include_annotations)
+			for stat in stats
 		})
 
 
-	def _parse_stats(self, stats, annotations):
-		stats = jsonloads(stats)
-
-		if not isinstance(stats, dict):
-			raise BinderRequestError('stats should be a dictionary')
-
-		errors = []
-		for stat, params in stats.items():
-			if not isinstance(params, dict):
-				errors.append(f'stats.{stat} should be a dictionary')
-				continue
-
-			for key, value in params.items():
-				if key == 'field':
-					params['field'] = self._check_field(stat, key, value, annotations, errors)
-
-				elif key == 'aggregate':
-					try:
-						params['aggregate'] = STAT_AGGREGATES[value]
-					except (ValueError, KeyError):
-						errors.append(f'stats.{stat}.aggregate is not a valid aggregate')
-
-				elif key == 'group_by':
-					params['group_by'] = self._check_field(stat, key, value, annotations, errors)
-
-				elif key == 'filters':
-					if not isinstance(params, dict):
-						errors.append(f'stats.{stat}.filters should be a dictionary')
-
-				else:
-					errors.append(f'stats.{stat}.{key} is not a valid key')
-
-		if errors:
-			raise BinderRequestError('\n'.join(errors))
-
-		return stats
-
-	def _check_field(self, stat, key, value, annotations, errors):
-		if not isinstance(value, str):
-			errors.append(f'stats.{stat}.{key} should be a string')
-			return
-
-		model = self.model
-		parts = []
-		while True:
-			try:
-				head, value = value.split('.', 1)
-			except ValueError:
-				break
-
-			try:
-				field = model._meta.get_field(head)
-				assert field.is_relation
-			except (FieldDoesNotExist, AssertionError):
-				errors.append(f'stats.{stat}.{key} references relation {model.__name__}.{head} that does not exist')
-				return
-
-			parts.append(head)
-			if isinstance(field, django.db.models.fields.reverse_related.ForeignObjectRel):
-				model = field.related_model
-			else:
-				model = field.remote_field.model
-
+	def _get_stat(self, request, queryset, stat, annotations, include_annotations):
+		# Get stat definition
 		try:
-			if parts or value not in annotations:
-				model._meta.get_field(value)
-		except FieldDoesNotExist:
-			errors.append(f'stats.{stat}.{key} references field {model.__name__}.{value} that does not exist')
-			return
+			stat = self.stats[stat]
+		except KeyError:
+			try:
+				stat = DEFAULT_STATS[stat]
+			except KeyError:
+				raise BinderRequestError(f'unknown stat: {stat}')
 
-		parts.append(value)
-		return '__'.join(parts)
-
-
-	def _get_stat(self, request, queryset, annotations, include_annotations, field='id', aggregate=Count, group_by=None, filters={}):
-		for key, value in filters.items():
+		# Apply filters
+		for key, value in stat.get('filters', {}).items():
 			q, distinct = self._parse_filter(key, value, request, include_annotations)
 			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 			if distinct:
 				queryset = queryset.distinct()
-		queryset = self._apply_annotations(queryset, annotations, field, group_by)
 
-		if group_by is None:
-			return queryset.aggregate(result=aggregate(field))['result']
-		else:
-			return {
-				key if isinstance(key, str) else jsonloads(jsondumps(key)): value
-				for key, value in (
-					queryset
-					.order_by()
-					.values(group_by)
-					.annotate(_binder_stats_aggregate=aggregate(field))
-					.values_list(group_by, '_binder_stats_aggregate')
-				)
-			}
+		# Apply required annotations
+		for key in stat.get('annotations', []):
+			try:
+				expr = annotations.pop(key)
+			except KeyError:
+				pass
+			else:
+				queryset = queryset.annotate(**{key: expr})
+
+		try:
+			group_by = stat['group_by']
+		except KeyError:
+			# No group by so just return a simple stat
+			return queryset.aggregate(result=stat['expr'])['result']
+
+		group_by = group_by.replace('.', '__')
+		# The jsonloads/jsondumps is to make sure we can handle different
+		# types as keys, an example is dates.
+		return {
+			jsonloads(jsondumps(key)): value
+			for key, value in (
+				queryset
+				.order_by()
+				.values(group_by)
+				.annotate(_binder_stat=stat['expr'])
+				.values_list(group_by, '_binder_stat')
+			)
+		}
 
 
 	def _apply_annotations(self, queryset, annotations, *fields):
