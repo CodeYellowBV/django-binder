@@ -20,7 +20,7 @@ from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidd
 from django.http.request import RawPostDataException
 from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
-from django.db.models import Q, F, Count, Sum, Min, Max, Avg
+from django.db.models import Q, F, Count
 from django.db.models.lookups import Transform
 from django.utils import timezone
 from django.db import transaction
@@ -33,6 +33,7 @@ from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField, BinderImageField
 from .json import JsonResponse, jsonloads, jsondumps
+from .route_decorators import list_route
 
 
 DEFAULT_STATS = {
@@ -2924,6 +2925,7 @@ class ModelView(View):
 			return history.view_changesets(request, changesets.order_by('-id'))
 
 
+	@list_route('stats', methods=['GET'])
 	def stats_view(self, request):
 		# We only apply annotations when used, so we can just pretend everything is included to simplify stuff
 		try:
@@ -2982,20 +2984,28 @@ class ModelView(View):
 			group_by = stat['group_by']
 		except KeyError:
 			# No group by so just return a simple stat
-			return queryset.aggregate(result=stat['expr'])['result']
+			return {
+				'value': queryset.aggregate(result=stat['expr'])['result'],
+				'filters': stat.get('filters', {}),
+			}
 
-		group_by = group_by.replace('.', '__')
-		# The jsonloads/jsondumps is to make sure we can handle different
-		# types as keys, an example is dates.
+		django_group_by = group_by.replace('.', '__')
 		return {
-			jsonloads(jsondumps(key)): value
-			for key, value in (
-				queryset
-				.order_by()
-				.values(group_by)
-				.annotate(_binder_stat=stat['expr'])
-				.values_list(group_by, '_binder_stat')
-			)
+			'value': {
+				# The jsonloads/jsondumps is to make sure we can handle different
+				# types as keys, an example is dates.
+				jsonloads(jsondumps(key)): value
+				for key, value in (
+					queryset
+					.order_by()
+					.exclude(**{django_group_by: None})
+					.values(django_group_by)
+					.annotate(_binder_stat=stat['expr'])
+					.values_list(django_group_by, '_binder_stat')
+				)
+			},
+			'group_by': group_by,
+			'filters': stat.get('filters', {}),
 		}
 
 

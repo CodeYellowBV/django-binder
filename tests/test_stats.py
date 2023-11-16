@@ -5,6 +5,8 @@ from django.contrib.auth.models import User
 
 from .testapp.models import Animal, Caretaker, Zoo
 
+from .compare import assert_json, ANY
+
 
 class StatsTest(TestCase):
 
@@ -24,26 +26,32 @@ class StatsTest(TestCase):
 
 		self.assertTrue(self.client.login(username='testuser', password='test'))
 
-	def get_stats(self, *stats, params={}):
+	def get_stats(self, *stats, status=200, params={}):
 		res = self.client.get('/animal/stats/', {
 			'stats': ','.join(stats),
 			**params,
 		})
-		if res.status_code != 200:
-			print(res.content.decode())
-		self.assertEqual(res.status_code, 200)
+		self.assertEqual(res.status_code, status)
 		return json.loads(res.content)
 
 	def test_animals_without_caretaker(self):
 		res = self.get_stats('without_caretaker')
-		self.assertEqual(res, {'without_caretaker': 1})
+		self.assertEqual(res, {
+			'without_caretaker': {
+				'value': 1,
+				'filters': {'caretaker:isnull': 'true'},
+			},
+		})
 
 	def test_animals_by_zoo(self):
 		res = self.get_stats('by_zoo')
-		self.assertEqual(res, {'by_zoo': {
-			'Zoo 1': 1,
-			'Zoo 2': 2,
-		}})
+		self.assertEqual(res, {
+			'by_zoo': {
+				'value': {'Zoo 1': 1, 'Zoo 2': 2},
+				'filters': {},
+				'group_by': 'zoo.name',
+			},
+		})
 
 	def test_stats_filtered(self):
 		res = self.get_stats(
@@ -53,7 +61,25 @@ class StatsTest(TestCase):
 			params={'.zoo.name': 'Zoo 1'},
 		)
 		self.assertEqual(res, {
-			'total': 1,
-			'without_caretaker': 0,
-			'by_zoo': {'Zoo 1': 1},
+			'total': {
+				'value': 1,
+				'filters': {},
+			},
+			'without_caretaker': {
+				'value': 0,
+				'filters': {'caretaker:isnull': 'true'},
+			},
+			'by_zoo': {
+				'value': {'Zoo 1': 1},
+				'filters': {},
+				'group_by': 'zoo.name',
+			},
+		})
+
+	def test_stat_not_found(self):
+		res = self.get_stats('does_not_exist', status=418)
+		assert_json(res, {
+			'code': 'RequestError',
+			'message': 'unknown stat: does_not_exist',
+			'debug': ANY(),
 		})
