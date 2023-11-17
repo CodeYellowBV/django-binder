@@ -53,6 +53,6 @@ This class has the following signature
   - **annotations**: a list of annotation names that have to be applied to the
   queryset for the expr to work (optional),
 
-By default the stat `total` is already defined for every view. This will give
-the total amount of records in the dataset. This stat is defined as
+By default the stat `total_records` is already defined for every view. This
+will give the total amount of records in the dataset. This stat is defined as
 `Stat(Count(Value(1)))`.
