@@ -48,7 +48,7 @@ Stat = namedtuple(
 
 
 DEFAULT_STATS = {
-	'total': Stat(Count(Value(1))),
+	'total_records': Stat(Count(Value(1))),
 }
 
 

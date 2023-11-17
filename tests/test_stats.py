@@ -55,13 +55,13 @@ class StatsTest(TestCase):
 
 	def test_stats_filtered(self):
 		res = self.get_stats(
-			'total',
+			'total_records',
 			'without_caretaker',
 			'by_zoo',
 			params={'.zoo.name': 'Zoo 1'},
 		)
 		self.assertEqual(res, {
-			'total': {
+			'total_records': {
 				'value': 1,
 				'filters': {},
 			},
