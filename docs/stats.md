@@ -41,25 +41,18 @@ statistics.
 ## Defining Stats
 
 You can define stats by setting the `stats` property on the view. This should
-be a dict that resembles this:
+be a mapping of stat names to `binder.views.Stat`-instances.
 
-```
-{
-	name: {
-		'expr': an aggregate expr to get the statistic,
-		'filter': a dict of filters to filter the queryset with before getting the aggregate, leading dot not included (optional),
-		'group_by': a field to group by separated by dots if following relations (optional),
-		'annotations': a list of annotation names that have to be applied to the queryset for the expr to work (optional),
-	},
-	...
-}
-```
+This class has the following signature
+`Stat(expr, filters={}, group_by=None, annotations=[])` where:
+  - **expr**: an aggregate expr to get the statistic,
+  - **filter**: a dict of filters to filter the queryset with before getting
+  the aggregate, leading dot not included (optional),
+  - **group_by**: a field to group by separated by dots if following relations
+  (optional),
+  - **annotations**: a list of annotation names that have to be applied to the
+  queryset for the expr to work (optional),
 
 By default the stat `total` is already defined for every view. This will give
-the total amount of records in the dataset. The definition for this looks like this:
-
-```
-'total': {
-	'expr': Count(Value(1)),
-},
-```
+the total amount of records in the dataset. This stat is defined as
+`Stat(Count(Value(1)))`.

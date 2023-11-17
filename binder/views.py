@@ -36,10 +36,19 @@ from .json import JsonResponse, jsonloads, jsondumps
 from .route_decorators import list_route
 
 
+# expr: an aggregate expr to get the statistic,
+# filter: a dict of filters to filter the queryset with before getting the aggregate, leading dot not included (optional),
+# group_by: a field to group by separated by dots if following relations (optional),
+# annotations: a list of annotation names that have to be applied to the queryset for the expr to work (optional),
+Stat = namedtuple(
+	'Stat',
+	['expr', 'filters', 'group_by', 'annotations'],
+	defaults=[{}, None, []],
+)
+
+
 DEFAULT_STATS = {
-	'total': {
-		'expr': Count(Value(1)),
-	},
+	'total': Stat(Count(Value(1))),
 }
 
 
@@ -454,16 +463,7 @@ class ModelView(View):
 	# NOTICE: alternative_filters may not contain a field or annotation as key
 	alternative_filters = {}
 
-	# A dict that looks like:
-	# {
-	#     name: {
-	#         'expr': an aggregate expr to get the statistic,
-	#         'filter': a dict of filters to filter the queryset with before getting the aggregate, leading dot not included (optional),
-	#         'group_by': a field to group by separated by dots if following relations (optional),
-	#         'annotations': a list of annotation names that have to be applied to the queryset for the expr to work (optional),
-	#     },
-	#     ...
-	# }
+	# A dict that maps stat name to instances of binder.views.Stat
 	# These statistics can then be used in the stats view
 	stats = {}
 
@@ -2959,14 +2959,14 @@ class ModelView(View):
 				raise BinderRequestError(f'unknown stat: {stat}')
 
 		# Apply filters
-		for key, value in stat.get('filters', {}).items():
+		for key, value in stat.filters.items():
 			q, distinct = self._parse_filter(key, value, request, include_annotations)
 			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 			if distinct:
 				queryset = queryset.distinct()
 
 		# Apply required annotations
-		for key in stat.get('annotations', []):
+		for key in stat.annotations:
 			try:
 				expr = annotations.pop(key)
 			except KeyError:
@@ -2974,16 +2974,14 @@ class ModelView(View):
 			else:
 				queryset = queryset.annotate(**{key: expr})
 
-		try:
-			group_by = stat['group_by']
-		except KeyError:
+		if stat.group_by is None:
 			# No group by so just return a simple stat
 			return {
-				'value': queryset.aggregate(result=stat['expr'])['result'],
-				'filters': stat.get('filters', {}),
+				'value': queryset.aggregate(result=stat.expr)['result'],
+				'filters': stat.filters,
 			}
 
-		django_group_by = group_by.replace('.', '__')
+		group_by = stat.group_by.replace('.', '__')
 		return {
 			'value': {
 				# The jsonloads/jsondumps is to make sure we can handle different
@@ -2992,14 +2990,14 @@ class ModelView(View):
 				for key, value in (
 					queryset
 					.order_by()
-					.exclude(**{django_group_by: None})
-					.values(django_group_by)
-					.annotate(_binder_stat=stat['expr'])
-					.values_list(django_group_by, '_binder_stat')
+					.exclude(**{group_by: None})
+					.values(group_by)
+					.annotate(_binder_stat=stat.expr)
+					.values_list(group_by, '_binder_stat')
 				)
 			},
-			'group_by': group_by,
-			'filters': stat.get('filters', {}),
+			'group_by': stat.group_by,
+			'filters': stat.filters,
 		}
 
 
