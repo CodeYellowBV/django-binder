@@ -2166,7 +2166,7 @@ class ModelView(View):
 			# corresponding view here?  That would make it
 			# more consistent with non-multi-PUT and POST,
 			# also requiring view permissions.
-			qs = model.objects.filter(pk__in=oids).select_for_update()
+			qs = model.objects.filter(pk__in=oids)
 			for obj in qs:
 				locked_objects[(model, obj.pk)] = obj
 
