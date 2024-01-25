@@ -10,6 +10,9 @@ class Costume(BinderModel):
 	class Meta(BinderModel.Meta):
 		ordering = ['animal_id']
 
+	class Binder:
+		history = True
+
 	nickname = models.TextField(blank=True)
 	description = models.TextField(blank=True, null=True)
 	animal = models.OneToOneField('Animal', on_delete=models.CASCADE, related_name='costume', primary_key=True)

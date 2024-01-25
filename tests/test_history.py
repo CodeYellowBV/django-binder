@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from binder import history
 from binder.history import Change, Changeset
 
-from .testapp.models import Animal, Caretaker, ContactPerson
+from .testapp.models import Animal, Caretaker, Costume, ContactPerson, Zoo
 
 
 class HistoryTest(TestCase):
@@ -151,6 +151,283 @@ class HistoryTest(TestCase):
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Caretaker', field='name', before='"Mickey"', after='"Mickey Mouse"').count())
 
 
+	def test_change_related_object(self):
+		mickey = Caretaker(name='Mickey')
+		mickey.save()
+		pluto = Animal(name='Pluto', caretaker=mickey)
+		pluto.save()
+
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
+			'data': [{
+				'id': mickey.id,
+				'name': 'Mickey Mouse',
+			}],
+		}
+		response = self.client.put('/caretaker/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(2, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Animal', field='caretaker', before='Related object changed', after="Changed ['name']").count())
+		self.assertEqual(1, Change.objects.filter(model='Caretaker', field='name', before='"Mickey"', after='"Mickey Mouse"').count())
+
+
+	def test_change_related_object_one_to_one(self):
+		pluto = Animal(name='Pluto')
+		pluto.save()
+		costume = Costume(nickname='Flapdrol', animal=pluto)
+		costume.save()
+
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
+			'data': [{
+				'id': pluto.id,
+				'name': 'Pluto the dog',
+			}],
+		}
+		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(2, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Animal', field='name', before='"Pluto"', after='"Pluto the dog"').count())
+		self.assertEqual(1, Change.objects.filter(model='Costume', field='animal', before='Related object changed', after="Changed ['name']").count())
+
+
+	def test_change_related_object_one_to_one_ignore_forward(self):
+		pluto = Animal(name='Pluto')
+		pluto.save()
+		costume = Costume(nickname='Flapdrol', animal=pluto)
+		costume.save()
+
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
+			'data': [{
+				'id': pluto.id,
+				'nickname': 'Cutie',
+			}],
+		}
+		response = self.client.put('/costume/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(1, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Costume', field='nickname', before='"Flapdrol"', after='"Cutie"').count())
+
+
+	def test_change_related_object_multiple_fields(self):
+		mickey = Caretaker(name='Mickey')
+		mickey.save()
+		pluto = Animal(name='Pluto', caretaker=mickey)
+		pluto.save()
+		mars = Animal(name='Mars', caretaker=mickey)
+		mars.save()
+
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
+			'data': [{
+				'id': mickey.id,
+				'name': 'Mickey Mouse',
+				'ssn': 'test1234'
+			}],
+		}
+		response = self.client.put('/caretaker/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(4, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Animal', oid=pluto.id, field='caretaker', before='Related object changed', after="Changed ['name', 'ssn']").count())
+		self.assertEqual(1, Change.objects.filter(model='Animal', oid=mars.id, field='caretaker', before='Related object changed', after="Changed ['name', 'ssn']").count())
+		self.assertEqual(1, Change.objects.filter(model='Caretaker', field='name', before='"Mickey"', after='"Mickey Mouse"').count())
+		self.assertEqual(1, Change.objects.filter(model='Caretaker', field='ssn', before='"my secret ssn"', after='"test1234"').count())
+
+
+	def test_assign_related_object(self):
+		mickey = Caretaker(name='Mickey')
+		mickey.save()
+		pluto = Animal(name='Pluto')
+		pluto.save()
+
+		self.assertEqual(0, Change.objects.count())
+		model_data = {
+			'data': [{
+				'id': pluto.id,
+				'caretaker': mickey.id
+			}],
+			'with': {
+				'caretaker': [{
+					'id': mickey.id,
+					'name': 'Mickey Mouse',
+				}],
+			},
+		}
+		
+		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(2, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Animal', field='caretaker', before='null', after=mickey.id).count())
+		self.assertEqual(1, Change.objects.filter(model='Caretaker', field='name', before='"Mickey"', after='"Mickey Mouse"').count())
+
+
+	def test_unassign_related_object(self):
+		mickey = Caretaker(name='Mickey')
+		mickey.save()
+		pluto = Animal(name='Pluto', caretaker=mickey)
+		pluto.save()
+
+		self.assertEqual(0, Change.objects.count())
+		model_data = {
+			'data': [{
+				'id': pluto.id,
+				'caretaker': None
+			}],
+			'with': {
+				'caretaker': [{
+					'id': mickey.id,
+					'name': 'Mickey Mouse',
+				}],
+			},
+		}
+		
+		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(2, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Animal', field='caretaker', before=mickey.id, after='null').count())
+		self.assertEqual(1, Change.objects.filter(model='Caretaker', field='name', before='"Mickey"', after='"Mickey Mouse"').count())
+
+
+	def test_change_object_and_related_object(self):
+		mickey = Caretaker(name='Mickey')
+		mickey.save()
+		pluto = Animal(name='Pluto', caretaker=mickey)
+		pluto.save()
+
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
+			'data': [{
+				'id': pluto.id,
+				'name': 'Pluto the dog',
+			}],
+			'with': {
+				'caretaker': [{
+					'id': mickey.id,
+					'name': 'Mickey Mouse',
+				}],
+			},
+		}
+		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(3, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Animal', field='name', before='"Pluto"', after='"Pluto the dog"').count())
+		self.assertEqual(1, Change.objects.filter(model='Animal', field='caretaker', before='Related object changed', after="Changed ['name']").count())
+		self.assertEqual(1, Change.objects.filter(model='Caretaker', field='name', before='"Mickey"', after='"Mickey Mouse"').count())
+
+
+	def test_related_changes_ignore_many_to_many(self):
+		pluto = Animal(name='Pluto')
+		pluto.save()
+
+		disney = Zoo(name='Disney')
+		disney.save()
+
+		disney.most_popular_animals.set([pluto])
+		disney.save()
+
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
+			'data': [{
+				'id': pluto.id,
+				'name': 'Pluto the dog',
+			}],
+		}
+		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(1, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Animal', field='name', before='"Pluto"', after='"Pluto the dog"').count())
+
+
+	def test_related_changes_ignore_many_to_many_reverse(self):
+		pluto = Animal(name='Pluto')
+		pluto.save()
+
+		disney = Zoo(name='Disney')
+		disney.save()
+
+		disney.most_popular_animals.set([pluto])
+		disney.save()
+
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
+			'data': [{
+				'id': disney.id,
+				'name': 'Disneyland',
+			}],
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(1, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Zoo', field='name', before='"Disney"', after='"Disneyland"').count())
+
+
+	def test_related_changes_ignore_many_to_many_named(self):
+		contact = ContactPerson(name='Joe')
+		contact.save()
+
+		disney = Zoo(name='Disney')
+		disney.save()
+
+		disney.contacts.set([contact])
+		disney.save()
+
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
+			'data': [{
+				'id': contact.id,
+				'name': 'Uncle Joe',
+			}],
+		}
+		response = self.client.put('/contact_person/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(2, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='ContactPerson', field='name', before='"Joe"', after='"Uncle Joe"').count())
+		self.assertEqual(1, Change.objects.filter(model='ContactPerson', field='updated_at').count())
+
+
+	def test_related_changes_ignore_many_to_many_named_reverse(self):
+		contact = ContactPerson(name='Joe')
+		contact.save()
+
+		disney = Zoo(name='Disney')
+		disney.save()
+
+		disney.contacts.set([contact])
+		disney.save()
+
+		self.assertEqual(0, Change.objects.count())
+
+		model_data = {
+			'data': [{
+				'id': disney.id,
+				'name': 'Disneyland',
+			}],
+		}
+		response = self.client.put('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		self.assertEqual(1, Change.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='Zoo', field='name', before='"Disney"', after='"Disneyland"').count())
+	
 
 	def test_manual_history_direct_success(self):
 		history.start(source='tests')

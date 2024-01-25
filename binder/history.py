@@ -172,6 +172,22 @@ def _commit():
 	)
 	changeset.save()
 
+	changed_objs = dict()
+
+	for (model, oid, field), (old, new, diff) in _Transaction.changes.items():
+		changed_fields = changed_objs.get((model, oid), [])
+		changed_fields.append(field)
+		changed_objs[(model, oid)] = changed_fields
+
+	relation_changes = dict()
+	for (model, oid), fields in changed_objs.items():
+		for field in model._meta.get_fields():
+			if field.auto_created and not field.concrete and not field.many_to_many and field.related_model.Binder.history:
+				related_field = field.field.name + '_id'
+				related_objects = list(field.related_model.objects.filter(**{related_field: oid}).all())
+				for related_object in related_objects:
+					relation_changes[(field.related_model, related_object.pk, field.field.name)] = fields
+
 	for (model, oid, field), (old, new, diff) in _Transaction.changes.items():
 		# New instances get None for all the before values
 		if old is NewInstanceField:
@@ -187,9 +203,21 @@ def _commit():
 			before=jsondumps(old),
 			after=jsondumps(new),
 		)
+		relation_changes.pop((model, oid, field), None)
 		change.save()
 
 	transaction_commit.send(sender=None, changeset=changeset)
+
+	for (model, oid, field), related_fields in relation_changes.items():
+		Change(
+			changeset=changeset,
+			model=model.__name__,
+			oid=oid,
+			field=field,
+			diff=False,
+			before='Related object changed',
+			after='Changed ' + str(related_fields)
+		).save()
 
 	# Save the changeset again, to update the date to be as close to DB transaction commit start as possible.
 	changeset.save()
