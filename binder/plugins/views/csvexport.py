@@ -182,7 +182,7 @@ class CsvExportView:
 		"""
 
 		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ',
-					extra_permission=None, extra_params={}, csv_adapter=RequestAwareAdapter):
+					extra_permission=None, extra_params={}, csv_adapter=RequestAwareAdapter, limit=10000):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
@@ -195,6 +195,8 @@ class CsvExportView:
 			@param extra_permission: String When set, an extra binder permission check will be done on this permission.
 			@param csv_adapter: Class. Either an object extending
 			@param response_type_mapping: Mapping between the parameter used in the custom response type
+			@param limit: Limit for amount of items in the csv. This is a fail save that you do not bring down the server with
+			a big query
 			"""
 			self.withs = withs
 			self.column_map = column_map
@@ -204,6 +206,8 @@ class CsvExportView:
 			self.extra_permission = extra_permission
 			self.extra_params = extra_params
 			self.csv_adapter = csv_adapter
+			self.limit = limit
+
 
 	def _generate_csv_file(self, request: HttpRequest, file_adapter: CsvFileAdapter):
 
@@ -216,7 +220,7 @@ class CsvExportView:
 		mutable = request.POST._mutable
 		request.GET._mutable = True
 		request.GET['page'] = 1
-		request.GET['limit'] = 10000
+		request.GET['limit'] = self.csv_settings.limit if self.csv_settings.limit is not None else 'none'
 		request.GET['with'] = ",".join(self.csv_settings.withs)
 		for key, value in self.csv_settings.extra_params.items():
 			request.GET[key] = value

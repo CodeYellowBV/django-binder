@@ -8,6 +8,7 @@ from django.core.files import File
 from django.contrib.auth.models import User
 
 from ..testapp.models import Picture, Animal, Caretaker
+from ..testapp.views import PictureView
 import csv
 import openpyxl
 
@@ -160,3 +161,59 @@ class CsvExportTest(TestCase):
 							 [self.pictures[1].id, str(self.pictures[1].animal_id), (self.pictures[1].id ** 2)])
 			self.assertEqual(list(_values[3]),
 							 [self.pictures[2].id, str(self.pictures[2].animal_id), (self.pictures[2].id ** 2)])
+
+	def test_csv_export_custom_limit(self):
+		old_limit = PictureView.csv_settings.limit;
+		PictureView.csv_settings.limit = 1
+		response = self.client.get('/picture/download/')
+		self.assertEqual(200, response.status_code)
+		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
+
+		# Header
+		self.assertEqual(next(response_data), ['picture identifier', 'animal identifier', 'squared picture identifier'])
+		# 1 REcord
+		self.assertIsNotNone(next(response_data))
+
+		# EOF
+		with self.assertRaises(StopIteration):
+			self.assertIsNone(next(response_data))
+
+		###### Limit 2
+		PictureView.csv_settings.limit = 2
+		response = self.client.get('/picture/download/')
+		self.assertEqual(200, response.status_code)
+		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
+
+		# Header
+		self.assertEqual(next(response_data), ['picture identifier', 'animal identifier', 'squared picture identifier'])
+		# 1 REcord
+		self.assertIsNotNone(next(response_data))
+		# 2 Records
+		self.assertIsNotNone(next(response_data))
+		# EOF
+		with self.assertRaises(StopIteration):
+			self.assertIsNone(next(response_data))
+
+		PictureView.csv_settings.limit = old_limit;
+
+	def test_csv_settings_limit_none_working(self):
+		# Limit None should download everything
+
+		old_limit = PictureView.csv_settings.limit;
+		PictureView.csv_settings.limit = None
+		response = self.client.get('/picture/download/')
+		self.assertEqual(200, response.status_code)
+		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
+
+		# Header
+		self.assertEqual(next(response_data), ['picture identifier', 'animal identifier', 'squared picture identifier'])
+		# 3 REcords, everything we have in the database
+		self.assertIsNotNone(next(response_data))
+		self.assertIsNotNone(next(response_data))
+		self.assertIsNotNone(next(response_data))
+
+		# EOF
+		with self.assertRaises(StopIteration):
+			self.assertIsNone(next(response_data))
+
+		PictureView.csv_settings.limit = old_limit;
