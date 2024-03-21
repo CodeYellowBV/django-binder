@@ -182,7 +182,7 @@ def _commit():
 	relation_changes = dict()
 	for (model, oid), fields in changed_objs.items():
 		for field in model._meta.get_fields():
-			if field.auto_created and not field.concrete and not field.many_to_many and field.related_model.Binder.history:
+			if field.auto_created and not field.concrete and not field.many_to_many and hasattr(field.related_model, 'Binder') and field.related_model.Binder.history:
 				related_field = field.field.name + '_id'
 				related_objects = list(field.related_model.objects.filter(**{related_field: oid}).all())
 				for related_object in related_objects:
