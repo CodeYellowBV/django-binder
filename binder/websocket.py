@@ -3,7 +3,7 @@ from django.conf import settings
 from .json import jsondumps
 import requests
 from requests.exceptions import RequestException
-
+import os
 
 class RoomController(object):
 	def __init__(self):
@@ -29,32 +29,34 @@ class RoomController(object):
 
 		return rooms
 
+channels = {
 
-channel = None
+}
 
 
 def get_websocket_channel(force_new=False):
 	import pika
 	from pika import BlockingConnection
-	global channel
-	if channel and channel.is_open:
+	global channels
+
+	pid = os.getpid()
+
+	if channels.get(pid) and channel.get(pid).is_open:
 		if not force_new:
 			return channel
 		if force_new:
 			try:
-				channel.close()
+				channels.get(pid).close()
 			except ChannelWrongStateError:
-				pass
-			finally:
-				channel = None
+				channels[pid] = None
 
 	connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
 												   settings.HIGH_TEMPLAR['rabbitmq']['password'])
 	connection_parameters = pika.ConnectionParameters(settings.HIGH_TEMPLAR['rabbitmq']['host'],
 													  credentials=connection_credentials)
 	connection = BlockingConnection(parameters=connection_parameters)
-	channel = connection.channel()
-	return channel
+	channels[pid] = connection.channel()
+	return channel[pid]
 
 
 def _trigger_rabbitmq(data, rooms, tries=2):
