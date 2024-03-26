@@ -47,7 +47,7 @@ def get_websocket_channel(force_new=False):
 		if force_new:
 			try:
 				channels.get(pid).close()
-			except ChannelWrongStateError:
+			except pika.exceptions.ChannelWrongStateError:
 				channels[pid] = None
 
 	connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
@@ -60,6 +60,7 @@ def get_websocket_channel(force_new=False):
 
 
 def _trigger_rabbitmq(data, rooms, tries=2):
+	import pika
 	try:
 		channel = get_websocket_channel()
 		channel.basic_publish('hightemplar', routing_key='*', body=jsondumps({
