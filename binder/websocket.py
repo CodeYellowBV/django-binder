@@ -29,19 +29,24 @@ class RoomController(object):
 
         return rooms
 
+channel = Noneq
+def get_websocket_channel():
+    import pika
+    from pika import BlockingConnection
+    global channel
+    if channel and channel.is_open:
+        return channel
+    connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
+                                                   settings.HIGH_TEMPLAR['rabbitmq']['password'])
+    connection_parameters = pika.ConnectionParameters(settings.HIGH_TEMPLAR['rabbitmq']['host'],
+                                                      credentials=connection_credentials)
+    connection = BlockingConnection(parameters=connection_parameters)
+    channel = connection.channel()
+    return channel
 
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
-        import pika
-        from pika import BlockingConnection
-
-        connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
-                                                       settings.HIGH_TEMPLAR['rabbitmq']['password'])
-        connection_parameters = pika.ConnectionParameters(settings.HIGH_TEMPLAR['rabbitmq']['host'],
-                                                          credentials=connection_credentials)
-        connection = BlockingConnection(parameters=connection_parameters)
-        channel = connection.channel()
-
+        channel = get_websocket_channel()
         channel.basic_publish('hightemplar', routing_key='*', body=jsondumps({
             'data': data,
             'rooms': rooms,
