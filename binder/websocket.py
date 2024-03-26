@@ -29,7 +29,7 @@ class RoomController(object):
 
         return rooms
 
-channel = Noneq
+channel = None
 def get_websocket_channel():
     import pika
     from pika import BlockingConnection
