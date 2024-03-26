@@ -65,7 +65,11 @@ def _trigger_rabbitmq(data, rooms, tries=2):
 			'rooms': rooms,
 		}))
 	except (pika.exceptions.StreamLostError, pika.exceptions.AMQPHeartbeatTimeout):
-		chanen
+		if tries == 0:
+			raise
+		get_websocket_channel(force_new=True)
+		_trigger_rabbitmq(data, rooms, tries=tries - 1)
+
 
 
 
