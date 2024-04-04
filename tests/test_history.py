@@ -80,7 +80,27 @@ class HistoryTest(TestCase):
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='deleted', before='null', after='false').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='birth_date', before='null', after='null').count())
 
+	def test_do_not_keep_auto_now_only_changesets(self):
+		tim = ContactPerson.objects.create(name="Tim")
 
+		self.assertEqual(0, Changeset.objects.count())
+		self.assertEqual(0, Change.objects.count())
+
+		self.assertEqual(self.client.patch(
+			'/contact_person/%d/' % tim.pk, data=json.dumps({'name': 'Tim'}), content_type='application/json'
+		).status_code, 200)
+
+		self.assertEqual(0, Change.objects.count())
+		self.assertEqual(0, Changeset.objects.count())
+
+		self.assertEqual(self.client.patch(
+			'/contact_person/%d/' % tim.pk, data=json.dumps({'name': 'knokko'}), content_type='application/json'
+		).status_code, 200)
+
+		self.assertEqual(2, Change.objects.count())
+		self.assertEqual(1, Changeset.objects.count())
+		self.assertEqual(1, Change.objects.filter(model='ContactPerson', after='"knokko"').count())
+		self.assertEqual(1, Change.objects.filter(model='ContactPerson', field='updated_at').count())
 
 	def test_model_with_history_creates_changes_on_update_but_only_for_changed_fields(self):
 		daffy = Animal(name='Daffy Duck')

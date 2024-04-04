@@ -7,6 +7,7 @@ from django.http import HttpResponse
 from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.dispatch import Signal
+from django.core.exceptions import FieldDoesNotExist
 
 from .json import jsondumps, JsonResponse
 
@@ -172,7 +173,18 @@ def _commit():
 	)
 	changeset.save()
 
+	auto_now_counter = 0
+
 	for (model, oid, field), (old, new, diff) in _Transaction.changes.items():
+
+		# Skip auto_now and auto_now_add fields because they are not interesting for the history
+		try:
+			field_properties = model._meta.get_field(field)
+			if field_properties.auto_now or field_properties.auto_now_add:
+				auto_now_counter += 1
+		except (FieldDoesNotExist, AttributeError):
+			pass
+
 		# New instances get None for all the before values
 		if old is NewInstanceField:
 			old = None
@@ -191,8 +203,14 @@ def _commit():
 
 	transaction_commit.send(sender=None, changeset=changeset)
 
-	# Save the changeset again, to update the date to be as close to DB transaction commit start as possible.
-	changeset.save()
+	if changeset.changes.count() > auto_now_counter:
+		# Save the changeset again, to update the date to be as close to DB transaction commit start as possible.
+		changeset.save()
+	else:
+		# Changesets without real changes are useless
+		changeset.changes.all().delete()
+		changeset.delete()
+
 	_Transaction.stop()
 
 

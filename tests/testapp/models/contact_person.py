@@ -7,6 +7,9 @@ class ContactPerson(BinderModel):
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
+	class Binder:
+		history = True
+
 	def __str__(self):
 		return 'contact_person %d: %s' % (self.pk, self.name)
 
