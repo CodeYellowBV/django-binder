@@ -14,10 +14,27 @@ INSTALLED_APPS = [
 ]
 ```
 
+Add middleware to `settings.py`:
+
+```
+MIDDLEWARE = [
+    ...
+    'binder.plugins.token_auth.middleware.TokenAuthMiddleware',
+    ...
+]
+```
+
 Then run the migrations:
 
 ```
 ./manage.py migrate
+```
+
+## Optional
+If you want to make the Tokens available through the API, you can add the following to your `urls.py`:
+
+```
+import binder.plugins.token_auth.views
 ```
 
 # Generate tokens
