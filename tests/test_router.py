@@ -7,7 +7,7 @@ from binder.router import Router, Route, detail_route
 from binder.views import ModelView
 
 from django.urls.base import is_valid_path, clear_url_caches
-from django.conf.urls import url, include
+from django.urls import re_path, include
 
 from . import urls_module
 
@@ -71,7 +71,7 @@ class RouterTest(TestCase):
 
 		r = Router()
 		r.register(ParentView)
-		urls_module.urlpatterns = [url(r'^', include(r.urls))]
+		urls_module.urlpatterns = [re_path(r'^', include(r.urls))]
 
 		self.assertTrue(is_valid_path('/foo_model/', urls_module))
 		self.assertTrue(is_valid_path('/foo_model/1/', urls_module))
@@ -95,7 +95,7 @@ class RouterTest(TestCase):
 
 		r = Router()
 		r.register(ParentView)
-		urls_module.urlpatterns = [url(r'^', include(r.urls))]
+		urls_module.urlpatterns = [re_path(r'^', include(r.urls))]
 
 		self.assertTrue(is_valid_path('/foo/', urls_module))
 		self.assertTrue(is_valid_path('/foo/1/', urls_module))
@@ -120,7 +120,7 @@ class RouterTest(TestCase):
 
 		r = Router()
 		r.register(ParentView)
-		urls_module.urlpatterns = [url(r'^', include(r.urls))]
+		urls_module.urlpatterns = [re_path(r'^', include(r.urls))]
 
 		self.assertFalse(is_valid_path('/foo/', urls_module))
 		self.assertTrue(is_valid_path('/foo/1/', urls_module))

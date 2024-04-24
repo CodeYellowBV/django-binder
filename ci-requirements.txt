@@ -1,4 +1,4 @@
-psycopg2<2.9
+psycopg2<3.0
 mysqlclient
 Pillow
 django-request-id

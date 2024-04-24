@@ -1,5 +1,12 @@
-from django.test.runner import is_discoverable
 from django.apps import apps
+try:
+    from django.test.runner import is_discoverable
+except ImportError:
+    # Django 4 support
+    from django.test.runner import try_importing
+    def is_discoverable(path):
+        is_importable, _ = try_importing(path)
+        return is_importable
 
 # This prevents discoverer from loading models and views, which will
 # cause all sorts of random failures.
