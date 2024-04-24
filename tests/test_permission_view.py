@@ -419,14 +419,14 @@ class TestPutRelationScoping(TestCase):
 		}))
 
 		# This is not ok
-		self.assertEquals(403, res.status_code)
+		self.assertEqual(403, res.status_code)
 
 		content = jsonloads(res.content)
-		self.assertEquals('testapp.delete_city',  content['required_permission'])
+		self.assertEqual('testapp.delete_city',  content['required_permission'])
 
 		# City 2 still exists!
 		city2.refresh_from_db()
-		self.assertEquals(country, city2.country) # And belongs to the nederlands
+		self.assertEqual(country, city2.country) # And belongs to the nederlands
 
 	@override_settings(BINDER_PERMISSION={
 		'testapp.view_country': [
@@ -450,12 +450,12 @@ class TestPutRelationScoping(TestCase):
 			}]
 		}))
 
-		self.assertEquals(200, res.status_code)
+		self.assertEqual(200, res.status_code)
 
 		# City 2 must not exist.
 		with self.assertRaises(City.DoesNotExist):
 			city2.refresh_from_db()
-		self.assertEquals(1, country.cities.count())
+		self.assertEqual(1, country.cities.count())
 
 	@override_settings(BINDER_PERMISSION={
 		'testapp.view_country': [
@@ -481,9 +481,9 @@ class TestPutRelationScoping(TestCase):
 		}))
 
 		# This is not ok
-		self.assertEquals(403, res.status_code)
+		self.assertEqual(403, res.status_code)
 		content = jsonloads(res.content)
-		self.assertEquals('testapp.change_city', content['required_permission'])
+		self.assertEqual('testapp.change_city', content['required_permission'])
 
 	@override_settings(BINDER_PERMISSION={
 		'testapp.view_country': [
@@ -506,14 +506,14 @@ class TestPutRelationScoping(TestCase):
 		}))
 
 		# This is not ok
-		self.assertEquals(res.status_code, 403)
+		self.assertEqual(res.status_code, 403)
 
 		content = jsonloads(res.content)
-		self.assertEquals('testapp.delete_city', content['required_permission'])
+		self.assertEqual('testapp.delete_city', content['required_permission'])
 
 		# City 2 still exists!
 		city2.refresh_from_db()
-		self.assertEquals(country, city2.country)
+		self.assertEqual(country, city2.country)
 
 	@override_settings(BINDER_PERMISSION={
 		'testapp.view_country': [
@@ -534,11 +534,11 @@ class TestPutRelationScoping(TestCase):
 			'cities': [city1.pk]
 		}))
 
-		self.assertEquals(200, res.status_code)
+		self.assertEqual(200, res.status_code)
 
 		with self.assertRaises(City.DoesNotExist):
 			city2.refresh_from_db()
-		self.assertEquals(1, country.cities.count())
+		self.assertEqual(1, country.cities.count())
 
 	@override_settings(BINDER_PERMISSION={
 		'testapp.view_country': [
@@ -558,7 +558,7 @@ class TestPutRelationScoping(TestCase):
 			'permanent_cities': []
 		}))
 
-		self.assertEquals(200,  res.status_code)
+		self.assertEqual(200,  res.status_code)
 		city1.refresh_from_db()
 		self.assertTrue(city1.deleted)
 
@@ -579,9 +579,9 @@ class TestPutRelationScoping(TestCase):
 			'permanent_cities': []
 		}))
 
-		self.assertEquals(res.status_code, 403)
+		self.assertEqual(res.status_code, 403)
 		content = jsonloads(res.content)
-		self.assertEquals('testapp.delete_permanentcity', content['required_permission'])
+		self.assertEqual('testapp.delete_permanentcity', content['required_permission'])
 
 	@override_settings(BINDER_PERMISSION={
 		'testapp.view_country': [
@@ -600,7 +600,7 @@ class TestPutRelationScoping(TestCase):
 			'name': 'Belgium',
 			'city_states': []
 		}))
-		self.assertEquals(200, res.status_code)
+		self.assertEqual(200, res.status_code)
 
 		city1.refresh_from_db()
 
@@ -623,14 +623,14 @@ class TestPutRelationScoping(TestCase):
 			'city_states': []
 		}))
 
-		self.assertEquals(403, res.status_code)
+		self.assertEqual(403, res.status_code)
 
 		content = jsonloads(res.content)
-		self.assertEquals('testapp.change_citystate', content['required_permission'])
+		self.assertEqual('testapp.change_citystate', content['required_permission'])
 
 		city1.refresh_from_db()
 
-		self.assertEquals(country.pk, country.pk)
+		self.assertEqual(country.pk, country.pk)
 
 	@override_settings(BINDER_PERMISSION={
 		'testapp.view_country': [
@@ -644,7 +644,7 @@ class TestPutRelationScoping(TestCase):
 			'deletions': [country.pk],
 		}))
 
-		self.assertEquals(200, res.status_code)
+		self.assertEqual(200, res.status_code)
 
 		with self.assertRaises(Country.DoesNotExist):
 			country.refresh_from_db()
@@ -660,7 +660,7 @@ class TestPutRelationScoping(TestCase):
 			'deletions': [country.pk],
 		}))
 
-		self.assertEquals(403, res.status_code)
+		self.assertEqual(403, res.status_code)
 
 		country.refresh_from_db()
 
@@ -676,7 +676,7 @@ class TestPutRelationScoping(TestCase):
 			'with_deletions': {'country': [country.pk]},
 		}))
 
-		self.assertEquals(200, res.status_code)
+		self.assertEqual(200, res.status_code)
 
 		with self.assertRaises(Country.DoesNotExist):
 			country.refresh_from_db()
@@ -692,7 +692,7 @@ class TestPutRelationScoping(TestCase):
 			'with_deletions': {'country': [country.pk]},
 		}))
 
-		self.assertEquals(403, res.status_code)
+		self.assertEqual(403, res.status_code)
 
 		country.refresh_from_db()
 
