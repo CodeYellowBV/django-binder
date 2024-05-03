@@ -2325,8 +2325,17 @@ class ModelView(View):
 		# Collect overrides
 		for (cls, mid), data in objects.items():
 			for subcls in getsubclasses(cls):
+				# Get remote field of the subclass
+				remote_field = subcls._meta.pk.remote_field
+
+				# In some scenarios with proxy models
+				# The remote field may not exist
+				# Because proxy models are just pure python wrappers(without its own db table) for other models
+				if remote_field is None:
+					continue
+
 				# Get key of field pointing to subclass
-				subkey = subcls._meta.pk.remote_field.name
+				subkey = remote_field.name
 				# Get id of subclass
 				subid = data.pop(subkey, None)
 				if subid is None:
