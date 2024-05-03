@@ -16,6 +16,7 @@ from .zoo_employee import ZooEmployee
 from .city import City, CityState, PermanentCity
 from .country import Country
 from .web_page import WebPage
+from .pet import Pet
 
 # This is Postgres-specific
 if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
