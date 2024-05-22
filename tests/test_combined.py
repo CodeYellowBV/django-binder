@@ -152,3 +152,18 @@ class CombinedTest(TestCase):
 			animal2.id * 2 + 1,  # Harambe
 			zoo1.id * 2,  # Apenheul
 		])
+
+	def test_combined_id_filter(self):
+		zoo1 = Zoo.objects.create(name='Apenheul', founding_date='1980-01-01')
+		zoo2 = Zoo.objects.create(name='Emmen', founding_date='1990-01-01')
+		animal1 = Animal.objects.create(zoo=zoo1, name='Bokito', birth_date='1995-01-01')
+		animal2 = Animal.objects.create(zoo=zoo2, name='Harambe', birth_date='1985-01-01')
+
+		res = self.client.get(f'/combined/zoo/animal/?.id:in={zoo1.id * 2},{animal2.id * 2 + 1}')
+		self.assertEqual(res.status_code, 200)
+		data = json.loads(res.content)
+		ids = {obj['id'] for obj in data['data']}
+		self.assertEqual(ids, {
+			zoo1.id * 2,  # Apenheul
+			animal2.id * 2 + 1,  # Harambe
+		})

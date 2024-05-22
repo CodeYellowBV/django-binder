@@ -75,7 +75,7 @@ def combined_view(request, router, names):
 
 	# Get filtered & annotated querysets per name
 	querysets = {}
-	for name in names:
+	for i, name in enumerate(names):
 		view = views[name]
 
 		queryset = view.get_queryset(request)
@@ -92,11 +92,39 @@ def combined_view(request, router, names):
 		queryset = annotate(queryset, request, sub_include_annotations.get(''))
 
 		# filters
-		filters = {
-			'id' if k == f'.{name}' else k[len(name) + 2:]: v
-			for k, v in request.GET.lists()
-			if k == f'.{name}' or k.startswith(f'.{name}.')
-		}
+		filters = {}
+		for k, v in request.GET.lists():
+			if k == '.id' or k.startswith('.id:'):
+				values = []
+				for value in v:
+					ids = []
+					for id in value.split(','):
+						try:
+							id = int(id)
+						except ValueError:
+							# leave invalid values for the detailed view
+							pass
+						else:
+							if id % len(names) == i:
+								# this is a combined id that matches this view,
+								# so we can convert it to an id for the model
+								# itself
+								id = str(id // len(names))
+							else:
+								# this id does not match this view, so we
+								# convert it to  an id that never matches any
+								# model
+								id = '-1'
+						ids.append(id)
+					values.append(','.join(ids))
+				filters[k[1:]] = values
+
+			elif k == f'.{name}' or k.startswith(f'.{name}:'):
+				filters['id' + k[len(name) + 1:]] = v
+
+			elif k.startswith(f'.{name}.'):
+				filters[k[len(name) + 2:]] = v
+
 		for field, values in filters.items():
 			for v in values:
 				q, distinct = view._parse_filter(field, v, request, sub_include_annotations)
