@@ -1543,20 +1543,31 @@ class ModelView(View):
 		return queryset.filter(q)
 
 
-	def _after_expr(self, request, after_id):
+	def _after_expr(self, request, after_id, include_annotations):
 		"""
 		This method given a request and an id returns a boolean	expression that
 		indicates if a record would show up after the provided id for the
 		ordering specified by this request.
 		"""
-		# First we get the object we need to use as our base for our filter
+		queryset = self.get_queryset(request)
+		annotations = {
+			name: value['expr']
+			for name, value in self.annotations(request, include_annotations).items()
+		}
+
+		# We do an order by on a copy of annotations so that we see which keys
+		# it pops
+		annotations_copy = annotations.copy()
+		ordering = self._order_by_base(queryset, request, annotations_copy).query.order_by
+		required_annotations = set(annotations) - set(annotations_copy)
+
+		queryset = queryset.annotate(**{name: annotations[name] for name in required_annotations})
 		try:
-			obj = self.get_queryset(request).get(pk=int(after_id))
+			obj = queryset.get(pk=int(after_id))
 		except (ValueError, self.model.DoesNotExist):
 			raise BinderRequestError(f'invalid value for after_id: {after_id!r}')
 
 		# Now we will build up a comparison expr based on the order by
-		ordering = self.order_by(self.model.objects.all(), request).query.order_by
 		left_exprs = []
 		right_exprs = []
 
@@ -1587,9 +1598,11 @@ class ModelView(View):
 
 		# Now we turn this into one big comparison
 		if len(ordering) == 1:
-			return GreaterThan(left_exprs[0], right_exprs[0])
+			expr = GreaterThan(left_exprs[0], right_exprs[0])
 		else:
-			return GreaterThan(Tuple(*left_exprs), Tuple(*right_exprs))
+			expr = GreaterThan(Tuple(*left_exprs), Tuple(*right_exprs))
+
+		return expr, required_annotations
 
 
 	def _get_filtered_queryset_base(self, request, pk=None, include_annotations=None):
@@ -1611,7 +1624,7 @@ class ModelView(View):
 
 		annotations = {
 			name: value['expr']
-			for name, value in get_annotations(queryset.model,  request, include_annotations.get('')).items()
+			for name, value in self.annotations(request, include_annotations).items()
 		}
 
 		#### filters
@@ -1635,8 +1648,15 @@ class ModelView(View):
 		except KeyError:
 			pass
 		else:
-			expr = self._after_expr(request, after)
-			queryset = queryset.filter(expr)
+			after_expr, required_annotations = self._after_expr(request, after, include_annotations)
+			for name in required_annotations:
+				try:
+					expr = annotations.pop(name)
+				except KeyError:
+					pass
+				else:
+					queryset = queryset.annotate(**{name: expr})
+			queryset = queryset.filter(after_expr)
 
 		return queryset, annotations
 
