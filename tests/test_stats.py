@@ -48,6 +48,7 @@ class StatsTest(TestCase):
 		self.assertEqual(res, {
 			'by_zoo': {
 				'value': {'Zoo 1': 1, 'Zoo 2': 2},
+				'other': 0,
 				'filters': {},
 				'group_by': 'zoo.name',
 			},
@@ -71,6 +72,7 @@ class StatsTest(TestCase):
 			},
 			'by_zoo': {
 				'value': {'Zoo 1': 1},
+				'other': 0,
 				'filters': {},
 				'group_by': 'zoo.name',
 			},
@@ -82,4 +84,15 @@ class StatsTest(TestCase):
 			'code': 'RequestError',
 			'message': 'unknown stat: does_not_exist',
 			'debug': ANY(),
+		})
+
+	def test_animals_by_zoo(self):
+		res = self.get_stats('by_zoo')
+		self.assertEqual(res, {
+			'by_zoo': {
+				'value': {'Zoo 1': 1, 'Zoo 2': 2},
+				'other': 0,
+				'filters': {},
+				'group_by': 'zoo.name',
+			},
 		})

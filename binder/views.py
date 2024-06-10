@@ -42,8 +42,8 @@ from .route_decorators import list_route
 # annotations: a list of annotation names that have to be applied to the queryset for the expr to work (optional),
 Stat = namedtuple(
 	'Stat',
-	['expr', 'filters', 'group_by', 'annotations'],
-	defaults=[{}, None, []],
+	['expr', 'filters', 'group_by', 'annotations', 'min_value'],
+	defaults=[{}, None, [], None],
 )
 
 
@@ -3008,20 +3008,42 @@ class ModelView(View):
 			}
 
 		group_by = stat.group_by.replace('.', '__')
+
+		value = {
+			# The jsonloads/jsondumps is to make sure we can handle different
+			# types as keys, an example is dates.
+			jsonloads(jsondumps(key)): value
+			for key, value in (
+				queryset
+				.order_by()
+				.exclude(**{group_by: None})
+				.values(group_by)
+				.annotate(_binder_stat=stat.expr)
+				.values_list(group_by, '_binder_stat')
+			)
+		}
+
+		other = 0
+		if stat.min_value is not None:
+			min_value = stat.min_value * sum(value.values())
+			new_value = {}
+
+			others = 0
+			for key, sub_value in value.items():
+				if sub_value >= min_value:
+					new_value[key] = sub_value
+				else:
+					other += sub_value
+					others += 1
+
+			if others > 1:
+				value = new_value
+			else:
+				other = 0
+
 		return {
-			'value': {
-				# The jsonloads/jsondumps is to make sure we can handle different
-				# types as keys, an example is dates.
-				jsonloads(jsondumps(key)): value
-				for key, value in (
-					queryset
-					.order_by()
-					.exclude(**{group_by: None})
-					.values(group_by)
-					.annotate(_binder_stat=stat.expr)
-					.values_list(group_by, '_binder_stat')
-				)
-			},
+			'value': value,
+			'other': other,
 			'group_by': stat.group_by,
 			'filters': stat.filters,
 		}
