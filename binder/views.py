@@ -42,8 +42,8 @@ from .route_decorators import list_route
 # annotations: a list of annotation names that have to be applied to the queryset for the expr to work (optional),
 Stat = namedtuple(
 	'Stat',
-	['expr', 'filters', 'group_by', 'annotations', 'min_value'],
-	defaults=[{}, None, [], None],
+	['expr', 'filters', 'group_by', 'annotations', 'min_value', 'max_values'],
+	defaults=[{}, None, [], None, None],
 )
 
 
@@ -3040,6 +3040,11 @@ class ModelView(View):
 				value = new_value
 			else:
 				other = 0
+
+		elif stat.max_values is not None:
+			keys = sorted(value, key=lambda key: value[key], reverse=True)
+			for key in keys[stat.max_values:]:
+				other += value.pop(key)
 
 		return {
 			'value': value,
