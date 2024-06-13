@@ -11,6 +11,7 @@ from contextlib import ExitStack
 
 from PIL import Image
 from inspect import getmro
+import base64
 
 import django
 from django.views.generic import View
@@ -2868,6 +2869,7 @@ class ModelView(View):
 
 			guess = mimetypes.guess_type(file_field.path)
 			guess = guess[0] if guess and guess[0] else 'application/octet-stream'
+
 			try:
 				resp = StreamingHttpResponse(open(file_field.path, 'rb'), content_type=guess)
 			except FileNotFoundError:
@@ -2879,6 +2881,16 @@ class ModelView(View):
 				if 'prefix' in request.GET:
 					filename = request.GET['prefix'] + ' - ' + filename
 				resp['Content-Disposition'] = 'attachment; filename="{}"'.format(filename)
+
+			elif 'encode' in request.GET:
+				with open(file_field.path, 'rb') as file_data:
+					header = bytes(f"data:{guess};base64,", encoding='utf-8')
+					data = file_data.read()
+					encoded_data = base64.b64encode(data)
+
+					return HttpResponse(header+encoded_data)
+
+
 			return resp
 
 		if request.method == 'POST':
