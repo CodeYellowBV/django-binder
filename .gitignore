@@ -11,3 +11,6 @@ venv
 .tox/
 .coverage
 .vscode/
+build/**/*
+foo/**/*
+foobar*
