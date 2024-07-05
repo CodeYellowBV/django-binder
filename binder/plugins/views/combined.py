@@ -185,19 +185,32 @@ def combined_view(request, router, names):
 		queryset = querysets[name]
 		suborder_bys = []
 		id_expr = F('id') * Value(len(names)) + Value(i)
+
 		for order_by in order_bys:
-			# So this is a bit of a hack, filtering on annotations is normally
-			# only possible on the top model so binder assumes this is always
-			# the case which is valid. However in our case we want to always
-			# filter on the submodel. We thus patch the annotations function
-			# temporarily
-			old_annotations = views[name].annotations
-			views[name].annotations = lambda *args, **kwargs: include_annotations.get(name)
-			try:
-				queryset, field, nulls_last = views[name]._parse_order_by(queryset, order_by.fields[name], request)
-			finally:
-				views[name].annotations = old_annotations
-			suborder_bys.append(id_expr if field == 'id' else F(field))
+			field = order_by.fields[name]
+
+			if field == 'id':
+				suborder_by = id_expr
+
+			elif field == 'model_index':
+				suborder_by = Value(i)
+
+			else:
+				# So this is a bit of a hack, filtering on annotations is normally
+				# only possible on the top model so binder assumes this is always
+				# the case which is valid. However in our case we want to always
+				# filter on the submodel. We thus patch the annotations function
+				# temporarily
+				old_annotations = views[name].annotations
+				views[name].annotations = lambda *args, **kwargs: include_annotations.get(name)
+				try:
+					queryset, field, nulls_last = views[name]._parse_order_by(queryset, field, request)
+				finally:
+					views[name].annotations = old_annotations
+				suborder_by = F(field)
+
+			suborder_bys.append(suborder_by)
+
 		queryset = queryset.values_list(
 			id_expr,
 			*suborder_bys,
