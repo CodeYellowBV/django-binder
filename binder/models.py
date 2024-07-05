@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from django import forms
 from django.db import models
+from django.db.models import Value
 from django.db.models.fields.files import FieldFile, FileField
 from django.contrib.postgres.fields import CITextField, ArrayField, DateTimeRangeField as DTRangeField
 from django.core import checks
@@ -27,6 +28,29 @@ from binder.json import jsonloads
 from binder.exceptions import BinderRequestError
 
 from . import history
+
+
+@models.CharField.register_lookup
+@models.TextField.register_lookup
+class FuzzyLookup(models.Lookup):
+
+	lookup_name = 'fuzzy'
+
+	def get_prep_lookup(self):
+		assert isinstance(self.rhs, str)
+		pattern = ['%']
+		for part in self.rhs.split():
+			for char in part:
+				if char in '%_[\\':
+					char.append('\\')
+				pattern.append(char)
+			pattern.append('%')
+		return Value(''.join(pattern))
+
+	def as_sql(self, compiler, connection):
+		lhs, lhs_params = self.process_lhs(compiler, connection)
+		rhs, rhs_params = self.process_rhs(compiler, connection)
+		return f'{lhs} ilike {rhs} escape \'\\\'', (*lhs_params, *rhs_params)
 
 
 class DateTimeRangeField(DTRangeField):
@@ -347,7 +371,7 @@ class BooleanFieldFilter(FieldFilter):
 
 class TextFieldFilter(FieldFilter):
 	fields = [models.CharField, models.TextField]
-	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'isnull']
+	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'isnull', 'fuzzy']
 
 	# Always valid(?)
 	def clean_value(self, qualifier, v):
