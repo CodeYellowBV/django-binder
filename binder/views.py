@@ -101,7 +101,7 @@ def q_get_flat_filters(q):
 		if isinstance(child, Q):
 			# If the child is another Q-object we can just yield recursively
 			yield from q_get_flat_filters(child)
-		else:
+		elif isinstance(child, tuple):
 			# So now the child is a 2-tuple of filter & value, we just need the
 			# filter so we yield that
 			yield child[0]
