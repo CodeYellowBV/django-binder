@@ -35,6 +35,8 @@ class Zoo(BinderModel):
 
 	binder_picture_custom_extensions = BinderImageField(allowed_extensions=['png'], blank=True, null=True)
 
+	binder_picture_direct = BinderImageField(serve_directly=True, blank=True, null=True)
+
 	def __str__(self):
 		return 'zoo %d: %s' % (self.pk, self.name)
 

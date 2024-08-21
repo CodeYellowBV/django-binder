@@ -14,6 +14,7 @@ from inspect import getmro
 
 import django
 from django.views.generic import View
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.core.files.base import File, ContentFile
 from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
@@ -442,7 +443,7 @@ class ModelView(View):
 
 				# Check if the TRANSACTION_DATABASES is set in the settings.py, and if so, use that instead
 				try:
-					transaction_dbs = django.conf.settings.TRANSACTION_DATABASES
+					transaction_dbs = settings.TRANSACTION_DATABASES
 				except AttributeError:
 					pass
 
@@ -1378,7 +1379,7 @@ class ModelView(View):
 			meta['comment'] = self.comment
 
 		debug = {'request_id': request.request_id}
-		if django.conf.settings.DEBUG and 'debug' in request.GET:
+		if settings.DEBUG and 'debug' in request.GET:
 			debug['queries'] = ['{}s: {}'.format(q['time'], q['sql'].replace('"', '')) for q in django.db.connection.queries]
 			debug['query_count'] = len(django.db.connection.queries)
 
@@ -2518,15 +2519,23 @@ class ModelView(View):
 
 		file_field_name = file_field
 		file_field = getattr(obj, file_field_name)
+		field = self.model._meta.get_field(file_field_name)
 
 		if request.method == 'GET':
 			if not file_field:
 				raise BinderNotFound(file_field_name)
 
 			guess = mimetypes.guess_type(file_field.name)
-			guess = guess[0] if guess and guess[0] else 'application/octet-stream'
+			content_type = (guess and guess[0]) or 'application/octet-stream'
+			serve_directly = isinstance(field, BinderFileField) and field.serve_directly
 			try:
-				resp = StreamingHttpResponse(file_field.open(), content_type=guess)
+				if serve_directly:
+					resp = HttpResponse(content_type=content_type)
+					resp[settings.INTERNAL_MEDIA_HEADER] = os.path.join(settings.INTERNAL_MEDIA_LOCATION, file_field.name)
+					if not file_field.url.startswith('/'):
+						resp['redirect_url'] = file_field.url
+				else:
+					resp = StreamingHttpResponse(file_field.open(), content_type=content_type)
 			except FileNotFoundError:
 				logger.error('Expected file {} not found'.format(file_field.name))
 				raise BinderNotFound(file_field_name)
@@ -2591,7 +2600,7 @@ class ModelView(View):
 
 		debug = kwargs['history'] == 'debug'
 
-		if debug and not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
+		if debug and not settings.ENABLE_DEBUG_ENDPOINTS:
 			logger.warning('Debug endpoints disabled.')
 			return HttpResponseForbidden('Debug endpoints disabled.')
 
@@ -2621,7 +2630,7 @@ def debug_changesets_24h(request):
 		logger.warning('Not authenticated.')
 		return HttpResponseForbidden('Not authenticated.')
 
-	if not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
+	if not settings.ENABLE_DEBUG_ENDPOINTS:
 		logger.warning('Debug endpoints disabled.')
 		return HttpResponseForbidden('Debug endpoints disabled.')
 

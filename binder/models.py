@@ -790,12 +790,13 @@ class BinderFileField(FileField):
 	attr_class = BinderFieldFile
 	descriptor_class = BinderFileDescriptor
 
-	def __init__(self, allowed_extensions=None, *args, **kwargs):
+	def __init__(self, allowed_extensions=None, serve_directly=False, *args, **kwargs):
 		# Since we also need to store a content type and a hash in the field
 		# we up the default max_length from 100 to 200. Now we store also
 		# the original file name, so lets make it 400 chars.
 		kwargs.setdefault('max_length', 400)
 		self.allowed_extensions = allowed_extensions
+		self.serve_directly = serve_directly
 		return super().__init__(*args, **kwargs)
 
 	def get_prep_value(self, value):
@@ -825,6 +826,7 @@ class BinderFileField(FileField):
 
 		if self.allowed_extensions:
 			kwargs['allowed_extensions'] = self.allowed_extensions
+		kwargs['serve_directly'] = self.serve_directly
 		return name, path, args, kwargs
 
 
@@ -868,11 +870,11 @@ class BinderImageField(BinderFileField):
 	descriptor_class = BinderImageFileDescriptor
 	description = _("Image")
 
-	def __init__(self, verbose_name=None, name=None, width_field=None, height_field=None, allowed_extensions=None, **kwargs):
+	def __init__(self, verbose_name=None, name=None, width_field=None, height_field=None, allowed_extensions=None, serve_directly=False, **kwargs):
 		self.width_field, self.height_field = width_field, height_field
 		if allowed_extensions is None:
 			allowed_extensions = ['png', 'gif', 'jpg', 'jpeg']
-		super().__init__(allowed_extensions, verbose_name, name, **kwargs)
+		super().__init__(allowed_extensions, serve_directly, verbose_name, name, **kwargs)
 
 	def check(self, **kwargs):
 		return [

@@ -108,7 +108,9 @@ settings.configure(**{
 	},
 	'GROUP_CONTAINS': {
 		'admin': []
-	}
+	},
+	'INTERNAL_MEDIA_HEADER': 'X-Accel-Redirect',
+	'INTERNAL_MEDIA_LOCATION': '/internal/media/',
 })
 
 setup()
@@ -131,4 +133,3 @@ from django.contrib.auth.models import Group, Permission, ContentType
 content_type = ContentType.objects.get_or_create(app_label='testapp', model='country')[0]
 Permission.objects.get_or_create(content_type=content_type, codename='view_country')
 call_command('define_groups')
-
