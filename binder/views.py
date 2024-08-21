@@ -2882,8 +2882,12 @@ class ModelView(View):
 				if serve_directly:
 					resp = HttpResponse(content_type=content_type)
 					resp[settings.INTERNAL_MEDIA_HEADER] = os.path.join(settings.INTERNAL_MEDIA_LOCATION, file_field.name)
+					# if the filefield does not start with '/' it is likely a http address (S3) instead of path
+					# and because of that we set the redirect url
+					if not file_field.url.startswith('/'):
+						resp['redirect_url'] = file_field.url
 				else:
-					resp = StreamingHttpResponse(open(file_field.path, 'rb'), content_type=content_type)
+					resp = StreamingHttpResponse(file_field.open(), content_type=content_type)
 			except FileNotFoundError:
 				logger.error('Expected file {} not found'.format(file_field.name))
 				raise BinderNotFound(file_field_name)
