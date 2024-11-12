@@ -1,4 +1,4 @@
-from django.db.models import Count, Value
+from django.db.models import Count, Value, Sum
 
 from binder.views import ModelView, Stat
 
@@ -19,5 +19,13 @@ class AnimalView(ModelView):
 		'by_zoo': Stat(
 			Count(Value(1)),
 			group_by='zoo.name',
+		),
+		'stat_total_magic_number': Stat(
+			Sum('magic_number'),
+			annotations=['magic_number'],
+		),
+		'stat_total_magic_number_times_hunderd': Stat(
+			Sum('magic_number')*100,
+			annotations=['magic_number'],
 		),
 	}

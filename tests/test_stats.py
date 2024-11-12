@@ -86,13 +86,25 @@ class StatsTest(TestCase):
 			'debug': ANY(),
 		})
 
-	def test_animals_by_zoo(self):
-		res = self.get_stats('by_zoo')
+	# annotations
+	def test_animals_annotation(self):
+		res = self.get_stats('stat_total_magic_number')
 		self.assertEqual(res, {
-			'by_zoo': {
-				'value': {'Zoo 1': 1, 'Zoo 2': 2},
-				'other': 0,
+			'stat_total_magic_number': {
+				'value': 6,
 				'filters': {},
-				'group_by': 'zoo.name',
 			},
+		})
+
+	def test_animals_annotation_duplicates(self):
+		res = self.get_stats('stat_total_magic_number,stat_total_magic_number_times_hunderd')
+		self.assertEqual(res, {
+			'stat_total_magic_number': {
+				'value': 6,
+				'filters': {},
+			},
+			'stat_total_magic_number_times_hunderd': {
+				'value': 600,
+				'filters': {},
+			}
 		})

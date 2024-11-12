@@ -2985,12 +2985,13 @@ class ModelView(View):
 			stats = stats.split(',')
 
 		return JsonResponse({
-			stat: self._get_stat(request, queryset, stat, annotations, include_annotations)
+			stat: self._get_stat(request, queryset, stat, annotations.copy(), include_annotations)
 			for stat in stats
 		})
 
 
 	def _get_stat(self, request, queryset, stat, annotations, include_annotations):
+		# NOTE: uses annotations! If called multiple times, provide a copy
 		# Get stat definition
 		try:
 			stat = self.stats[stat]
