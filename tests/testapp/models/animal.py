@@ -35,3 +35,4 @@ class Animal(LoadedValuesMixin, BinderModel):
 			Value(request.GET.get('animal_name_prefix', 'Sir') + ' '),
 			F('name'),
 		))
+		magic_number = Value(2)
