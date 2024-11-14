@@ -21,11 +21,11 @@ from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidd
 from django.http.request import RawPostDataException
 from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
-from django.db.models import Q, F, Count
+from django.db.models import Q, F, Count, Case, When
 from django.db.models.lookups import Transform
 from django.utils import timezone
 from django.db import transaction
-from django.db.models.expressions import BaseExpression, Value, CombinedExpression, OrderBy, ExpressionWrapper, Func
+from django.db.models.expressions import BaseExpression, Value, CombinedExpression, OrderBy, ExpressionWrapper
 from django.db.models.fields.reverse_related import ForeignObjectRel
 
 
@@ -51,17 +51,6 @@ Stat = namedtuple(
 DEFAULT_STATS = {
 	'total_records': Stat(Count(Value(1))),
 }
-
-
-class Tuple(Func):
-	template = '(%(expressions)s)'
-
-
-class GreaterThan(Func):
-	template = '(%(expressions)s)'
-	arg_joiner = ' > '
-	arity = 2
-	output_field = models.BooleanField()
 
 
 def get_joins_from_queryset(queryset):
@@ -1569,8 +1558,7 @@ class ModelView(View):
 			raise BinderRequestError(f'invalid value for after_id: {after_id!r}')
 
 		# Now we will build up a comparison expr based on the order by
-		left_exprs = []
-		right_exprs = []
+		whens = []
 
 		for field in ordering:
 			# First we have to split of a leading '-' as indicating reverse
@@ -1578,30 +1566,40 @@ class ModelView(View):
 			if reverse:
 				field = field[1:]
 
-			# Then we build 2 exprs for the left hand side (objs in the query)
-			# and the right hand side (the object with the provided after id)
-			left_expr = F(field)
-
-			right_expr = obj
-			for attr in field.split('__'):
-				right_expr = getattr(right_expr, attr)
-			if isinstance(right_expr, models.Model):
-				right_expr = right_expr.pk
-			right_expr = Value(right_expr)
-
-			# To handle reverse we flip the expressions
-			if reverse:
-				left_exprs.append(right_expr)
-				right_exprs.append(left_expr)
+			# Then we determine if nulls come last
+			if field.endswith('__nulls_last'):
+				field = field[:-12]
+				nulls_last = True
+			elif field.endswith('__nulls_first'):
+				field = field[:-13]
+				nulls_last = False
+			elif connections[self.model.objects.db].vendor == 'mysql':
+				# In MySQL null is considered to be the lowest possible value for ordering
+				nulls_last = reverse
 			else:
-				left_exprs.append(left_expr)
-				right_exprs.append(right_expr)
+				# In other databases null is considered to be the highest possible value for ordering
+				nulls_last = not reverse
 
-		# Now we turn this into one big comparison
-		if len(ordering) == 1:
-			expr = GreaterThan(left_exprs[0], right_exprs[0])
-		else:
-			expr = GreaterThan(Tuple(*left_exprs), Tuple(*right_exprs))
+			# Then we determine what the value is for the obj we need to be after
+			value = obj
+			for attr in field.split('__'):
+				value = getattr(value, attr)
+			if isinstance(value, models.Model):
+				value = value.pk
+
+			# Now we add some conditions for the comparison
+			if value is None:
+				# If the value is None, that means we have to add a condition for when the field is not None because only then it is different
+				# What the result should be in that case is determined by nulls last
+				whens.append(When(Q(**{field + '__isnull': False}), then=Value(not nulls_last)))
+			else:
+				# If the field is None we give a result based on nulls last
+				whens.append(When(Q(**{field: None}), then=Value(nulls_last)))
+				# Otherwise we check with comparisons, note that equality is intentionally left open with these two options so in that case we go on to the next field
+				whens.append(When(Q(**{field + '__lt': value}), then=Value(reverse)))
+				whens.append(When(Q(**{field + '__gt': value}), then=Value(not reverse)))
+
+		expr = Case(*whens, default=Value(False))
 
 		return expr, required_annotations
 
