@@ -8,6 +8,7 @@ import functools
 import re
 from collections import defaultdict, namedtuple
 from contextlib import ExitStack
+from unidecode import unidecode
 
 from PIL import Image
 from inspect import getmro
@@ -2889,7 +2890,8 @@ class ModelView(View):
 				raise BinderNotFound(file_field_name)
 
 			if 'download' in request.GET:
-				filename = self.filefield_get_name(instance=obj, request=request, file_field=file_field)
+				# unidecode in order to prevent weird utf-8 symbols from messing with our urls, causing issues
+				filename = unidecode(self.filefield_get_name(instance=obj, request=request, file_field=file_field))
 				if 'prefix' in request.GET:
 					filename = request.GET['prefix'] + ' - ' + filename
 				resp['Content-Disposition'] = 'attachment; filename="{}"'.format(filename)
