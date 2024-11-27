@@ -1,6 +1,8 @@
 from django.conf import settings
 
 from .json import jsondumps
+from binder.inter_process_producers_consumer import produce
+from binder.rabbitmq import RABBITMQ_CONSUMER_PATH
 import requests
 from requests.exceptions import RequestException
 
@@ -29,23 +31,18 @@ class RoomController(object):
 
         return rooms
 
+# WARNING: When this is non-empty, the entire RabbitMQ connection will be mocked
+mock_trigger_listeners = []
 
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
-        import pika
-        from pika import BlockingConnection
-
-        connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
-                                                       settings.HIGH_TEMPLAR['rabbitmq']['password'])
-        connection_parameters = pika.ConnectionParameters(settings.HIGH_TEMPLAR['rabbitmq']['host'],
-                                                          credentials=connection_credentials)
-        connection = BlockingConnection(parameters=connection_parameters)
-        channel = connection.channel()
-
-        channel.basic_publish('hightemplar', routing_key='*', body=jsondumps({
-            'data': data,
-            'rooms': rooms,
-        }))
+        global mock_trigger_listeners
+        if len(mock_trigger_listeners) > 0:
+            for trigger_listener in mock_trigger_listeners:
+                trigger_listener(jsondumps({ 'data': data, 'rooms': rooms }))
+        else:
+            rabbitmq_consumer_args = settings.HIGH_TEMPLAR['rabbitmq']['username'] + ' ' + settings.HIGH_TEMPLAR['rabbitmq']['password'] + ' ' + settings.HIGH_TEMPLAR['rabbitmq']['host']
+            produce(jsondumps({ 'data': data, 'rooms': rooms }), RABBITMQ_CONSUMER_PATH, rabbitmq_consumer_args)
     if getattr(settings, 'HIGH_TEMPLAR_URL', None):
         url = getattr(settings, 'HIGH_TEMPLAR_URL')
         try:
