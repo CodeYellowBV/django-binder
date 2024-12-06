@@ -288,14 +288,20 @@ class CsvExportView:
 
 						if fk_ids is None:
 							# This case happens if we have a nullable foreign key that is null. Treat this as a many
-							# to one relation with no values. 
+							# to one relation with no values.
 							fk_ids = []
 						elif type(fk_ids) != list:
 							fk_ids = [fk_ids]
 
 						# if head_key not in key_mapping:
 						prefix_key = parent_data['with_mapping'][new_prefix[1:]]
-						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in fk_ids]
+						datums = []
+						for fk_id in fk_ids:
+							try:
+								datums.append(str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)))
+							except KeyError:
+							 	pass
+						# datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in fk_ids]
 						return self.csv_settings.multi_value_delimiter.join(
 							datums
 						)
