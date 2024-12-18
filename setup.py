@@ -11,7 +11,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
 	name='django-binder',
-	version='1.6.0',
+	version='1.7.0',
 	package_dir={'binder': 'binder'},
 	packages=find_packages(),
 	include_package_data=True,
@@ -27,6 +27,7 @@ setup(
 		'Framework :: Django',
 		'Framework :: Django :: 3.0',
 		'Framework :: Django :: 4.0',
+		'Framework :: Django :: 5.0',
 		'Intended Audience :: Developers',
 		'License :: OSI Approved :: MIT License',
 		'Operating System :: OS Independent',
@@ -36,7 +37,7 @@ setup(
 		'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
 	],
 	install_requires=[
-		'Django >= 3.0, < 5.0',
+		'Django >= 3.0, < 6.0',
 		'Pillow >= 3.2.0',
 		'django-request-id >= 1.0.0',
 		'requests >= 2.13.0',
