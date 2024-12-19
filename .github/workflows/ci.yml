@@ -11,6 +11,10 @@ jobs:
         python-version: ["3.8", "3.12"]
         django-version: ["3.2.25", "4.2.17", "5.1.4"]
         database-engine: ["postgres", "mysql"]
+        include:
+          - python-version: 3.7
+            django-version: 3.2.25
+            database-engine: postgres
         exclude:
           - python-version: 3.8
             django-version: 5.1.4
