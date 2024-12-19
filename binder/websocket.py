@@ -32,20 +32,24 @@ class RoomController(object):
 
 def trigger(data, rooms):
     if 'rabbitmq' in getattr(settings, 'HIGH_TEMPLAR', {}):
-        import pika
-        from pika import BlockingConnection
+        connection = None
+        try:
+            import pika
+            from pika import BlockingConnection
+            connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
+                                                           settings.HIGH_TEMPLAR['rabbitmq']['password'])
+            connection_parameters = pika.ConnectionParameters(settings.HIGH_TEMPLAR['rabbitmq']['host'],
+                                                              credentials=connection_credentials)
+            connection = BlockingConnection(parameters=connection_parameters)
+            channel = connection.channel()
 
-        connection_credentials = pika.PlainCredentials(settings.HIGH_TEMPLAR['rabbitmq']['username'],
-                                                       settings.HIGH_TEMPLAR['rabbitmq']['password'])
-        connection_parameters = pika.ConnectionParameters(settings.HIGH_TEMPLAR['rabbitmq']['host'],
-                                                          credentials=connection_credentials)
-        connection = BlockingConnection(parameters=connection_parameters)
-        channel = connection.channel()
-
-        channel.basic_publish('hightemplar', routing_key='*', body=jsondumps({
-            'data': data,
-            'rooms': rooms,
-        }))
+            channel.basic_publish('hightemplar', routing_key='*', body=jsondumps({
+                'data': data,
+                'rooms': rooms,
+            }))
+        finally:
+            if connection and not connection.is_closed:
+                connection.close()
     if getattr(settings, 'HIGH_TEMPLAR_URL', None):
         url = getattr(settings, 'HIGH_TEMPLAR_URL')
         try:
