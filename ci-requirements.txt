@@ -8,3 +8,4 @@ codecov
 coverage
 django-hijack<3.0.0
 openpyxl
+pika
