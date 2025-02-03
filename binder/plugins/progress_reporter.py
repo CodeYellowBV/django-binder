@@ -33,27 +33,27 @@ class ProgressReporter(ProgressReporterInterface):
 
 	```
 	progress_reporter = ProgressReporter(targets=[
-        {
-            'target': 'download',
-            'uuid': download.uuid,
-            'triggered_by': '*'
-        },
-        {
-            'target': 'download',
-            'uuid': download.uuid,
-            'triggered_by': download.triggered_by.pk
-        }
-    ])
+		{
+			'target': 'download',
+			'uuid': download.uuid,
+			'triggered_by': '*'
+		},
+		{
+			'target': 'download',
+			'uuid': download.uuid,
+			'triggered_by': download.triggered_by.pk
+		}
+	])
 
 	# 20% done
-    progress_reporter.report(0.2)
+	progress_reporter.report(0.2)
 
-    # 50% done
-    progress_reporter.report(0.5)
+	# 50% done
+	progress_reporter.report(0.5)
 
-    # 100% done
-    progress_reporter.report_finished()
-    ````
+	# 100% done
+	progress_reporter.report_finished()
+	````
 	"""
 	def __init__(self, targets: List[dict]):
 		self.targets = targets

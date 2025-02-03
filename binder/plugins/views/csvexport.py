@@ -255,7 +255,7 @@ class CsvExportView:
 
 
 	def _generate_csv_file(self, request: HttpRequest, file_adapter: CsvFileAdapter,
-						   progress_reporter: Optional[ProgressReporterInterface] = None):
+						progress_reporter: Optional[ProgressReporterInterface] = None):
 		"""
 		Generate the actual data for the CSV file, by doing a HTTP request, and then parsing the data to CSV Format
 
@@ -288,7 +288,6 @@ class CsvExportView:
 		file_adapter.set_columns(list(map(lambda x: x[1], self.csv_settings.column_map)))
 
 		# # A bit of a hack. We overwrite some get parameters, to make sure that we can create the CSV file
-		mutable = request.POST._mutable
 		request.GET._mutable = True
 		request.GET['page'] = 1
 		request.GET['limit'] = self.csv_settings.limit if self.csv_settings.limit is not None else 'none'
@@ -337,8 +336,7 @@ class CsvExportView:
 
 						# if head_key not in key_mapping:
 						prefix_key = parent_data['with_mapping'][new_prefix[1:]]
-						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in
-								  fk_ids]
+						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in fk_ids]
 						return self.csv_settings.multi_value_delimiter.join(
 							datums
 						)
@@ -365,7 +363,7 @@ class CsvExportView:
 			# 	"with_name": {
 			#		model_id: model,
 			#		...
-			#   },
+			#	},
 			#	...
 			# }
 			key_mapping = {}
