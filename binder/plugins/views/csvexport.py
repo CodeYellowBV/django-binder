@@ -1,11 +1,13 @@
 import abc
 import csv
+from collections import namedtuple
 from tempfile import NamedTemporaryFile
-from typing import List
+from typing import List, Optional
 
 from django.http import HttpResponse, HttpRequest
 
 from binder.json import jsonloads
+from binder.plugins.progress_reporter import ProgressReporterInterface
 from binder.router import list_route
 
 
@@ -163,7 +165,38 @@ class RequestAwareAdapter(ExportFileAdapter):
 		return self.base_adapter.get_response()
 
 
+class ProgressReporterAdapter:
+	Chunk = namedtuple('Chunk', ['page', 'limit'])
+	"""
+	Adapter which keeps tracks of some statistics to do progress reporting
+	"""
+	def __init__(self, progress_reporter: ProgressReporterInterface):
+		self.progress_reporter = progress_reporter
+		self._total_records = 0
+		self._limit = 25
 
+		self._chunks = []
+		self._chunks_done = []
+
+	def set_total_records(self, total_records):
+		self._total_records = total_records
+
+	def chunks(self) -> List[Chunk]:
+		"""
+		returns all the pages, with corresponding limits for this progress reporter
+		"""
+		self._chunks = []
+		self._chunks_done = []
+
+		records_to_go = self._total_records
+		page_counter = 1
+
+		while records_to_go > 0:
+			self._chunks.append(ProgressReporterAdapter.Chunk(page_counter, min(self._limit, records_to_go)))
+			page_counter += 1
+			records_to_go -= self._limit
+
+		return self._chunks
 
 class CsvExportView:
 	"""
@@ -209,12 +242,38 @@ class CsvExportView:
 			self.limit = limit
 
 
-	def _generate_csv_file(self, request: HttpRequest, file_adapter: CsvFileAdapter):
+	def _generate_csv_file(self, request: HttpRequest, file_adapter: CsvFileAdapter,
+						   progress_reporter: Optional[ProgressReporterInterface] = None):
+		"""
+		Generate the actual data for the CSV file, by doing a HTTP request, and then parsing the data to CSV Format
+
+		:param progress_reporter An optional progress reporter. Adding this will slow down the query
+		"""
 
 		# Sometimes we want to add an extra permission check before a csv file can be downloaded. This checks if the
 		# permission is set, and if the permission is set, checks if the current user has the specified permission
 		if self.csv_settings.extra_permission is not None:
 			self._require_model_perm(self.csv_settings.extra_permission, request)
+
+		# First, if we have a progress_reporter,
+		progress_reporter_adapter = ProgressReporterAdapter(progress_reporter=progress_reporter)
+
+		# Check the total amount of records. Do this by stripping all the withs and annotations. This should be very quick
+		total_records = self._get_filtered_queryset_base(request)[0].count()
+
+		# Bound the total amount of records, to make sure that we do not ddos the server. By default is capped at 10000m
+		# but can be overwritten in the settings
+
+
+		if self.csv_settings.limit is not None and total_records > self.csv_settings.limit:
+			total_records = self.csv_settings.limit
+		elif total_records > 10000:
+			total_records = 10000
+
+		progress_reporter_adapter.set_total_records(total_records)
+
+		# CSV header
+		file_adapter.set_columns(list(map(lambda x: x[1], self.csv_settings.column_map)))
 
 		# # A bit of a hack. We overwrite some get parameters, to make sure that we can create the CSV file
 		mutable = request.POST._mutable
@@ -224,34 +283,6 @@ class CsvExportView:
 		request.GET['with'] = ",".join(self.csv_settings.withs)
 		for key, value in self.csv_settings.extra_params.items():
 			request.GET[key] = value
-		request.GET._mutable = mutable
-
-		parent_result = self.get(request)
-		parent_data = jsonloads(parent_result.content)
-
-		file_name = self.csv_settings.file_name
-		if callable(file_name):
-			file_name = file_name(parent_data)
-		if file_name is None:
-			file_name = self.csv_settings.default_file_name
-		file_adapter.set_file_name(file_name)
-
-		# CSV header
-		file_adapter.set_columns(list(map(lambda x: x[1], self.csv_settings.column_map)))
-
-		# Make a mapping from the withs. This creates a map. This is needed for easy looking up relations
-		# {
-		# 	"with_name": {
-		#		model_id: model,
-		#		...
-		#   },
-		#	...
-		# }
-		key_mapping = {}
-		for key in parent_data['with']:
-			key_mapping[key] = {}
-			for row in parent_data['with'][key]:
-				key_mapping[key][row['id']] = row
 
 		def get_datum(data, key, prefix=''):
 			"""
@@ -294,7 +325,8 @@ class CsvExportView:
 
 						# if head_key not in key_mapping:
 						prefix_key = parent_data['with_mapping'][new_prefix[1:]]
-						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in fk_ids]
+						datums = [str(get_datum(key_mapping[prefix_key][fk_id], subkey, new_prefix)) for fk_id in
+								  fk_ids]
 						return self.csv_settings.multi_value_delimiter.join(
 							datums
 						)
@@ -302,17 +334,45 @@ class CsvExportView:
 				else:
 					raise Exception("{} not found in {}".format(head_key, data))
 
-		for row in parent_data['data']:
-			data = []
-			for col_definition in self.csv_settings.column_map:
-				datum = get_datum(row, col_definition[0])
-				if len(col_definition) >= 3:
-					transform_function = col_definition[2]
-					datum = transform_function(datum, row, key_mapping)
-				if isinstance(datum, list):
-					datum = self.csv_settings.multi_value_delimiter.join(datum)
-				data.append(datum)
-			file_adapter.add_row(data)
+		for chunk in progress_reporter_adapter.chunks():
+			request.GET['limit'] = chunk.limit
+			request.GET['page'] = chunk.page
+
+			parent_result = self.get(request)
+			parent_data = jsonloads(parent_result.content)
+
+			file_name = self.csv_settings.file_name
+			if callable(file_name):
+				file_name = file_name(parent_data)
+			if file_name is None:
+				file_name = self.csv_settings.default_file_name
+			file_adapter.set_file_name(file_name)
+
+			# Make a mapping from the withs. This creates a map. This is needed for easy looking up relations
+			# {
+			# 	"with_name": {
+			#		model_id: model,
+			#		...
+			#   },
+			#	...
+			# }
+			key_mapping = {}
+			for key in parent_data['with']:
+				key_mapping[key] = {}
+				for row in parent_data['with'][key]:
+					key_mapping[key][row['id']] = row
+
+			for row in parent_data['data']:
+				data = []
+				for col_definition in self.csv_settings.column_map:
+					datum = get_datum(row, col_definition[0])
+					if len(col_definition) >= 3:
+						transform_function = col_definition[2]
+						datum = transform_function(datum, row, key_mapping)
+					if isinstance(datum, list):
+						datum = self.csv_settings.multi_value_delimiter.join(datum)
+					data.append(datum)
+				file_adapter.add_row(data)
 
 	@list_route(name='download', methods=['GET'])
 	def download(self, request):
