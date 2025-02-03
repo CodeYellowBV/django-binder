@@ -170,33 +170,43 @@ class ProgressReporterAdapter:
 	"""
 	Adapter which keeps tracks of some statistics to do progress reporting
 	"""
-	def __init__(self, progress_reporter: ProgressReporterInterface):
+	def __init__(self, progress_reporter: ProgressReporterInterface, page_size):
 		self.progress_reporter = progress_reporter
 		self._total_records = 0
-		self._limit = 25
+		self._limit = page_size
 
-		self._chunks = []
-		self._chunks_done = []
+		self._chunks = set()
+		self._chunks_done = set()
 
 	def set_total_records(self, total_records):
 		self._total_records = total_records
+
+	def report_chunk_done(self, chunk):
+		self._chunks_done.add(chunk)
+
+		if self._chunks == self._chunks_done:
+			self.progress_reporter.report_finished()
+		else:
+			percentage = round(len(self._chunks_done) * 1.0 / len(self._chunks), 2)
+			self.progress_reporter.report(percentage)
+
 
 	def chunks(self) -> List[Chunk]:
 		"""
 		returns all the pages, with corresponding limits for this progress reporter
 		"""
-		self._chunks = []
-		self._chunks_done = []
+		self._chunks = set()
+		self._chunks_done = set()
 
 		records_to_go = self._total_records
 		page_counter = 1
 
 		while records_to_go > 0:
-			self._chunks.append(ProgressReporterAdapter.Chunk(page_counter, min(self._limit, records_to_go)))
+			self._chunks.add(ProgressReporterAdapter.Chunk(page_counter, min(self._limit, records_to_go)))
 			page_counter += 1
 			records_to_go -= self._limit
 
-		return self._chunks
+		return list(self._chunks)
 
 class CsvExportView:
 	"""
@@ -215,7 +225,7 @@ class CsvExportView:
 		"""
 
 		def __init__(self, withs, column_map, file_name=None, default_file_name='download', multi_value_delimiter=' ',
-					extra_permission=None, extra_params={}, csv_adapter=RequestAwareAdapter, limit=10000):
+					extra_permission=None, extra_params={}, csv_adapter=RequestAwareAdapter, limit=10000, page_size=10000):
 			"""
 			@param withs: String[]  An array of all the withs that are necessary for this csv export
 			@param column_map: Tuple[] An array, with all columns of the csv file in order. Each column is represented by a tuple
@@ -230,6 +240,7 @@ class CsvExportView:
 			@param response_type_mapping: Mapping between the parameter used in the custom response type
 			@param limit: Limit for amount of items in the csv. This is a fail save that you do not bring down the server with
 			a big query
+			@param page_size: The amount of records we get per chunk from the database. Progress is reported between each chunk.
 			"""
 			self.withs = withs
 			self.column_map = column_map
@@ -240,6 +251,7 @@ class CsvExportView:
 			self.extra_params = extra_params
 			self.csv_adapter = csv_adapter
 			self.limit = limit
+			self.page_size = page_size
 
 
 	def _generate_csv_file(self, request: HttpRequest, file_adapter: CsvFileAdapter,
@@ -256,7 +268,7 @@ class CsvExportView:
 			self._require_model_perm(self.csv_settings.extra_permission, request)
 
 		# First, if we have a progress_reporter,
-		progress_reporter_adapter = ProgressReporterAdapter(progress_reporter=progress_reporter)
+		progress_reporter_adapter = ProgressReporterAdapter(progress_reporter=progress_reporter, page_size=self.csv_settings.page_size)
 
 		# Check the total amount of records. Do this by stripping all the withs and annotations. This should be very quick
 		total_records = self._get_filtered_queryset_base(request)[0].count()
@@ -373,6 +385,7 @@ class CsvExportView:
 						datum = self.csv_settings.multi_value_delimiter.join(datum)
 					data.append(datum)
 				file_adapter.add_row(data)
+			progress_reporter_adapter.report_chunk_done(chunk)
 
 	@list_route(name='download', methods=['GET'])
 	def download(self, request):
