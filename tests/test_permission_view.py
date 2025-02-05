@@ -6,7 +6,7 @@ from django.test import TestCase, Client,  override_settings
 from django.db.models import Q
 
 from binder.json import jsonloads, jsondumps
-from binder.permissions.views import is_q_stricter, smart_q_or
+from binder.permissions.views import is_q_stricter, smart_q_or, PermissionView
 
 from .testapp.models import Zoo, ZooEmployee, Country, City, PermanentCity, CityState, Animal
 from .testapp.urls import router
@@ -804,3 +804,60 @@ class SmartQOrTest(TestCase):
 
 		combined = smart_q_or(pk_not_in_empty_list | foo)
 		self.assertEqual(combined, pk_not_in_empty_list)
+
+class ForUpdateErrorNotOccurringTest(TestCase):
+	"""
+	Previously there was a bug where if you did a delete on an object in a permisionview, while at the same time you
+	also had a view scope that depended on a nullable field, then a SQL error would occur during the deletion:
+
+
+	"FOR UPDATE cannot be applied to the nullable side of an outer join"
+
+	"""
+	def setUp(self):
+		super().setUp()
+
+		group = Group.objects.get()
+
+		u = User(username='testuser', is_active=True, is_superuser=False)
+		u.set_password('test')
+		u.save()
+		u.groups.add(group)
+
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
+
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.view_citystate', 'netherlands'),
+			('testapp.delete_citystate', 'all'),
+		],
+	})
+	def test_for_update_bug_not_occurs_on_deletion(self):
+		country = Country.objects.create(name='Netherlands')
+		city_state = CityState.objects.create(name='Luxembourg', country=country)
+
+		res = self.client.delete(f'/city_state/{city_state.id}/')
+
+		self.assertEqual(204, res.status_code)
+
+	@override_settings(BINDER_PERMISSION={
+		'testapp.view_country': [
+			('testapp.view_country', 'all'),
+			('testapp.view_citystate', 'netherlands'),
+			('testapp.delete_citystate', 'all'),
+			('testapp.change_citystate', 'all'),
+		],
+	})
+	def test_for_update_bug_not_occurs_on_put(self):
+		# Same bug occurred with a put request
+		country = Country.objects.create(name='Netherlands')
+		city_state = CityState.objects.create(name='Luxembourg', country=country)
+
+		res = self.client.put(f'/city_state/{city_state.id}/', data=jsondumps({
+		}))
+		print(res.json())
+
+		self.assertEqual(200, res.status_code)
