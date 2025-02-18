@@ -13,6 +13,7 @@ class MyFilter(BinderModel):
     view = models.TextField()
     name = models.TextField()
     params = models.JSONField()
+    columns = models.JSONField(default=list, blank=True)
     default = models.BooleanField(default=False)
 
     class Meta(BinderModel.Meta):
