@@ -88,3 +88,27 @@ class TestAfter(TestCase):
 			self.assertEqual(self.get('-birth_date'), 'edbacf')
 			self.assertEqual(self.get('-birth_date', after='c'), 'f')
 			self.assertEqual(self.get('-birth_date', after='b'), 'acf')
+
+	def test_after_with_nullable_foreign_key(self):
+		"""
+		There was a bug that if you filtered on a nullable relation, and the relation was not set for the after,
+		then it would crash. Here we test that this doesn't happen again
+		"""
+
+		first_animal = Animal.objects.all()[0]
+		first_animal.zoo = None
+		first_animal.save()
+
+		self.get('-zoo.name', after=self.mapping[first_animal.pk])
+
+	def test_after_with_nullable_foreign_key_and_nulls_first(self):
+		"""
+		There was a bug that if you filtered on a nullable relation, and the relation was not set for the after,
+		then it would crash. Here we test that this doesn't happen again
+		"""
+
+		first_animal = Animal.objects.all()[0]
+		first_animal.zoo = None
+		first_animal.save()
+
+		self.get('-zoo.name__nulls_first', after=self.mapping[first_animal.pk])
