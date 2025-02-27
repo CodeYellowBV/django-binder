@@ -1561,6 +1561,21 @@ class ModelView(View):
 		whens = []
 
 		for field in ordering:
+			# Fields are generally strings, except in some edge case, where it is an OrderBy expression.
+			# In thase case, we need to change it back to starting (sigh) for compatability reasons
+
+			if type(field) is not str:
+				_field = field
+
+				field = field.expression.name
+
+				if _field.descending:
+					field = f'-{field}'
+				if _field.nulls_first:
+					field = f'{field}__nulls_first'
+				if _field.nulls_last:
+					field = f'{field}__nulls_last'
+
 			# First we have to split of a leading '-' as indicating reverse
 			reverse = field.startswith('-')
 			if reverse:
@@ -1583,7 +1598,7 @@ class ModelView(View):
 			# Then we determine what the value is for the obj we need to be after
 			value = obj
 			for attr in field.split('__'):
-				value = getattr(value, attr)
+				value = getattr(value, attr, None)
 			if isinstance(value, models.Model):
 				value = value.pk
 
