@@ -239,11 +239,14 @@ class IntegerFieldFilter(FieldFilter):
 		models.ManyToManyField,
 		models.ManyToManyRel,
 	]
-	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull', 'icontains']
 
 	def clean_value(self, qualifier, v):
 		try:
-			return int(v)
+			if qualifier == 'icontains':
+				return str(v)
+			else:
+				return int(v)
 		except ValueError:
 			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
