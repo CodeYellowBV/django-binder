@@ -175,6 +175,7 @@ class LoadedValuesMixinTest(TestCase):
 			'id': None,
 			'name': 'Henk',
 			'zoo': None,
+			'favorite_number': None,
 			'hourly_wage': None,
 			'deleted': False,
 		}, zoo_employee.get_old_values())
@@ -197,6 +198,7 @@ class LoadedValuesMixinTest(TestCase):
 			'id': zoo_employee.id,
 			'name': 'Henk',
 			'zoo': artis.id,
+			'favorite_number': None,
 			'hourly_wage': None,
 			'deleted': False,
 		}, zoo_employee.get_old_values())
@@ -216,6 +218,7 @@ class LoadedValuesMixinTest(TestCase):
 			'id': zoo_employee.id,
 			'name': 'Henk',
 			'zoo': artis.id,
+			'favorite_number': None,
 			'hourly_wage': None,
 			'deleted': False,
 		}, zoo_employee.get_old_values())
