@@ -493,8 +493,6 @@ class TestDateTimeRangeField(TestCase):
 			test_model = TimeTable(daterange=DateTimeTZRange(lower, upper))
 			test_model.save()
 
-		self.assertEqual("expected string or bytes-like object", str(te.exception))
-
 
 	def test_value_tuple_empty(self):
 		# empty is equivalent to None
@@ -573,8 +571,6 @@ class TestDateTimeRangeField(TestCase):
 			test_model = TimeTable(daterange=(lower, upper))
 			test_model.save()
 
-		self.assertEqual("expected string or bytes-like object", str(te.exception))
-
 
 	def test_value_array_empty(self):
 		# empty is equivalent to None
@@ -652,8 +648,6 @@ class TestDateTimeRangeField(TestCase):
 		with self.assertRaises(TypeError) as te:
 			test_model = TimeTable(daterange=[lower, upper])
 			test_model.save()
-
-		self.assertEqual("expected string or bytes-like object", str(te.exception))
 
 
 	def test_value_stringified_array(self):

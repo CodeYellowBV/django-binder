@@ -6,11 +6,13 @@ import json
 from collections import defaultdict
 from datetime import date, datetime, time
 from contextlib import suppress
+from decimal import Decimal
 
 from django import forms
 from django.db import models
+from django.db.models import Value
 from django.db.models.fields.files import FieldFile, FileField
-from django.contrib.postgres.fields import CITextField, ArrayField, JSONField, DateTimeRangeField as DTRangeField
+from django.contrib.postgres.fields import CITextField, ArrayField, DateTimeRangeField as DTRangeField
 from django.core import checks
 from django.core.files.base import File, ContentFile
 from django.core.files.images import ImageFile
@@ -26,6 +28,29 @@ from binder.json import jsonloads
 from binder.exceptions import BinderRequestError
 
 from . import history
+
+
+@models.CharField.register_lookup
+@models.TextField.register_lookup
+class FuzzyLookup(models.Lookup):
+
+	lookup_name = 'fuzzy'
+
+	def get_prep_lookup(self):
+		assert isinstance(self.rhs, str)
+		pattern = ['%']
+		for part in self.rhs.split():
+			for char in part:
+				if char in '%_[\\':
+					char.append('\\')
+				pattern.append(char)
+			pattern.append('%')
+		return Value(''.join(pattern))
+
+	def as_sql(self, compiler, connection):
+		lhs, lhs_params = self.process_lhs(compiler, connection)
+		rhs, rhs_params = self.process_rhs(compiler, connection)
+		return f'{lhs} ilike {rhs} escape \'\\\'', (*lhs_params, *rhs_params)
 
 
 class DateTimeRangeField(DTRangeField):
@@ -290,6 +315,16 @@ class FloatFieldFilter(FieldFilter):
 			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
 
+class DecimalFieldFilter(FieldFilter):
+	fields = [models.DecimalField]
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
+
+	def clean_value(self, qualifier, v):
+		try:
+			return Decimal(v)
+		except ValueError:
+			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
+
 
 class DateFieldFilter(FieldFilter):
 	fields = [models.DateField]
@@ -393,9 +428,8 @@ class BooleanFieldFilter(FieldFilter):
 
 class TextFieldFilter(FieldFilter):
 	fields = [models.CharField, models.TextField]
-	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'isnull']
+	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'isnull', 'fuzzy']
 	allowed_chain_qualifiers = {'unaccent': models.TextField}
-
 	# Always valid(?)
 	def clean_value(self, qualifier, v):
 		return v
@@ -426,7 +460,7 @@ class ArrayFieldFilter(FieldFilter):
 
 
 class JSONFieldFilter(FieldFilter):
-	fields = [JSONField]
+	fields = [models.JSONField]
 	# TODO: Element or path-based lookup is not supported yet
 	allowed_qualifiers = [None, 'contains', 'contained_by', 'has_key', 'has_any_keys', 'has_keys', 'isnull']
 
@@ -499,7 +533,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 			d.pop(field.source_field.name + '_id')
 			d['id'] = d.pop(field.target_field.name + '_id')
 
-		return set(sorted(d.items()) for d in data)
+		return set(tuple(sorted(d.items())) for d in data)
 
 	binder_is_binder_model = True
 
@@ -724,7 +758,7 @@ class BinderFieldFile(FieldFile):
 		if not self.name:
 			self._content_type = None
 		elif self._content_type is None:
-			self._content_type, _ = mimetypes.guess_type(self.path)
+			self._content_type, _ = mimetypes.guess_type(self.name)
 		return self._content_type
 
 	# So here we have a bunch of methods that might alter the data or name of
@@ -832,12 +866,13 @@ class BinderFileField(FileField):
 	attr_class = BinderFieldFile
 	descriptor_class = BinderFileDescriptor
 
-	def __init__(self, allowed_extensions=None, *args, **kwargs):
+	def __init__(self, allowed_extensions=None, serve_directly=False, *args, **kwargs):
 		# Since we also need to store a content type and a hash in the field
 		# we up the default max_length from 100 to 200. Now we store also
 		# the original file name, so lets make it 400 chars.
 		kwargs.setdefault('max_length', 400)
 		self.allowed_extensions = allowed_extensions
+		self.serve_directly = serve_directly
 		return super().__init__(*args, **kwargs)
 
 	def get_prep_value(self, value):
@@ -867,6 +902,7 @@ class BinderFileField(FileField):
 
 		if self.allowed_extensions:
 			kwargs['allowed_extensions'] = self.allowed_extensions
+		kwargs['serve_directly'] = self.serve_directly
 		return name, path, args, kwargs
 
 
@@ -910,11 +946,11 @@ class BinderImageField(BinderFileField):
 	descriptor_class = BinderImageFileDescriptor
 	description = _("Image")
 
-	def __init__(self, verbose_name=None, name=None, width_field=None, height_field=None, allowed_extensions=None, **kwargs):
+	def __init__(self, verbose_name=None, name=None, width_field=None, height_field=None, allowed_extensions=None, serve_directly=False, **kwargs):
 		self.width_field, self.height_field = width_field, height_field
 		if allowed_extensions is None:
 			allowed_extensions = ['png', 'gif', 'jpg', 'jpeg']
-		super().__init__(allowed_extensions, verbose_name, name, **kwargs)
+		super().__init__(allowed_extensions, serve_directly, verbose_name, name, **kwargs)
 
 	def check(self, **kwargs):
 		return [
@@ -983,7 +1019,7 @@ class BinderImageField(BinderFileField):
 		if not file and not force:
 			return
 
-		dimension_fields_filled = not(
+		dimension_fields_filled = not (
 			(self.width_field and not getattr(instance, self.width_field)) or
 			(self.height_field and not getattr(instance, self.height_field))
 		)

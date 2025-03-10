@@ -142,10 +142,10 @@ class BinderFileFieldTest(TestCase):
 		zoo.refresh_from_db()
 		filename = basename(zoo.binder_picture.name) # Without folders foo/bar/
 
-		self.assertEqual(
-			data['data']['binder_picture'],
-			'/zoo/{}/binder_picture/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, JPG_HASH, filename),
-		)
+		path = '/zoo/{}/binder_picture/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, JPG_HASH, filename)
+		self.assertEqual(data['data']['binder_picture'], path)
+		response = self.client.get(path)
+		self.assertNotIn('X-Accel-Redirect', response.headers)
 
 	def test_get_unknown_extension(self):
 		filename = 'pic.unknown'
@@ -165,6 +165,25 @@ class BinderFileFieldTest(TestCase):
 			data['data']['binder_picture'],
 			'/zoo/{}/binder_picture/?h={}&content_type=&filename={}'.format(zoo.pk, UNKNOWN_TYPE_HASH, filename),
 		)
+
+	def test_get_direct(self):
+		filename = 'pic.jpg'
+		zoo = Zoo(name='Apenheul')
+		zoo.binder_picture_direct = ContentFile(JPG_CONTENT, name=filename)
+		zoo.save()
+
+		response = self.client.get('/zoo/{}/'.format(zoo.pk))
+		self.assertEqual(response.status_code, 200)
+		data = jsonloads(response.content)
+
+		# Remove once Django 3 lands with: https://docs.djangoproject.com/en/3.1/howto/custom-file-storage/#django.core.files.storage.get_alternative_name
+		zoo.refresh_from_db()
+		filename = basename(zoo.binder_picture_direct.name) # Without folders foo/bar/
+
+		path = '/zoo/{}/binder_picture_direct/?h={}&content_type=image/jpeg&filename={}'.format(zoo.pk, JPG_HASH, filename)
+		self.assertEqual(data['data']['binder_picture_direct'], path)
+		response = self.client.get(path)
+		self.assertIn('X-Accel-Redirect', response.headers)
 
 	def test_setting_blank(self):
 		zoo = Zoo(name='Apenheul')

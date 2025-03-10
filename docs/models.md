@@ -62,6 +62,12 @@ When manually changed, Django will then correctly make new migration files.
 
 ---
 
+#### Extra options
+
+* `allowed_extensions` (default: `None`): limits the file extensions that can be uploaded
+* `serve_directly` (default: `False`): delegates file serving to the web server (e.g. nginx)
+  * Requires configuration of `INTERNAL_MEDIA_HEADER` and `INTERNAL_MEDIA_LOCATION` in `settings.py`
+
 ## Enums
 
 Binder makes it easy to use enums.

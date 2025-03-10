@@ -7,8 +7,7 @@ from django.contrib.auth.models import User
 from binder import history
 from binder.history import Change, Changeset
 
-from .testapp.models import Animal, Caretaker
-
+from .testapp.models import Animal, Caretaker, ContactPerson
 
 
 class HistoryTest(TestCase):
@@ -28,11 +27,36 @@ class HistoryTest(TestCase):
 		model_data = {
 			'name': 'Artis',
 		}
-		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		response = self.client.post('/country/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 
 		self.assertEqual(0, Changeset.objects.count())
 		self.assertEqual(0, Change.objects.count())
+
+
+	def test_m2m_using_binder_through_history_doesnt_crash(self):
+
+		contact_person = ContactPerson.objects.create(
+			name='Burhan'
+		)
+
+		contact_person_2 = ContactPerson.objects.create(
+			name='Rene'
+		)
+
+		model_data = {
+			'name': 'Code Yellow',
+			'contacts': [contact_person.pk]
+		}
+		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		_id = json.loads(response.content)['id']
+
+		response = self.client.put(f'/zoo/{_id}/', data=json.dumps({
+			"contacts": [contact_person.pk, contact_person_2.pk]
+		}), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
 
 
 	def test_model_with_history_creates_changes_on_creation(self):
@@ -47,13 +71,14 @@ class HistoryTest(TestCase):
 		self.assertEqual('testuser', cs.user.username)
 		self.assertAlmostEqual(datetime.now(tz=timezone.utc), cs.date, delta=timedelta(seconds=1))
 
-		self.assertEqual(6, Change.objects.count())
+		self.assertEqual(7, Change.objects.count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='name', before='null', after='"Daffy Duck"').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='id', before='null', after=Animal.objects.get().id).count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='caretaker', before='null', after='null').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='zoo', before='null', after='null').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='zoo_of_birth', before='null', after='null').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='deleted', before='null', after='false').count())
+		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='birth_date', before='null', after='null').count())
 
 
 

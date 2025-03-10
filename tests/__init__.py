@@ -113,7 +113,9 @@ settings.configure(**{
 	},
 	'GROUP_CONTAINS': {
 		'admin': []
-	}
+	},
+	'INTERNAL_MEDIA_HEADER': 'X-Accel-Redirect',
+	'INTERNAL_MEDIA_LOCATION': '/internal/media/',
 })
 
 setup()

@@ -18,8 +18,8 @@ if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
 			r = self.client.login(username='testuser', password='test')
 			self.assertTrue(r)
 
-			Zoo(name='Burgers Zoo', opening_time='11:00:00Z').save()
-			Zoo(name='Artis', opening_time='09:00:00Z').save()
+			Zoo(name='Burgers Zoo', opening_time='11:00:00').save()
+			Zoo(name='Artis', opening_time='09:00:00').save()
 
 
 		def test_time_filter_exact_match(self):

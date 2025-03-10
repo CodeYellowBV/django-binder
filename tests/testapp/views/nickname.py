@@ -1,14 +1,33 @@
 from binder.views import ModelView
 
-from ..models import Nickname
+from ..models import Nickname, Zoo, NullableNickname
+
 
 class NicknameView(ModelView):
 	model = Nickname
 
+	virtual_relations = {
+		'source': {
+			'model': Zoo,
+			'annotation': '_virtual_source',
+			'singular': True
+		},
+	}
 
-from binder.views import ModelView
+	def _virtual_source(self, request, pks, q):
 
-from ..models import NullableNickname
+		nicknames =  Nickname.objects.filter(pk__in=pks)
+
+		res = {}
+		for nickname in nicknames:
+			res[nickname.pk] = [
+				nickname.animal.zoo_of_birth.pk
+			]
+
+
+		return res
 
 class NullableNicknameView(ModelView):
 	model = NullableNickname
+
+
