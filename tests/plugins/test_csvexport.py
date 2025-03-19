@@ -70,7 +70,7 @@ class CsvExportTest(TestCase):
 			tmp.write(response.content)
 
 			wb = openpyxl.load_workbook(tmp.name)
-			sheet = wb._sheets[1]
+			sheet = wb._sheets[0]
 
 			_values = list(sheet.values)
 
@@ -133,7 +133,7 @@ class CsvExportTest(TestCase):
 			tmp.write(response.content)
 
 			wb = openpyxl.load_workbook(tmp.name)
-			sheet = wb._sheets[1]
+			sheet = wb._sheets[0]
 
 			_values = list(sheet.values)
 
