@@ -91,7 +91,7 @@ class CsvFileAdapter(ExportFileAdapter):
 
 class ExcelFileAdapter(ExportFileAdapter):
 	"""
-	Adapter fore returning excel files
+	Adapter for returning excel files
 	"""
 	def __init__(self, request: HttpRequest):
 		super().__init__(request)
@@ -103,7 +103,7 @@ class ExcelFileAdapter(ExportFileAdapter):
 		# self.writer = self.pandas.ExcelWriter(self.response)
 
 		self.work_book = self.openpyxl.Workbook()
-		self.sheet = self.work_book.create_sheet()
+		self.sheet = self.work_book.active
 
 		# The row number we are currently writing to
 		self._row_number = 0
