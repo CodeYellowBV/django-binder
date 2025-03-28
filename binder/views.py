@@ -1816,7 +1816,6 @@ class ModelView(View):
 			except BinderValidationError as e:
 				validation_errors.append(e)
 
-
 		if validation_errors:
 			raise sum(validation_errors, None)
 
@@ -2569,6 +2568,10 @@ class ModelView(View):
 				view._store(obj, values, request, pk=oid)
 			except BinderValidationError as e:
 				validation_errors.append(e)
+			except BinderFieldTypeError:
+				if not validation_errors:
+					raise
+
 			if oid < 0:
 				new_id_map[(model, oid)] = obj.id
 				for base in getmro(model)[1:]:
