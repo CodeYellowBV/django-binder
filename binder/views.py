@@ -1668,64 +1668,42 @@ class ModelView(View):
 
 		return queryset, annotations
 
-	def get_filtered_queryset(self, request, pk=None, include_annotations=None):
+	def get_filtered_queryset(self, request, *args, **kwargs):
 		"""
 		Returns a scoped queryset with filtering and sorting applied as
 		specified by the request.
 		"""
-		queryset = self.get_queryset(request)
-		if pk:
-			queryset = queryset.filter(pk=int(pk))
-
-		# No parameter repetition. Should be extended to .params too after filters have been refactored.
-		for k, v in request.GET.lists():
-			if not k.startswith('.') and len(v) > 1:
-				raise BinderRequestError('Query parameter `{}` may not be repeated.'.format(k))
-
-		#### soft-deletes
-		queryset = self.filter_deleted(queryset, pk, request.GET.get('deleted'), request)
-
-		#### annotations
-		if include_annotations is None:
-			include_annotations = self._parse_include_annotations(request)
-
-		queryset = annotate(queryset, request, include_annotations.get(''))
-
-		#### filters
-		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
-		for field, values in filters.items():
-			for v in values:
-				q, distinct = self._parse_filter(field, v, request, include_annotations)
-				queryset = queryset.filter(q)
-				if distinct:
-					queryset = queryset.distinct()
-
-		#### search
-		if 'search' in request.GET:
-			queryset = self.search(queryset, request.GET['search'], request)
-
+		queryset, annotations = self._get_filtered_queryset_base(request, *args, **kwargs)
+		queryset = queryset.annotate(**annotations)
 		queryset = self.order_by(queryset, request)
-
 		return queryset
-
 
 	def get(self, request, pk=None, withs=None, include_annotations=None):
 		include_meta = request.GET.get('include_meta', 'total_records').split(',')
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
 
-		queryset = self.get_filtered_queryset(request, pk, include_annotations)
+		queryset, annotations = self._get_filtered_queryset_base(request, pk, include_annotations)
 
 		meta = self._generate_meta(include_meta, queryset, request, pk)
 
+		queryset = self._order_by_base(queryset, request, annotations)
 		queryset = self._paginate(queryset, request)
+
+		# We fetch the data with only the currently applied annotations
+		data = self._get_objs(
+			queryset,
+			request=request,
+			annotations=include_annotations.get(''),
+			to_annotate=annotations,
+		)
+
+		# Now we add all remaining annotations to this data
+		data_by_pk = {obj['id']: obj for obj in data}
+		pks = set(data_by_pk)
 
 		#### with
 		# parse wheres from request
-		data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
-
-		pks = [obj['id'] for obj in data]
-
 		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(pks, withs, request=request, include_annotations=include_annotations)
 
 		for obj in data:
@@ -1741,7 +1719,7 @@ class ModelView(View):
 			meta['comment'] = self.comment
 
 		debug = {'request_id': request.request_id}
-		if django.conf.settings.DEBUG and 'debug' in request.GET:
+		if settings.DEBUG and 'debug' in request.GET:
 			debug['queries'] = ['{}s: {}'.format(q['time'], q['sql'].replace('"', '')) for q in django.db.connection.queries]
 			debug['query_count'] = len(django.db.connection.queries)
 
