@@ -17,7 +17,7 @@ from django.views.generic import View
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.core.files.base import File, ContentFile
-from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
+from django.http import HttpResponse,  HttpResponseForbidden, FileResponse
 from django.http.request import RawPostDataException
 from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
@@ -2912,7 +2912,7 @@ class ModelView(View):
 					if not file_field.url.startswith('/'):
 						resp['redirect_url'] = file_field.url
 				else:
-					resp = StreamingHttpResponse(file_field.open(), content_type=content_type)
+					resp = FileResponse(file_field.open(), content_type=content_type)
 			except FileNotFoundError:
 				logger.error('Expected file {} not found'.format(file_field.name))
 				raise BinderNotFound(file_field_name)
