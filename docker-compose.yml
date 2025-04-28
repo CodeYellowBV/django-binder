@@ -1,7 +1,11 @@
 services:
   db:
-    image: postgres:11.5
+    restart: always
+    image: postgres:12
+    environment: 
+      - POSTGRES_HOST_AUTH_METHOD=trust
   binder:
+    restart: always
     build: .
     command: tail -f /dev/null
     volumes:
