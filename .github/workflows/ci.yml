@@ -4,13 +4,28 @@ on: push
 
 jobs:
   check:
-    runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        python-version: ["3.8", "3.12"]
-        django-version: ["3.2.25", "4.2.11"]
+        # Testing Python 3.7 (deb 10), Python 3.9 (deb 11), Python 3.11 (deb 12)
+        python-version: ["3.9", "3.11"]
+        django-version: ["3.2.25", "4.2.17", "5.1.4"]
         database-engine: ["postgres", "mysql"]
+        os: [ubuntu-latest]
+        include:
+          # 3.7 cannot run on latest ubuntu
+          - python-version: 3.7
+            django-version: 3.2.25
+            database-engine: postgres
+            os: ubuntu-22.04
+          - python-version: 3.7
+            django-version: 3.2.25
+            database-engine: mysql
+            os: ubuntu-22.04
+        exclude:
+          - python-version: 3.9
+            django-version: 5.1.4
+
+    runs-on: ${{ matrix.os }}
 
     services:
       postgres:
@@ -39,10 +54,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Setup python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 

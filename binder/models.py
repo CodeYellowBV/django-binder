@@ -19,7 +19,9 @@ from django.core.files.images import ImageFile
 from django.db.models import signals
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
-from django.utils import timezone
+from datetime import timezone
+from django.utils.timezone import get_fixed_timezone
+
 from django.utils.translation import gettext_lazy as _
 from django.utils.dateparse import parse_date, parse_datetime
 
@@ -343,7 +345,7 @@ class TimeFieldFilter(FieldFilter):
 			offset = int(tzinfo[1:3]) * 60 + int(tzinfo[3:5])
 			if tzinfo.startswith('-'):
 				offset = -offset
-			tzinfo = timezone.get_fixed_timezone(offset)
+			tzinfo = get_fixed_timezone(offset)
 		# Create time object
 		return time(
 			hour=hour,
