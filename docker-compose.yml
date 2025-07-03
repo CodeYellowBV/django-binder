@@ -1,6 +1,8 @@
 services:
   db:
-    image: postgres:11.5
+    image: postgres:13.21
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust # Insecure, but fine for just for running tests.
   binder:
     build: .
     command: tail -f /dev/null
