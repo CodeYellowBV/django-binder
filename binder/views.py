@@ -1289,18 +1289,13 @@ class ModelView(View):
 				raise FieldDoesNotExist()
 			field = self.model._meta.get_field(field_name)
 		except FieldDoesNotExist:
-			rel = partial and '.'.join(partial[:-2].split('__'))
-			annotations = self.annotations(request, {'': include_annotations.get(rel)})
+			annotations = self.annotations(request, {'': include_annotations.get('')})
 			if field_name not in annotations:
 				raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, field_name))
 			if partial:
 				# NOTE: This creates a subquery; try to avoid this!
 				qs = annotate(self.model.objects.all(), request, annotations)
-				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request, {
-					rel_[len(rel) + 1:]: annotations
-					for rel_, annotations in include_annotations.items()
-					if rel_ == rel or rel_.startswith(rel + '.')
-				}))
+				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request, include_annotations))
 				return Q(**{partial + 'in': qs})
 			field = annotations[field_name]['field']
 
