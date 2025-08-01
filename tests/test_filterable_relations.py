@@ -456,3 +456,73 @@ class WithFilterTest(TestCase):
 			},
 			EXTRA(): None,
 		})
+
+	def test_filter_on_relation_with_include_annotations_using_where(self):
+		zoo = Zoo.objects.create(name='Apenheul')
+
+		carl = Caretaker.objects.create(name="carl")
+		tim = Caretaker.objects.create(name="tim")
+
+		Animal.objects.create(name='Harambe', zoo=zoo, caretaker=carl)
+		Animal.objects.create(name='Bokito', zoo=zoo, caretaker=tim)
+		Animal.objects.create(name='Rafiki', zoo=zoo)
+
+		res = self.client.get('/animal/', data={
+			'with': 'caretaker',
+			'include_annotations': 'caretaker.scary',
+			'where': 'caretaker(scary=boo! tim)',
+		})
+		self.assertEqual(res.status_code, 200)
+		data = jsonloads(res.content)
+		print(data)
+
+		self.assertEqual(1, len(data['with']))
+		self.assertEqual(1, len(data['with']['caretaker']))
+		with_tim = data['with']['caretaker'][0]
+		self.assertEqual('tim', with_tim['name'])
+		self.assertEqual('boo! tim', with_tim['scary'])
+
+	def test_filter_on_nested_relation_with_include_annotations_using_where(self):
+		# T49679: the reported failure is a *nested* relation (e.g. dossiers.trips.activities).
+		# Here: zoo -> animals -> caretaker, filtering the sub-subrelation on its annotation.
+		zoo = Zoo.objects.create(name='Apenheul')
+
+		carl = Caretaker.objects.create(name='carl')
+		tim = Caretaker.objects.create(name='tim')
+
+		Animal.objects.create(name='Harambe', zoo=zoo, caretaker=carl)
+		Animal.objects.create(name='Bokito', zoo=zoo, caretaker=tim)
+
+		res = self.client.get('/zoo/', data={
+			'with': 'animals.caretaker',
+			'include_annotations': 'animals.caretaker.scary',
+			'where': 'animals.caretaker(scary=boo! tim)',
+		})
+		self.assertEqual(res.status_code, 200)
+		data = jsonloads(res.content)
+
+		caretakers = data['with'].get('caretaker', [])
+		self.assertEqual(1, len(caretakers))
+		self.assertEqual('tim', caretakers[0]['name'])
+		self.assertEqual('boo! tim', caretakers[0]['scary'])
+
+	def test_filter_on_relation_annotation_without_where(self):
+		# T49679 regression guard: filtering on a related annotation via the normal
+		# ".relation.annotation=" filter must keep working (it worked before 21045c3).
+		zoo = Zoo.objects.create(name='Apenheul')
+
+		carl = Caretaker.objects.create(name='carl')
+		tim = Caretaker.objects.create(name='tim')
+
+		Animal.objects.create(name='Harambe', zoo=zoo, caretaker=carl)
+		Animal.objects.create(name='Bokito', zoo=zoo, caretaker=tim)
+
+		res = self.client.get('/animal/', data={
+			'include_annotations': 'caretaker.scary',
+			'.caretaker.scary': 'boo! tim',
+		})
+		self.assertEqual(res.status_code, 200)
+		data = jsonloads(res.content)
+
+		self.assertEqual(1, len(data['data']))
+		self.assertEqual('Bokito', data['data'][0]['name'])

@@ -229,6 +229,19 @@ def annotate(qs, request=None, annotations=None):
 
 
 
+def scope_include_annotations(include_annotations, relation):
+	# Re-key include_annotations to be relative to `relation`: keep only entries under
+	# `relation` and strip the `relation.` prefix. Call this at every point where a filter
+	# or `with` descends one relation level, so that by the time an annotation is looked up
+	# it is keyed relative to the current view (key '').
+	return {
+		rel[len(relation) + 1:]: annotations
+		for rel, annotations in include_annotations.items()
+		if rel == relation or rel.startswith(relation + '.')
+	}
+
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -1091,11 +1104,7 @@ class ModelView(View):
 
 			next_relation = self._follow_related(field)[0]
 			view = self.get_model_view(next_relation.model)
-			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None), request, {
-				rel[len(field) + 1:]: annotations
-				for rel, annotations in include_annotations.items()
-				if rel == field or rel.startswith(field + '.')
-			})
+			q, _ = view._filter_relation(None if vr else next_relation.fieldname, where_map.get(field, None), request, scope_include_annotations(include_annotations, field))
 
 			# Virtual relation
 			if vr:
@@ -1163,7 +1172,7 @@ class ModelView(View):
 				wm_scoped = wm_scoped['subrels'] if wm_scoped else {}
 
 				flattened_ids = [id for ids in rel_ids_by_field_by_id[field].values() for id in ids]
-				subrelations = view._get_with_ids(flattened_ids, request=request, include_annotations=include_annotations, with_map=sub_fields, where_map=wm_scoped)
+				subrelations = view._get_with_ids(flattened_ids, request=request, include_annotations=scope_include_annotations(include_annotations, field), with_map=sub_fields, where_map=wm_scoped)
 				for subrelation, data in subrelations.items():
 					result['.'.join([field, subrelation])] = data
 
@@ -1268,7 +1277,7 @@ class ModelView(View):
 				raise related_err
 
 			view = self.get_model_view(related.model)
-			filter_description = view._parse_filter('.'.join(tail), value, request, include_annotations, partial + head + '__')
+			filter_description = view._parse_filter('.'.join(tail), value, request, scope_include_annotations(include_annotations, head), partial + head + '__')
 			need_distinct |= filter_description.need_distinct
 			q &= filter_description.filter
 
@@ -1291,18 +1300,13 @@ class ModelView(View):
 				raise FieldDoesNotExist()
 			field = self.model._meta.get_field(field_name)
 		except FieldDoesNotExist:
-			rel = partial and '.'.join(partial[:-2].split('__'))
-			annotations = self.annotations(request, {'': include_annotations.get(rel)})
+			annotations = self.annotations(request, {'': include_annotations.get('')})
 			if field_name not in annotations:
 				raise BinderRequestError('Unknown field in filter: {{{}}}.{{{}}}.'.format(self.model.__name__, field_name))
 			if partial:
 				# NOTE: This creates a subquery; try to avoid this!
 				qs = annotate(self.model.objects.all(), request, annotations)
-				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request, {
-					rel_[len(rel) + 1:]: annotations
-					for rel_, annotations in include_annotations.items()
-					if rel_ == rel or rel_.startswith(rel + '.')
-				}))
+				qs = qs.filter(self._filter_field(field_name, qualifier, value, invert, request, include_annotations))
 				return Q(**{partial + 'in': qs})
 			field = annotations[field_name]['field']
 
