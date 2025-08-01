@@ -25,5 +25,5 @@ class Caretaker(BinderModel):
 		bsn = F('ssn')  # simple alias
 		last_present = F('last_seen')
 		scary = OptionalAnnotation(
-			Value('boo!', output_field=models.TextField())
+			models.functions.Concat(Value('boo! '), 'name', output_field=models.TextField())
 		)

@@ -123,9 +123,9 @@ class CsvExportTest(TestCase):
 		self.assertEqual(data[0], ['ID', 'Name', 'Scary'])
 
 		# All other data needs to be ordered using the default ordering (by id, asc)
-		self.assertEqual(data[1], [str(caretaker_1.id), 'Foo', 'boo!'])
-		self.assertEqual(data[2], [str(caretaker_2.id), 'Bar', 'boo!'])
-		self.assertEqual(data[3], [str(caretaker_3.id), 'Baz', 'boo!'])
+		self.assertEqual(data[1], [str(caretaker_1.id), 'Foo', 'boo! Foo'])
+		self.assertEqual(data[2], [str(caretaker_2.id), 'Bar', 'boo! Bar'])
+		self.assertEqual(data[3], [str(caretaker_3.id), 'Baz', 'boo! Baz'])
 
 	def test_context_aware_download_xlsx(self):
 		response = self.client.get('/picture/download/?response_type=xlsx')
