@@ -1,4 +1,5 @@
 from PIL import Image
+from binder.plugins.views.csvexport import ExcelFileAdapter
 from os import urandom
 from tempfile import NamedTemporaryFile
 import io
@@ -70,6 +71,7 @@ class CsvExportTest(TestCase):
 			tmp.write(response.content)
 
 			wb = openpyxl.load_workbook(tmp.name)
+			self.assertEqual(1, len(wb._sheets))
 			sheet = wb._sheets[0]
 
 			_values = list(sheet.values)
@@ -203,3 +205,8 @@ class CsvExportTest(TestCase):
 			self.assertIsNone(next(response_data))
 
 		PictureView.csv_settings.limit = old_limit;
+
+class TestExcelFileAdapter(TestCase):
+    def test_one_sheet_after_init(self):
+        file_adapter = ExcelFileAdapter(None)
+        self.assertEqual(len(file_adapter.work_book.worksheets), 1)
