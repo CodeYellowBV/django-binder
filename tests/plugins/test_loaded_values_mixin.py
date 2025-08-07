@@ -1,3 +1,4 @@
+from dateutil.relativedelta import relativedelta
 from django.test import TestCase
 from ..testapp.models import Animal, Zoo, Caretaker, ZooEmployee
 
@@ -37,6 +38,7 @@ class LoadedValuesMixinTest(TestCase):
 			'zoo_of_birth': artis.id,
 			'caretaker': caretaker.id,
 			'deleted': False,
+			'feeding_period': relativedelta(days=1),
 			'birth_date': None,
 		}, scooby.get_old_values())
 
@@ -77,6 +79,7 @@ class LoadedValuesMixinTest(TestCase):
 			'zoo_of_birth': artis.id,
 			'caretaker': None,
 			'deleted': False,
+			'feeding_period': relativedelta(days=1),
 			'birth_date': None,
 		}, scooby.get_old_values())
 
@@ -112,6 +115,7 @@ class LoadedValuesMixinTest(TestCase):
 			'zoo_of_birth': artis.id,
 			'caretaker': None,
 			'deleted': False,
+			'feeding_period': relativedelta(days=1),
 			'birth_date': None,
 		}, scooby.get_old_values())
 
@@ -150,6 +154,7 @@ class LoadedValuesMixinTest(TestCase):
 			'zoo_of_birth': artis.id,
 			'caretaker': None,
 			'deleted': False,
+			'feeding_period': None,
 			'birth_date': None,
 		}, scooby.get_old_values())
 

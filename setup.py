@@ -44,6 +44,7 @@ setup(
 	],
 	extras_require={
 		'test': [
+			'django-relativedelta >= 2.0.0',
 			'django-hijack >= 2.1.10',
 			(
 				'mysqlclient >= 1.3.12'
