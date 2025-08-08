@@ -58,6 +58,113 @@ class HistoryTest(TestCase):
 		}), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 
+		response = self.client.get(f'/zoo/{_id}/history/')
+		self.assertEqual(200, response.status_code)
+		data = json.loads(response.content)['data']
+		self.assertEqual(2, len(data))
+
+		self.assertEqual(1, len(data[0]['changes']))
+		add_rene = data[0]['changes'][0]
+		self.assertEqual('contacts', add_rene['field'])
+		self.assertEqual('Burhan, Rene', add_rene['after'])
+		self.assertEqual('Burhan', add_rene['before'])
+
+		self.assertEqual(13, len(data[1]['changes']))
+		add_burhan = data[1]['changes'][4]
+		self.assertEqual('contacts', add_burhan['field'])
+		self.assertEqual('Burhan', add_burhan['after'])
+		self.assertEqual('', add_burhan['before'])
+
+	def test_basic_relation_formatting(self):
+		contact_person = ContactPerson.objects.create(
+			name='Burhan'
+		)
+
+		model_data = {
+			'name': 'Code Yellow',
+			'director': contact_person.pk
+		}
+		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		zoo_id = json.loads(response.content)['id']
+		response = self.client.get(f'/zoo/{zoo_id}/history/')
+		self.assertEqual(200, response.status_code)
+		data = json.loads(response.content)['data']
+
+		self.assertEqual(1, len(data))
+		changes = data[0]['changes']
+		set_director = changes[4]
+		self.assertEqual('director', set_director['field'])
+		self.assertEqual('null', set_director['before'])
+		self.assertEqual('Burhan', set_director['after'])
+
+		model_data = {
+			'name': 'Code Yellow',
+			'director': None,
+		}
+		response = self.client.put('/zoo/' + str(zoo_id) + '/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		response = self.client.get(f'/zoo/{zoo_id}/history/')
+		self.assertEqual(200, response.status_code)
+		data = json.loads(response.content)['data']
+
+		self.assertEqual(2, len(data))
+		changes = data[0]['changes']
+		set_director = changes[0]
+		self.assertEqual('director', set_director['field'])
+		self.assertEqual('Burhan', set_director['before'])
+		self.assertEqual('null', set_director['after'])
+
+	def test_m2m_relation_formatting(self):
+		burhan = ContactPerson.objects.create(name='Burhan')
+		rene = ContactPerson.objects.create(name='Rene')
+		tim = ContactPerson.objects.create(name='Tim')
+		nuria = ContactPerson.objects.create(name='Nuria')
+
+		model_data = {
+			'name': 'Code Yellow',
+			'contacts': [burhan.id, rene.id]
+		}
+		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+		zoo_id = json.loads(response.content)['id']
+
+		model_data = {
+			'contacts': [rene.id, tim.id, nuria.id]
+		}
+		response = self.client.put(f'/zoo/{zoo_id}/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		model_data = {
+			'contacts': [burhan.id, nuria.id]
+		}
+		response = self.client.put(f'/zoo/{zoo_id}/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		response = self.client.get(f'/zoo/{zoo_id}/history/')
+		self.assertEqual(200, response.status_code)
+		data = json.loads(response.content)['data']
+		self.assertEqual(3, len(data))
+
+		remove_all = data[0]['changes']
+		self.assertEqual(1, len(remove_all))
+		self.assertEqual('contacts', remove_all[0]['field'])
+		self.assertEqual('Burhan, Nuria', remove_all[0]['after'])
+		self.assertEqual('Rene, Tim, Nuria', remove_all[0]['before'])
+
+		replace = data[1]['changes']
+		self.assertEqual(1, len(replace))
+		self.assertEqual('contacts', replace[0]['field'])
+		self.assertEqual('Rene, Tim, Nuria', replace[0]['after'])
+		self.assertEqual('Burhan, Rene', replace[0]['before'])
+
+		initial = data[2]['changes']
+		first_contacts = initial[4]
+		self.assertEqual('contacts', first_contacts['field'])
+		self.assertEqual('Burhan, Rene', first_contacts['after'])
+		self.assertEqual('', first_contacts['before'])
 
 	def test_model_with_history_creates_changes_on_creation(self):
 		model_data = {

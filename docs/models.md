@@ -123,3 +123,20 @@ urlpatterns = [
 TODO: verify if this actually works.
 
 Also make sure that `ENABLE_DEBUG_ENDPOINTS = True` in your `settings.py`.
+
+### Showing display names for foreign keys
+
+By default, whenever a foreign key field is changed (reassigned), the old ID and the new ID are shown in the history.
+
+If you want to show something else (e.g. the name instead of the ID),
+
+you need to override the `format_instance_for_history` method on the target model, for instance if your target model is `ContactPerson`:
+
+```python
+@classmethod
+def format_instance_for_history(cls, id: int):
+	try:
+		return ContactPerson.objects.get(id=id).name
+	except:
+		return 'deleted? ' + str(id)
+```

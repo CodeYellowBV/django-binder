@@ -2985,7 +2985,7 @@ class ModelView(View):
 		if debug:
 			return history.view_changesets_debug(request, changesets.order_by('-id'))
 		else:
-			return history.view_changesets(request, changesets.order_by('-id'))
+			return history.view_changesets(request, changesets.order_by('-id'), self.model, pk)
 
 
 	@list_route('stats', methods=['GET'])
