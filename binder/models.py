@@ -473,6 +473,114 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 				fields[field.name] = getattr(self, field.name)
 		return fields
 
+	@classmethod
+	def format_instance_for_history(cls, id: int):
+		"""
+		This method is called during the history endpoint to determine the display name for related objects.
+
+		By default, when model `A` has a foreign key field named `f` of type `B`, it will show a change that looks like
+		```
+		{ field: f, before: old_id, after: new_id }
+		```
+
+		If you override this method, you can display something nicer than just the ID (e.g. the name).
+		"""
+		return str(id)
+
+	@classmethod
+	def format_field_for_history(cls, field_name: str, raw_value: str, is_before: bool, diff_tracker: dict, oid: int):
+		"""
+		This method is called during the history endpoint to improve the way some of the changes in a changeset are displayed.
+		Most fields are intuitive by default, but (m2m) relations need extra attention.
+
+		To demonstrate when this method is called, consider an example model `Zoo`:
+		```
+		class Zoo(BinderModel)
+			contacts = models.ManyToManyField('ContactPerson')
+		```
+		When the history endpoint of a zoo is invoked, the following calls to `format_field_history` could happen:
+		- `Zoo.format_field_for_history(field_name='contacts', raw_value='[[["id", 6]]]', is_before=False, ...)`
+		- `Zoo.format_field_for_history(field_name='contacts', raw_value='[[["id", 8]], [["id", 9]]]', is_before=True, ...)`
+
+		This would mean that:
+		- The `ContactPerson` with id 6 was added to `contacts`.
+		- The `ContactPerson`s with id's 8 and 9 were removed from `contacts`.
+		- The **existing** contacts are **omitted**.
+
+		First of all, this method will do some bookkeeping to figure out the **existing** contacts.
+		Furthermore, it invokes `ContactPerson.format_instance_for_history(6)` to figure out the display name of `ContactPerson` 6,
+		which will be shown instead of the raw ID.
+
+		If you do **not** want this formatting (as was the case in older Binder versions),
+		you can override this method such that it always returns `raw_value`.
+		"""
+		try:
+			field = getattr(cls, field_name).field
+		except Exception:
+			# The except clause will be reached when the field has been deleted or renamed.
+			# Since we don't have any field info, we will just have to fall back to displaying the raw value
+			return raw_value
+
+		try:
+			if field.is_relation:
+				target_model = field.remote_field.model
+
+				def get_cached_display_name(target_id: int):
+					if target_model not in diff_tracker:
+						diff_tracker[target_model] = dict()
+					display_name_cache = diff_tracker[target_model]
+					if target_id not in display_name_cache:
+						display_name_cache[target_id] = target_model.format_instance_for_history(target_id)
+					return display_name_cache[target_id]
+
+				if field.remote_field.multiple:
+
+					if not is_before and field_name not in diff_tracker:
+						try:
+							dict_id_list = list(cls.objects.filter(id=oid).values(field_name).all())
+							for index in range(len(dict_id_list)):
+								dict_id_list[index] = dict_id_list[index][field_name]
+							diff_tracker[field_name] = set(dict_id_list)
+						except cls.DoesNotExist:
+							# If the object doesn't exist anymore, let's assume that the 'most recent' value is empty.
+							diff_tracker[field_name] = []
+
+					ids = list(diff_tracker[field_name])
+
+					entries = json.loads(raw_value)
+					for entry in entries:
+						if len(entry) != 1:
+							raise ValueError()
+						entry = entry[0]
+						if len(entry) != 2 or entry[0] != 'id':
+							raise ValueError()
+						target_id = entry[1]
+						if is_before:
+							ids.append(target_id)
+							diff_tracker[field_name].add(target_id)
+						else:
+							diff_tracker[field_name].remove(target_id)
+
+					ids.sort()
+					result = []
+					for id in ids:
+						if target_model not in diff_tracker:
+							diff_tracker[target_model] = dict()
+						result.append(get_cached_display_name(id))
+
+					return ', '.join(result)
+				else:
+					return get_cached_display_name(int(raw_value))
+			return raw_value
+		except Exception:
+			# If we get an unexpected error when we try to format changes,
+			# it's probably best to ignore the parse/format error, and display the original/raw value instead.
+			#
+			# After all, I don't want to break the history endpoint in our projects,
+			# just because it has outdated/corrupted Change entries in its database
+			# (or because I made a stupid error not caught by unit tests).
+			return raw_value
+
 	def binder_serialize_m2m_field(self, field):
 		if isinstance(field, str):
 			field = getattr(self, field)

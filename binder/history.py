@@ -202,13 +202,16 @@ def _abort():
 
 
 
-def view_changesets(request, changesets):
+def view_changesets(request, changesets, model_class, oid: int):
 	data = []
 	userids = set()
+	diff_tracker = dict()
 	for cs in changesets:
 		changes = []
 		for c in cs.changes.order_by('model', 'oid', 'field'):
-			changes.append({'model': c.model, 'oid': c.oid, 'field': c.field, 'diff': c.diff, 'before': c.before, 'after': c.after})
+			after = model_class.format_field_for_history(field_name=c.field, raw_value=c.after, is_before=False, diff_tracker=diff_tracker, oid=oid)
+			before = model_class.format_field_for_history(field_name=c.field, raw_value=c.before, is_before=True, diff_tracker=diff_tracker, oid=oid)
+			changes.append({'model': c.model, 'oid': c.oid, 'field': c.field, 'diff': c.diff, 'before': before, 'after': after})
 		data.append({'date': cs.date, 'uuid': cs.uuid, 'id': cs.id, 'source': cs.source, 'user': cs.user_id, 'changes': changes})
 		if cs.user_id:
 			userids.add(cs.user_id)
