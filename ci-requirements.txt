@@ -9,3 +9,5 @@ coverage
 django-hijack<3.0.0
 openpyxl
 pika
+python-dateutil >= 2.6.0
+django-relativedelta >= 2.0.0

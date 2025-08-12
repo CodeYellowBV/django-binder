@@ -27,7 +27,7 @@ SERIALIZERS = {
 # dateutil.relativedelta serializer, if available
 try:
 	from dateutil.relativedelta import relativedelta
-	from relativedeltafield import format_relativedelta
+	from relativedeltafield.utils import format_relativedelta
 	SERIALIZERS[relativedelta] = format_relativedelta
 except ImportError:
 	pass

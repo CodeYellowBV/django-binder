@@ -1,8 +1,10 @@
+from dateutil.relativedelta import relativedelta
 from django.db import models
 from django.db.models import Value, F, Func
 from binder.models import BinderModel, ContextAnnotation
 from binder.exceptions import BinderValidationError
 from binder.plugins.loaded_values import LoadedValuesMixin
+from relativedeltafield import RelativeDeltaField
 
 
 class Concat(Func):
@@ -15,6 +17,7 @@ class Animal(LoadedValuesMixin, BinderModel):
 	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='animals', blank=True, null=True)
 	zoo_of_birth = models.ForeignKey('Zoo', on_delete=models.CASCADE, related_name='+', blank=True, null=True) # might've been born outside captivity
 	caretaker = models.ForeignKey('Caretaker', on_delete=models.PROTECT, related_name='animals', blank=True, null=True)
+	feeding_period = RelativeDeltaField(default=relativedelta(days=1))
 	deleted = models.BooleanField(default=False)  # Softdelete
 	birth_date = models.DateField(blank=True, null=True)
 

@@ -44,6 +44,7 @@ setup(
 		'pika == 1.3.2',
 	],
 	tests_require=[
+		'django-relativedelta >= 2.0.0',
 		'django-hijack >= 2.1.10, < 3.0.0',
 		(
 			'mysqlclient >= 1.3.12'

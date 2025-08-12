@@ -19,19 +19,4 @@ To only run a selection of the tests, use the `-s` flag like `./setup.py test -s
 
 ## MySQL support
 
-MySQL is supported, but only with the goal to replace it with
-PostgreSQL.  This means it has a few limitations:
-
-- `where` filtering on `with` relations is not supported.
-- Only integer primary keys are supported.
-- When fetching large number of records using `with` or the ids are big, be sure to increase `GROUP_CONCAT` max string length by:
-
-```
-DATABASES = {
-	'default': {
-		'OPTIONS': {
-            'init_command': 'SET SESSION group_concat_max_len = 1000000',
-        },
-	},
-}
-```
+MySQL was supported at some point, but not anymore I guess.
