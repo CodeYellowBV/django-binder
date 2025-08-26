@@ -1,12 +1,18 @@
+from unittest.mock import patch, call
+
 from PIL import Image
 from os import urandom
 from tempfile import NamedTemporaryFile
 import io
 
+from django.http import QueryDict
 from django.test import TestCase, Client
 from django.core.files import File
 from django.contrib.auth.models import User
 
+from binder.plugins.views.csvexport import CsvFileAdapter
+from binder.router import Router
+from binder.views import ModelView
 from ..testapp.models import Picture, Animal, Caretaker
 from ..testapp.views import PictureView
 import csv
@@ -151,6 +157,7 @@ class CsvExportTest(TestCase):
 	def test_csv_export_custom_limit(self):
 		old_limit = PictureView.csv_settings.limit;
 		PictureView.csv_settings.limit = 1
+
 		response = self.client.get('/picture/download/')
 		self.assertEqual(200, response.status_code)
 		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
@@ -203,3 +210,55 @@ class CsvExportTest(TestCase):
 			self.assertIsNone(next(response_data))
 
 		PictureView.csv_settings.limit = old_limit;
+
+
+
+class ProgressReporterTest(TestCase):
+	def setUp(self):
+		router  = Router()
+		router.register(ModelView)
+		self.view = PictureView()
+		self.view.router = router
+
+		animal = Animal(name='test')
+		animal.save()
+
+		for i in range(3):
+			picture = Picture(animal=animal)
+			file = CsvExportTest.temp_imagefile(50, 50, 'jpeg')
+			picture.file.save('picture.jpg', File(file), save=False)
+			picture.original_file.save('picture_copy.jpg', File(file), save=False)
+			picture.save()
+
+
+
+		user = User.objects.create(username='test')
+
+		class RequestAdapter:
+			def __init__(self):
+				self.GET = QueryDict(mutable=True)
+				self.POST = QueryDict()
+				self.user = user
+				self.request_id = 'blaat'
+
+
+		self.request = RequestAdapter()
+		self.file_adapter = CsvFileAdapter(self.request)
+
+
+	@patch('binder.plugins.progress_reporter.ProgressReporterInterface')
+	def test_progress_reporter(self, progress_reporter_mock):
+		self.view.csv_settings.page_size = 1
+		self.view._generate_csv_file(request=self.request, file_adapter=self.file_adapter,
+								progress_reporter=progress_reporter_mock)
+		progress_reporter_mock.report.assert_has_calls([call(0.33), call(0.67)])
+		progress_reporter_mock.report_finished.assert_called_with()
+
+	@patch('binder.plugins.progress_reporter.ProgressReporterInterface')
+	def test_progress_page_size(self, progress_reporter_mock):
+		# Page size = 2. So we get 2 chunks, so Only one call at 50%
+		self.view.csv_settings.page_size = 2
+		self.view._generate_csv_file(request=self.request, file_adapter=self.file_adapter,
+								progress_reporter=progress_reporter_mock)
+		progress_reporter_mock.report.assert_called_once_with(0.5)
+		progress_reporter_mock.report_finished.assert_called_with()
