@@ -229,6 +229,7 @@ class FieldFilter(object):
 			i += 1
 
 			field_cls = field_filter.allowed_chain_qualifiers[chain_qualifier]
+
 			if field_cls is None:
 				raise BinderRequestError(
 					'Qualifier {} not supported for type {} ({}).'

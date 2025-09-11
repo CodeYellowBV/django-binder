@@ -1209,13 +1209,16 @@ class ModelView(View):
 		#   NOTE: not is_any ==> is_all
 		is_not = bool(re.search(r':not\b', tail))
 
-		is_any = bool(re.match(r':any\b', tail))
-		if is_any:
-			tail = tail[4:]
-		is_all = bool(re.match(r':all\b', tail))
-		if is_all and not is_any:
-			# if both is_any and is_all are true, we want the filter to fail
-			tail = tail[4:]
+		is_any = bool(re.search(r':any\b', tail))
+		is_all = bool(re.search(r':all\b', tail))
+
+		# if both is_any and is_all are true, we want the filter to fail
+		if is_any and is_all:
+			raise BinderRequestError('Combining any and all qualifiers is not allowed.')
+
+		# Remove any and all qualifiers from the tail for processing
+		tail = re.sub(r':any\b', '', tail)
+		tail = re.sub(r':all\b', '', tail)
 
 		alts = []
 		for head in filter_heads:
