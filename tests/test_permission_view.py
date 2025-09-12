@@ -861,3 +861,45 @@ class ForUpdateErrorNotOccurringTest(TestCase):
 		print(res.json())
 
 		self.assertEqual(200, res.status_code)
+
+class TestColumnScoping(TestCase):
+	def setUp(self):
+		super().setUp()
+
+		u = User(username='testuser_for_not_all_fields', is_active=True, is_superuser=False)
+		u.set_password('test')
+		u.save()
+
+		self.client = Client()
+		r = self.client.login(username='testuser_for_not_all_fields', password='test')
+		self.assertTrue(r)
+
+		self.zoo: Zoo = Zoo.objects.create(name='Artis')
+
+
+	def test_column_scoping_excludes_columns(self):
+		res = self.client.get('/zoo/{}/'.format(self.zoo.id))
+		self.assertEqual(res.status_code, 200)
+
+		columns = jsonloads(res.content)['data'].keys()
+
+		for field in ['name', 'founding_date', 'django_picture']:
+			self.zoo._meta.get_field(field) # check if those fields exist, otherwise throw error
+			self.assertFalse(field in columns)
+
+		self.assertFalse('zoo_name' in columns)
+		self.assertFalse('animal_count' in columns)
+
+
+	def test_column_scoping_includes_columns(self):
+		res = self.client.get('/zoo/{}/'.format(self.zoo.id))
+		self.assertEqual(res.status_code, 200)
+
+		columns = jsonloads(res.content)['data'].keys()
+
+		for field in ['id', 'floor_plan']:
+			self.zoo._meta.get_field(field)
+			self.assertTrue(field in columns)
+
+		self.assertTrue('another_zoo_name' in columns)
+		self.assertTrue('another_animal_count' in columns)

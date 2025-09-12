@@ -40,6 +40,8 @@ class ZooView(PermissionView):
             return ['bad_q_filter']
         elif perm_type == 'view' and request.user.username == 'testuser_for_good_q_filter':
             return ['good_q_filter']
+        elif perm_type == 'view' and request.user.username == 'testuser_for_not_all_fields':
+            return ['not_all_fields']
         else:
             model = self.perms_via if hasattr(self, 'perms_via') else self.model
             perm = '{}.{}_{}'.format(model._meta.app_label, perm_type, model.__name__.lower())
@@ -57,3 +59,12 @@ class ZooView(PermissionView):
 
     def _scope_view_good_q_filter(self, request):
         return FilterDescription(Q(animals__id__in=Animal.objects.all()), True)
+
+    def _scope_view_not_all_fields(self, request):
+        # expose only certain columns
+        columns = {
+            'fields': ['id', 'floor_plan'],
+            'properties': ['another_animal_count'],
+            'annotations': ['another_zoo_name'],
+        }
+        return Zoo.objects.all(), columns

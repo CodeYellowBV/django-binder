@@ -52,6 +52,9 @@ class Zoo(BinderModel):
 	def animal_count(self):
 		return self.animals.count()
 
+	@property # simple alias for testing scoping on properties
+	def another_animal_count(self):
+		return self.animals.count()
 
 	def clean(self):
 		if self.name == 'very_special_forbidden_zoo_name':
@@ -69,5 +72,8 @@ class Zoo(BinderModel):
 		if errors:
 			raise ValidationError(errors)
 
+	class Annotations:
+		zoo_name = models.F('name') # simple alias for testing scoping on annotations
+		another_zoo_name = models.F('name') # simple alias for testing scoping on annotations
 
 post_delete.connect(delete_files, sender=Zoo)

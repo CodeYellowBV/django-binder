@@ -54,6 +54,32 @@ Option 3 mainly exists out of historic reasons, this will generate a subquery
 and thus often leads to performance issues. Thus it is advised to use option 1
 or 2 whenever possible.
 
+#### Scoping individual fields
+It is also possible to return a **tuple** in a view scope.
+For instance, you could return `some_queryset, columns`.
+The first value of the tuple must be a `Q`, `FilterDescription`, or queryset,
+just like explained above.
+The *second* value should be a dict that looks like this:
+```
+{
+	'fields': ['id', 'floor_plan'],
+	'properties': ['another_animal_count'],
+	'annotations': ['another_zoo_name'],
+}
+```
+This allows you to restrict the fields, properties, and/or annotations that
+a user can view. The user can see *only these* fields.
+You can also replace any of the arrays with `None`, which means that the
+user can see everything. Consider the following example dict:
+```
+{
+	'fields': None,
+	'properties': [],
+	'annotations': [],
+}
+```
+If you use this, the user can see every field, but none of the properties or annotations.
+
 ### Add/Change/Delete scopes
 Add, change and delete scopes all work the same. They receive 3 arguments:
 `request`, `object` and `values`. And should return a boolean indicating if the
@@ -76,8 +102,8 @@ Change scoping:
 - view.store(obj, fields, request)
 
 ## @no_scoping_required()
-In some cases you might not need the automated scoping. An example might be when your endpoint does not make any  
-changes to the data-model but simply triggers an event or if you have already implemented custom scoping. In that 
+In some cases you might not need the automated scoping. An example might be when your endpoint does not make any
+changes to the data-model but simply triggers an event or if you have already implemented custom scoping. In that
 case there is the option of adding `@no_scoping_required()` before the endpoint, which will ignore the scoping checks for the endpoint.
 
 ```python
