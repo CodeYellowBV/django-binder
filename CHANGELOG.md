@@ -1,6 +1,9 @@
 
 ## HEAD
 
+### BUGFIX csv export with null foreign keys
+CSV export will now work with null foreign keys
+
 ### Chained qualifiers
 Chained qualifiers have been added [T35707](https://phabricator.codeyellow.nl/T35707). For more information on how they work and how to use it see [documentation](/docs/api.md)
 
