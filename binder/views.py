@@ -97,24 +97,14 @@ def q_get_flat_filters(q):
 
 	This is useful to detect which fields are used in a Q-object.
 	"""
-	try:
-		for child in q.children:
-			if isinstance(child, Q):
-				# If the child is another Q-object we can just yield recursively
-				yield from q_get_flat_filters(child)
-			else:
-				# So now the child is a 2-tuple of filter & value, we just need the
-				# filter so we yield that
-				# Skip Exists objects and other expressions that might contain OuterRef
-				if isinstance(child, tuple) and len(child) == 2:
-					filter_name, filter_value = child
-					# Only yield simple filter names, skip complex expressions
-					if isinstance(filter_name, str):
-						yield filter_name
-	except (ValueError, TypeError, AttributeError):
-		# If we encounter any issues (like OuterRef evaluation), skip silently
-		# The Q object will still work in .filter() even if we can't extract annotations
-		pass
+	for child in q.children:
+		if isinstance(child, Q) and hasattr(child, 'children'):
+			# If child has 'children', it may be a Q-like object, so recurse
+			yield from q_get_flat_filters(child)
+		elif isinstance(child, tuple):
+			# So now the child is a 2-tuple of filter & value, we just need the
+			# filter so we yield that
+			yield child[0]
 
 
 def split_par_aware(content):
@@ -1538,30 +1528,17 @@ class ModelView(View):
 
 
 	def _apply_q_with_possible_annotations(self, queryset, q, annotations):
-		try:
-			for filter in q_get_flat_filters(q):
-				head = filter.split('__', 1)[0]
-				try:
-					expr = annotations.pop(head)
-				except KeyError:
-					pass
-				else:
-					queryset = queryset.annotate(**{head: expr})
-		except (ValueError, TypeError):
-			# Handle Q objects with Exists/OuterRef that can't be evaluated directly
-			# These are safe to use in .filter() but not in q_get_flat_filters
-			pass
-
-		try:
-			return queryset.filter(q)
-		except (ValueError, TypeError) as e:
-			# If filtering fails due to OuterRef issues, return the original queryset
-			# This shouldn't happen in normal cases, but provides a fallback
-			# This is specifically for logistics projects when _filter_field returns Q(Exists(matching_trip_subquery))
-			if "outer query" in str(e):
-				return queryset
+		for filter in q_get_flat_filters(q):
+			head = filter.split('__', 1)[0]
+			try:
+				expr = annotations.pop(head)
+			except KeyError:
+				pass
 			else:
-				raise
+				queryset = queryset.annotate(**{head: expr})
+
+		return queryset.filter(q)
+
 
 
 	def _after_expr(self, request, after_id):
@@ -1640,9 +1617,7 @@ class ModelView(View):
 		for field, values in filters.items():
 
 			for v in values:
-				filter_description = self._parse_filter(field, v, request, include_annotations)
-				q = filter_description.filter
-				distinct = filter_description.need_distinct
+				q, distinct = self._parse_filter(field, v, request, include_annotations)
 				queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 				if distinct:
 					queryset = queryset.distinct()
@@ -2989,9 +2964,7 @@ class ModelView(View):
 
 		# Apply filters
 		for key, value in stat.filters.items():
-			filter_description = self._parse_filter(key, value, request, include_annotations)
-			q = filter_description.filter
-			distinct = filter_description.need_distinct
+			q, distinct = self._parse_filter(key, value, request, include_annotations)
 			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 			if distinct:
 				queryset = queryset.distinct()
