@@ -9,7 +9,7 @@ from contextlib import suppress
 from decimal import Decimal
 
 from django import forms
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Value
 from django.db.models.fields.files import FieldFile, FileField
 from django.contrib.postgres.fields import CITextField, ArrayField, DateTimeRangeField as DTRangeField
@@ -28,6 +28,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 from binder.json import jsonloads
 
 from binder.exceptions import BinderRequestError
+from binder.websocket import trigger
 
 from . import history
 
@@ -440,6 +441,32 @@ class JSONFieldFilter(FieldFilter):
 			return jsonloads(bytes(v, 'utf-8'))
 
 
+class BinderQuerySet(models.QuerySet):
+	def update(self, *args, **kwargs):
+		result = super().update(*args, **kwargs)
+		self.model.push_default_websocket_update()
+		return result
+
+	def delete(self, *args, **kwargs):
+		result = super().delete(*args, **kwargs)
+		self.model.push_default_websocket_update()
+		return result
+
+
+class BinderManager(models.Manager):
+	def get_queryset(self):
+		return BinderQuerySet(self.model, using=self._db)
+
+	def bulk_create(self, *args, **kwargs):
+		result = super().bulk_create(*args, **kwargs)
+		self.model.push_default_websocket_update()
+		return result
+
+	def bulk_update(self, *args, **kwargs):
+		result = super().bulk_update(*args, **kwargs)
+		self.model.push_default_websocket_update()
+		return result
+
 
 class BinderModelBase(models.base.ModelBase):
 	def __new__(cls, name, bases, attrs):
@@ -458,6 +485,9 @@ class BinderModelBase(models.base.ModelBase):
 
 
 class BinderModel(models.Model, metaclass=BinderModelBase):
+	push_websocket_updates_upon_save = False
+	objects = BinderManager()
+
 	def binder_concrete_fields_as_dict(self, skip_deferred_fields=False):
 		fields = {}
 		deferred_fields = self.get_deferred_fields()
@@ -613,10 +643,22 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		abstract = True
 		ordering = ['pk']
 
+	@classmethod
+	def push_default_websocket_update(cls):
+		from binder.views import determine_model_resource_name
+		if cls.push_websocket_updates_upon_save:
+			transaction.on_commit(lambda: trigger('', [{ 'auto-updates': determine_model_resource_name(cls.__name__)}]))
+
 	def save(self, *args, **kwargs):
 		self.full_clean() # Never allow saving invalid models!
-		return super().save(*args, **kwargs)
+		result = super().save(*args, **kwargs)
+		self.push_default_websocket_update()
+		return result
 
+	def delete(self, *args, **kwargs):
+		result = super().delete(*args, **kwargs)
+		self.push_default_websocket_update()
+		return result
 
 	# This can be overridden in your model when there are special
 	# validation rules like partial indexes that may need to be

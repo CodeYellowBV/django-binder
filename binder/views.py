@@ -342,6 +342,8 @@ def prefix_q_expression(value, prefix, antiprefix=None, model=None):
 			children.append((prefix + '__' + child[0], child[1]))
 	return Q(*children, _connector=value.connector, _negated=value.negated)
 
+def determine_model_resource_name(mn: str):
+	return ''.join((x + '_' if x.islower() and y.isupper() else x.lower() for x, y in zip(mn, mn[1:] + 'x')))
 
 class ModelView(View):
 	# Model this is a view for. Use None for views not tied to a particular model.
@@ -578,9 +580,7 @@ class ModelView(View):
 	# Like model._meta.model_name, except it converts camelcase to underscores
 	@classmethod
 	def _model_name(cls):
-		mn = cls.model.__name__
-		return ''.join((x + '_' if x.islower() and y.isupper() else x.lower() for x, y in zip(mn, mn[1:] + 'x')))
-
+		return determine_model_resource_name(cls.model.__name__)
 
 
 	# Use this to instantiate other views you need. It returns a properly initialized view instance.

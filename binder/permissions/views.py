@@ -190,6 +190,25 @@ class PermissionView(ModelView):
 		return self.scope_view(request, queryset)
 
 
+	@classmethod
+	def get_rooms_for_user(cls, user):
+		from django.conf import settings
+
+		required_permission = cls.model._meta.app_label + '.view_' + cls.model.__name__.lower()
+		has_required_permission = False
+
+		for low_permission in list(user.get_all_permissions()) + ['default']:
+			for permission_tuple in settings.BINDER_PERMISSION.get(low_permission, []):
+				high_permission = permission_tuple[0]
+				if high_permission == required_permission:
+					has_required_permission = True
+					break
+
+		if has_required_permission:
+			return [{ 'auto-updates': cls._model_name() }]
+		else:
+			return []
+
 
 	def _require_model_perm(self, perm_type, request, pk=None):
 		"""
