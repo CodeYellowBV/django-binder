@@ -1,4 +1,5 @@
 import re
+from typing import List
 import warnings
 import hashlib
 import mimetypes
@@ -608,6 +609,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 
 	class Binder:
 		history = False
+		exclude_history_fields: List[str] = []
 
 	class Meta:
 		abstract = True
@@ -683,13 +685,22 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 def history_obj_post_init(sender, instance, **kwargs):
 	instance._history = instance.binder_concrete_fields_as_dict(skip_deferred_fields=True)
 
+	excluded_fields = getattr(sender.Binder, 'exclude_history_fields', [])
+	for field_name in excluded_fields:
+		instance._history.pop(field_name, None)
+
 	if not instance.pk:
 		instance._history = {k: history.NewInstanceField for k in instance._history}
 
 
 
 def history_obj_post_save(sender, instance, **kwargs):
+	excluded_fields = getattr(sender.Binder, 'exclude_history_fields', [])
+
 	for field_name, new_value in instance.binder_concrete_fields_as_dict().items():
+		if field_name in excluded_fields:
+			continue
+
 		try:
 			old_value = instance._history[field_name]
 			if old_value != new_value:

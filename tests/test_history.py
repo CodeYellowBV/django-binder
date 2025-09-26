@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from binder import history
 from binder.history import Change, Changeset
 
-from .testapp.models import Animal, Caretaker, ContactPerson
+from .testapp.models import Animal, Caretaker, ContactPerson, Zoo
 
 
 class HistoryTest(TestCase):
@@ -346,3 +346,65 @@ class HistoryTest(TestCase):
 		# Aborted, so still no history
 		self.assertEqual(0, Changeset.objects.count())
 		self.assertEqual(0, Change.objects.count())
+
+	def test_exclude_history_fields_prevents_tracking(self):
+		"""Test that fields listed in exclude_history_fields are not tracked in history"""
+		original_exclude_fields = getattr(Animal.Binder, 'exclude_history_fields', [])
+		Animal.Binder.exclude_history_fields = ['name']
+		
+		try:
+			model_data = {
+				'name': 'Test Animal',
+			}
+			response = self.client.post('/animal/', data=json.dumps(model_data), content_type='application/json')
+			self.assertEqual(response.status_code, 200)
+			animal_id = json.loads(response.content)['id']
+			
+			# Check that we have a changeset for the creation
+			self.assertEqual(1, Changeset.objects.count())
+			cs = Changeset.objects.get()
+			
+			# Check that changes exist for normal fields but not for excluded fields
+			changes = Change.objects.filter(changeset=cs)
+			field_names = [change.field for change in changes]
+			
+			# The 'name' field should be excluded from history
+			self.assertNotIn('name', field_names)
+			# Other fields should still be tracked
+			self.assertIn('id', field_names)
+			self.assertIn('deleted', field_names)
+			
+			model_data = {
+				'name': 'Updated Animal Name',
+			}
+			response = self.client.patch(f'/animal/{animal_id}/', data=json.dumps(model_data), content_type='application/json')
+			self.assertEqual(response.status_code, 200)
+			
+			# Should still only have 1 changeset (no new one created for excluded field)
+			self.assertEqual(1, Changeset.objects.count())
+			
+			# Now update both an excluded field AND a non-excluded field
+			zoo = Zoo.objects.create(name='Test Zoo')
+			model_data = {
+				'name': 'Another Name Update',  # excluded field
+				'zoo': zoo.id,  # non-excluded field
+			}
+			response = self.client.patch(f'/animal/{animal_id}/', data=json.dumps(model_data), content_type='application/json')
+			self.assertEqual(response.status_code, 200)
+			
+			# Now we should have 2 changesets (original creation + this mixed update)
+			self.assertEqual(2, Changeset.objects.count())
+			
+			# Check the latest changeset (for the mixed update)
+			latest_cs = Changeset.objects.order_by('-id').first()
+			latest_changes = Change.objects.filter(changeset=latest_cs)
+			latest_field_names = [change.field for change in latest_changes]
+			
+			# Only the zoo field should be recorded, not the name
+			self.assertEqual(1, len(latest_field_names))
+			self.assertIn('zoo', latest_field_names)
+			self.assertNotIn('name', latest_field_names)
+			
+		finally:
+			# Restore original exclude_history_fields setting
+			Animal.Binder.exclude_history_fields = original_exclude_fields

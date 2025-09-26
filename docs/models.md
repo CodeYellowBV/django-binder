@@ -98,6 +98,20 @@ class Animal(BinderModel):
 		history = True
 ```
 
+You can also exclude specific fields from history tracking by setting `exclude_history_fields`:
+
+```python
+from binder.models import BinderModel
+
+class Animal(BinderModel):
+	name = models.TextField()
+	secret_notes = models.TextField()  # This field won't be tracked
+	
+	class Binder:
+		history = True
+		exclude_history_fields = ['secret_notes']
+```
+
 Saving the model will result in one changeset. With a changeset, the user that changed it and datetime is saved.
 
 A changeset contains changes for each field that has been changed to a new value. For each change, you can see the old value and the new value.
