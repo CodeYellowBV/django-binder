@@ -2903,6 +2903,9 @@ class ModelView(View):
 			guess = mimetypes.guess_type(file_field.name)
 			content_type = (guess and guess[0]) or 'application/octet-stream'
 			serve_directly = isinstance(field, BinderFileField) and field.serve_directly
+
+			is_video = content_type and content_type.startswith('video/')
+
 			try:
 				if serve_directly:
 					resp = HttpResponse(content_type=content_type)
@@ -2912,7 +2915,10 @@ class ModelView(View):
 					if not file_field.url.startswith('/'):
 						resp['redirect_url'] = file_field.url
 				else:
-					resp = FileResponse(file_field.open(), content_type=content_type)
+					file_handle = file_field.open('rb')
+					resp = FileResponse(file_handle, content_type=content_type)
+					if is_video:
+						resp['Accept-Ranges'] = 'bytes'
 			except FileNotFoundError:
 				logger.error('Expected file {} not found'.format(file_field.name))
 				raise BinderNotFound(file_field_name)
