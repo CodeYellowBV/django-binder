@@ -4,8 +4,8 @@ Binder.websockets contains functions to connect with a [high-templar](https://gi
 
 ## Flow
 
-The client = a web/native/whatever frontend  
-The websocket server = a high-templar instance  
+The client = a web/native/whatever frontend
+The websocket server = a high-templar instance
 The binder app = a server created with django-binder
 
 - The client needs live updates of certain models.
@@ -24,7 +24,7 @@ The scoping of subscriptions is done through rooms. Roomnames are dictionaries. 
 
 There is a chat application for a company. A manager can only view messages of a single location.
 
-The allowed_rooms of a manager of the eindhoven branch could look like 
+The allowed_rooms of a manager of the eindhoven branch could look like
 ```
 [{'location': 'Eindhoven'}]
 ```
@@ -43,9 +43,30 @@ Note: this doesn't mean a client can subscribe to room: `{'location': '*'}` and 
 
 If you do really need a room with messages from all locations, just trigger twice: once in the location specific room and one in the location: * room.
 
+## Trigger on saves
+Since sending websocket updates upon saving models is something we often need, there is a 'shortcut' for this.
+If you set `push_websocket_updates_upon_save` to `True` in a model, it will automatically send websocket updates whenever it is saved or deleted.
+
+```python
+class Country(BinderModel):
+    push_websocket_updates_upon_save = True
+    name = models.CharField(unique=True, max_length=100)
+```
+For instance, whenever a `Country` is saved, it will trigger a websocket update to `auto-updates/country` with `data = country.id`.
+
+### Custom object managers
+Normally, websocket updates are also sent when an object is bulk created/updated/deleted. This is implemented by using a custom objects `Manager`.
+This is usually just an implementation detail, but it can be problematic when your model *also* has its own custom objects `Manager`.
+If you want to make bulk updating push websocket notifications, you need to ensure that your custom manager inherits from `binder.models.BinderManager`.
+
+### Forcing websocket updates
+If you want stores to re-fetch your objects, but you haven't saved them directly (e.g. when you changed related objects or annotation values),
+you can forcibly send a websocket update by calling the `push_default_websocket_update()` class method on the model.
+
+
 ## Binder setup
 
-The high-templar instance is agnostic of the authentication/datamodel/permissions. The authentication is done by the proxy to /api/bootstrap. The datamodel / permission stuff is all done through rooms and the data that gets sent through it. 
+The high-templar instance is agnostic of the authentication/datamodel/permissions. The authentication is done by the proxy to /api/bootstrap. The datamodel / permission stuff is all done through rooms and the data that gets sent through it.
 
 `binder.websocket` provides 2 helpers for communicating with high-templar.
 
@@ -74,4 +95,3 @@ The RoomController checks every descendant of the ModelView and looks for a  `@c
 ### Trigger
 
 `binder.websocket` provides a `trigger` to the high_templar instance using a POST request. The url for this request is `getattr(settings, 'HIGH_TEMPLAR_URL', 'http://localhost:8002')`. It needs `data, rooms` as args, the data which will be sent in the publish and the rooms it will be publishes to.
-

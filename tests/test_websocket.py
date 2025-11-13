@@ -1,19 +1,23 @@
-from django.test import TestCase, Client
+from django.test import TestCase, TransactionTestCase, Client
 from django.contrib.auth.models import User
-from unittest import mock
+from unittest import mock, skipIf
 from binder.views import JsonResponse
 from binder.websocket import trigger
 from .testapp.urls import room_controller
-from .testapp.models import Animal, Costume
+from .testapp.models import Animal, Costume, Country
 import requests
 import json
+import os
 from django.test import override_settings
 
 
 class MockUser:
-	def __init__(self, costumes):
+	def __init__(self, costumes, permissions = []):
 		self.costumes = costumes
+		self.permissions = permissions
 
+	def get_all_permissions(self):
+		return self.permissions
 
 def mock_post_high_templar(*args, **kwargs):
 	return JsonResponse({'ok': True})
@@ -31,6 +35,9 @@ class WebsocketTest(TestCase):
 
 	def test_room_controller_list_rooms_for_user(self):
 		allowed_rooms = [
+			{
+				'auto-updates': 'user'
+			},
 			{
 				'zoo': 'all',
 			},
@@ -70,6 +77,69 @@ class WebsocketTest(TestCase):
 
 		self.assertIsNotNone(costume.pk)
 
+	def test_auto_update_rooms(self):
+		user = MockUser([], ['testapp.manage_country'])
+		rooms = room_controller.list_rooms_for_user(user)
+
+		found_it = False
+		for room in rooms:
+			if 'auto-updates' in room and room['auto-updates'] == 'city':
+				found_it = True
+		self.assertTrue(found_it)
+
+class AutoUpdateTest(TransactionTestCase):
+
+	@mock.patch('requests.post', side_effect=mock_post_high_templar)
+	@override_settings(HIGH_TEMPLAR_URL="http://localhost:8002")
+	def test_auto_update_trigger(self, mock):
+		country = Country.objects.create(name='YellowLand')
+		mock.assert_called_with('http://localhost:8002/trigger/', data=json.dumps({
+				'data': '',
+				'rooms': [{ 'auto-updates': 'country' }]
+			}))
+		mock.reset_mock()
+		country.delete()
+		mock.assert_called_with('http://localhost:8002/trigger/', data=json.dumps({
+				'data': '',
+				'rooms': [{ 'auto-updates': 'country' }]
+			}))
+
+	@mock.patch('requests.post', side_effect=mock_post_high_templar)
+	@override_settings(HIGH_TEMPLAR_URL="http://localhost:8002")
+	@skipIf(
+		os.environ.get('BINDER_TEST_MYSQL', '0') != '0',
+		"Only available with PostgreSQL"
+	)
+	def test_bulk_update_trigger(self, mock):
+		countries = Country.objects.bulk_create([Country(name='YellowLand')])
+		self.assertEqual(1, len(countries))
+		country = countries[0]
+
+		mock.assert_called_with('http://localhost:8002/trigger/', data=json.dumps({
+				'data': '',
+				'rooms': [{ 'auto-updates': 'country' }]
+			}))
+		mock.reset_mock()
+
+		Country.objects.bulk_update(countries, ['name'])
+		mock.assert_called_with('http://localhost:8002/trigger/', data=json.dumps({
+				'data': '',
+				'rooms': [{ 'auto-updates': 'country' }]
+			}))
+		mock.reset_mock()
+
+		Country.objects.all().update(name='YellowCountry')
+		mock.assert_called_with('http://localhost:8002/trigger/', data=json.dumps({
+				'data': '',
+				'rooms': [{ 'auto-updates': 'country' }]
+			}))
+		mock.reset_mock()
+
+		Country.objects.filter(id=country.pk).delete()
+		mock.assert_called_with('http://localhost:8002/trigger/', data=json.dumps({
+				'data': '',
+				'rooms': [{ 'auto-updates': 'country' }]
+			}))
 
 class TriggerConnectionCloseTest(TestCase):
 	@override_settings(
@@ -92,4 +162,3 @@ class TriggerConnectionCloseTest(TestCase):
 		trigger(data, rooms)
 
 		mock_connection.close.assert_called_once()
-
