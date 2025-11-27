@@ -322,6 +322,25 @@ class DateTimeFieldFilter(FieldFilter):
 		return qualifier, cleaned_value
 
 
+class RelativeDeltaFieldFilter(FieldFilter):
+	name = 'RelativeDeltaFieldFilter'
+	fields = []
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
+
+	def clean_value(self, qualifier, v):
+		from relativedeltafield.utils import parse_relativedelta
+		try:
+			return parse_relativedelta(v)
+		except ValueError:
+			raise ValidationError(v + ' is not a valid (extended) ISO8601 interval specification')
+
+try:
+	from relativedeltafield import RelativeDeltaField
+	RelativeDeltaFieldFilter.fields.append(RelativeDeltaField)
+except ImportError:
+	pass
+
+
 class TimeFieldFilter(FieldFilter):
 	fields = [models.TimeField]
 	# Maybe allow __startswith? And __year etc?
