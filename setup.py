@@ -21,7 +21,6 @@ setup(
 	url='https://github.com/CodeYellowBV/django-binder',
 	author='Marcel Moreaux',
 	author_email='marcel@codeyellow.nl',
-	test_suite='tests',
 	classifiers=[
 		'Environment :: Web Environment',
 		'Framework :: Django',
@@ -43,13 +42,15 @@ setup(
 		'requests >= 2.13.0',
 		'pika == 1.3.2',
 	],
-	tests_require=[
-		'django-hijack >= 2.1.10, < 3.0.0',
-		(
-			'mysqlclient >= 1.3.12'
-			if os.environ.get('BINDER_TEST_MYSQL', '0') == '1' else
-			'psycopg2 >= 2.7'
-		),
-		"openpyxl >= 3.0.0"
-	],
+	extras_require={
+		'test': [
+			'django-hijack >= 2.1.10, < 3.0.0',
+			(
+				'mysqlclient >= 1.3.12'
+				if os.environ.get('BINDER_TEST_MYSQL', '0') == '1' else
+				'psycopg2 >= 2.7'
+			),
+			"openpyxl >= 3.0.0"
+		],
+	}
 )
