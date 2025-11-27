@@ -456,3 +456,28 @@ class WithFilterTest(TestCase):
 			},
 			EXTRA(): None,
 		})
+
+	def test_filter_on_relation_with_include_annotations_using_where(self):
+		zoo = Zoo.objects.create(name='Apenheul')
+
+		carl = Caretaker.objects.create(name="carl")
+		tim = Caretaker.objects.create(name="tim")
+
+		Animal.objects.create(name='Harambe', zoo=zoo, caretaker=carl)
+		Animal.objects.create(name='Bokito', zoo=zoo, caretaker=tim)
+		Animal.objects.create(name='Rafiki', zoo=zoo)
+
+		res = self.client.get('/animal/', data={
+			'with': 'caretaker',
+			'include_annotations': 'caretaker.scary',
+			'where': 'caretaker(scary=boo! tim)',
+		})
+		self.assertEqual(res.status_code, 200)
+		data = jsonloads(res.content)
+		print(data)
+
+		self.assertEqual(1, len(data['with']))
+		self.assertEqual(1, len(data['with']['caretaker']))
+		with_tim = data['with']['caretaker'][0]
+		self.assertEqual('tim', with_tim['name'])
+		self.assertEqual('boo! tim', with_tim['scary'])
