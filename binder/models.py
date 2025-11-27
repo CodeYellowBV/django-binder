@@ -216,8 +216,9 @@ class FieldFilter(object):
 
 	def check_qualifier(self, qualifier):
 		if qualifier not in self.allowed_qualifiers:
-			raise BinderRequestError('Qualifier {} not supported for type {} ({}).'
-					.format(qualifier, self.__class__.__name__, self.field_description()))
+			raise BinderRequestError('Qualifier {} not supported for type {} ({}). Supported qualifiers: {}'
+					.format(qualifier, self.__class__.__name__, self.field_description(),
+							self.allowed_qualifiers))
 
 
 
