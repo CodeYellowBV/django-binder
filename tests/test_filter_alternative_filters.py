@@ -22,7 +22,7 @@ class TestFilterAlternativeFilters(TestCase):
 		z1 = Zoo(id=1, name='zoo1')
 		z1.save()
 		z1.contacts.set([1, 2])
-		
+
 		z2 = Zoo(id=2, name='zoo2')
 		z2.save()
 		z2.contacts.set([2])
@@ -35,7 +35,7 @@ class TestFilterAlternativeFilters(TestCase):
 		response = self.client.get('/zoo/?.all_contact_name:icontains=contact1')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
-		
+
         # only zoo1 contain contacts.name=contact1
 
 		assert_json(returned_data, {
@@ -53,7 +53,7 @@ class TestFilterAlternativeFilters(TestCase):
 		response = self.client.get('/zoo/?.all_contact_name:icontains=contact2')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
-		
+
         # both zoos contain contacts.name=contact2
 
 		assert_json(returned_data, {
@@ -71,12 +71,12 @@ class TestFilterAlternativeFilters(TestCase):
 			],
 			EXTRA(): None,  # Debug, meta, with, etc
 		})
-		
+
 	def test_filter_alternative_contacts_regular_field(self):
 		response = self.client.get('/zoo/?.all_contact_name:icontains=zoo2')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
-		
+
         # only zoo 2 contain .name=zoo2
 
 		assert_json(returned_data, {
@@ -95,7 +95,7 @@ class TestFilterAlternativeFilters(TestCase):
 		response = self.client.get('/zoo/?.all_contact_name:any:icontains=zoo2')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
-		
+
         # only zoo 2 contain .name=zoo2
 
 		assert_json(returned_data, {
@@ -114,7 +114,7 @@ class TestFilterAlternativeFilters(TestCase):
 		response = self.client.get('/zoo/?.all_contact_name:all=zoo3')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
-		
+
         # only zoo 3 has all related names =zoo3 (both contact.name and .name)
 
 		assert_json(returned_data, {
@@ -132,7 +132,7 @@ class TestFilterAlternativeFilters(TestCase):
 		response = self.client.get('/zoo/?.all_contact_name:any:not=contact2')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
-		
+
 		# :not:any means none, so only for zoo3 NONE of the name_fields contains contact2
 
 		assert_json(returned_data, {
@@ -150,7 +150,7 @@ class TestFilterAlternativeFilters(TestCase):
 		response = self.client.get('/zoo/?.all_contact_name:all:not=zoo3')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
-		
+
 		# :not:all means that it must contain a field that is NOT zoo3; all but zoo3 contains such a field
 
 		assert_json(returned_data, {
@@ -183,3 +183,17 @@ class TestFilterAlternativeFilters(TestCase):
 			response = self.client.get(f'/zoo/?.{filter_value}=zoo2')
 			self.assertEqual(response.status_code, 418)
 			body = jsonloads(response.content)
+
+	def test_not_existing_qualifier_gives_error(self):
+		response = self.client.get(f'/zoo/?.all_contact_name:qualifier=zoo2')
+		self.assertEqual(response.status_code, 418)
+		body = jsonloads(response.content)
+		message = body['message']
+
+		# We get a message which qualifier is incorrect
+		self.assertIn("Qualifier qualifier not supported for type TextFieldFilter (CharField {ContactPerson}.{name}).", message)
+
+		# And we get a suggestion of supported qualifiers:
+		self.assertIn("Supported qualifiers", message)
+		self.assertIn("contains", message)
+		self.assertIn("icontains", message)
