@@ -121,3 +121,55 @@ class M2MStoreErrorsTest(TestCase):
 
 		response = self.client.put('/contact_person/', data=json.dumps(model_data), content_type='application/json')
 		self.assert_validation_error_as_response(response)
+	
+	# Validation should be shown when contained in m2m relation
+	def test_saving_m2m_with_validation_error(self):
+		data = {
+			"id": -65,
+			# Name exceeds allowed 64 charecters, should show this error in response
+			'name': 'Scooby Dooooooooooooooooooooooooooooooooooooooooooooooooooooooooo',
+		}
+
+		zoo_data = {
+			"data": [
+				{
+					"id": -4,
+					'name': 2,
+					'most_popular_animals': [],
+					"contacts": [],
+					'opening_time': 'time validation error'
+				}
+			]
+		}
+
+		zoo_data_with_animal = {
+			"data": [
+				{
+					"id": -4,
+					'name': 2,
+					'most_popular_animals': [-65],
+					"contacts": [],
+					'opening_time': 'time validation error'
+				}
+			],
+			"with": {
+				"animal": [data]
+			}
+		}
+
+		animal_data = {
+			"data": [data]
+		}
+
+		response_animal = self.client.put(
+			'/animal/', data=json.dumps(animal_data), content_type='application/json')
+		response_zoo = self.client.put(
+			'/zoo/', data=json.dumps(zoo_data), content_type='application/json')
+		response_zoo_with_animal = self.client.put(
+			'/zoo/', data=json.dumps(zoo_data_with_animal), content_type='application/json')
+
+		self.assertEqual(response_zoo.status_code, 400)
+		self.assertIn(str(response_animal.content),
+                    str(response_zoo_with_animal.content))
+		self.assertIn(str(response_zoo.content), str(
+			response_zoo_with_animal.content))
