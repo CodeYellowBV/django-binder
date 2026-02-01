@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import date, datetime, time
 from contextlib import suppress
 from decimal import Decimal
+from functools import partial
 
 from django import forms
 from django.db import models
@@ -730,6 +731,69 @@ def history_obj_m2m_changed(sender, instance, action, reverse, model, pk_set, **
 
 
 
+def history_obj_reverse_relation_pre_save(
+	sender, instance, parent_model, fk_name, reverse_name, **kwargs
+):
+	if getattr(instance, "_history_skip", False):
+		return
+
+	# New Parent
+	try:
+		new_parent = getattr(instance, fk_name)
+	except parent_model.DoesNotExist:
+		new_parent = None
+
+	# Old Parent
+	if instance.pk:
+		try:
+			# We only need the FK field to identify the old parent
+			old_instance = sender.objects.only(fk_name).get(pk=instance.pk)
+			old_parent = getattr(old_instance, fk_name)
+		except (sender.DoesNotExist, parent_model.DoesNotExist):
+			old_parent = None
+	else:
+		old_parent = None
+
+	if old_parent:
+		history.change(
+			parent_model,
+			old_parent.pk,
+			reverse_name,
+			history.DeferredM2M,
+			history.DeferredM2M,
+		)
+
+	if new_parent and new_parent != old_parent:
+		history.change(
+			parent_model,
+			new_parent.pk,
+			reverse_name,
+			history.DeferredM2M,
+			history.DeferredM2M,
+		)
+
+
+def history_obj_reverse_relation_pre_delete(
+	sender, instance, parent_model, fk_name, reverse_name, **kwargs
+):
+	if getattr(instance, "_history_skip", False):
+		return
+
+	try:
+		parent = getattr(instance, fk_name)
+	except parent_model.DoesNotExist:
+		parent = None
+
+	if parent:
+		history.change(
+			parent_model,
+			parent.pk,
+			reverse_name,
+			history.DeferredM2M,
+			history.DeferredM2M,
+		)
+
+
 # FIXME: remove
 def install_m2m_signal_handlers(model):
 	warnings.warn(DeprecationWarning('install_m2m_signal_handlers() is deprecated, call install_history_signal_handlers() instead!'))
@@ -748,7 +812,43 @@ def install_history_signal_handlers(model):
 
 		for field in model._meta.get_fields():
 			if field.many_to_many and field.concrete:
-				signals.m2m_changed.connect(history_obj_m2m_changed, getattr(model, field.name).through)
+				signals.m2m_changed.connect(
+					history_obj_m2m_changed, getattr(model, field.name).through
+				)
+
+		for rel_name in getattr(model.Binder, "include_reverse_relations", []):
+			try:
+				rel_field = model._meta.get_field(rel_name)
+			except models.FieldDoesNotExist:
+				continue
+
+			if not rel_field.is_relation or not rel_field.auto_created:
+				continue
+
+			child_model = rel_field.related_model
+			fk_field = rel_field.field
+			fk_name = fk_field.name
+
+			signals.pre_save.connect(
+				partial(
+					history_obj_reverse_relation_pre_save,
+					parent_model=model,
+					fk_name=fk_name,
+					reverse_name=rel_name,
+				),
+				sender=child_model,
+				weak=False,
+			)
+			signals.pre_delete.connect(
+				partial(
+					history_obj_reverse_relation_pre_delete,
+					parent_model=model,
+					fk_name=fk_name,
+					reverse_name=rel_name,
+				),
+				sender=child_model,
+				weak=False,
+			)
 
 	for sub in model.__subclasses__():
 		install_history_signal_handlers(sub)
