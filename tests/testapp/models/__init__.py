@@ -17,8 +17,14 @@ from .city import City, CityState, PermanentCity
 from .country import Country
 from .web_page import WebPage
 from .pet import Pet
+from .reverse_config_models import (
+    ReverseParent,
+    ReverseChild,
+    ReverseParentNoChildHistory,
+    ReverseChildNoHistory,
+)
 
 # This is Postgres-specific
-if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
-	from .timetable import TimeTable
-	from .feeding_schedule import FeedingSchedule
+if os.environ.get("BINDER_TEST_MYSQL", "0") != "1":
+    from .timetable import TimeTable
+    from .feeding_schedule import FeedingSchedule

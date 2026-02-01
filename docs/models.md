@@ -112,6 +112,22 @@ class Animal(BinderModel):
 		exclude_history_fields = ['secret_notes']
 ```
 
+You can also include reverse relations in history tracking by setting `include_reverse_relations`. This is useful if you want to track when related objects are created or deleted on the parent model.
+
+```python
+class Zoo(BinderModel):
+	# ...
+
+	class Binder:
+		history = True
+		include_reverse_relations = ['animals']
+
+class Animal(BinderModel):
+	zoo = models.ForeignKey(Zoo, related_name='animals', on_delete=models.CASCADE)
+
+	# History on the child model is not required for this to work
+```
+
 Saving the model will result in one changeset. With a changeset, the user that changed it and datetime is saved.
 
 A changeset contains changes for each field that has been changed to a new value. For each change, you can see the old value and the new value.
