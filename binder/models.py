@@ -820,10 +820,10 @@ def install_history_signal_handlers(model):
 			try:
 				rel_field = model._meta.get_field(rel_name)
 			except models.FieldDoesNotExist:
-				continue
+				raise ValueError(f'Reverse relation {rel_name} does not exist on model {model.__name__}.')
 
 			if not rel_field.is_relation or not rel_field.auto_created:
-				continue
+				raise ValueError(f'Field {rel_name} on model {model.__name__} is not a reverse relation.')
 
 			child_model = rel_field.related_model
 			fk_field = rel_field.field
