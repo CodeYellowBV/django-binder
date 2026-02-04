@@ -25,6 +25,6 @@ from .reverse_config_models import (
 )
 
 # This is Postgres-specific
-if os.environ.get("BINDER_TEST_MYSQL", "0") != "1":
-    from .timetable import TimeTable
-    from .feeding_schedule import FeedingSchedule
+if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
+	from .timetable import TimeTable
+	from .feeding_schedule import FeedingSchedule
