@@ -9,6 +9,9 @@ class CaretakerView(CsvExportView, ModelView):
 	unupdatable_fields = ['first_seen']
 	model = Caretaker
 
+	# see `test_model_validation.py`
+	allow_standalone_validation = True
+
 	csv_settings = CsvExportView.CsvExportSettings(
 		withs=[],
 		column_map=[
