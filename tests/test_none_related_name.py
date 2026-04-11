@@ -50,5 +50,5 @@ class TestNoneRelatedName(TestCase):
 
 		self.assertIsInstance(result[0], RelatedModel)
 		self.assertIsNone(result[0].reverse_fieldname)
-		self.assertEquals('bar', result[0].fieldname)
+		self.assertEqual('bar', result[0].fieldname)
 		self.assertEqual(BarModel, result[0].model)

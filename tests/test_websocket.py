@@ -2,6 +2,7 @@ from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from unittest import mock
 from binder.views import JsonResponse
+from binder.websocket import trigger
 from .testapp.urls import room_controller
 from .testapp.models import Animal, Costume
 import requests
@@ -68,3 +69,27 @@ class WebsocketTest(TestCase):
 		costume.save()
 
 		self.assertIsNotNone(costume.pk)
+
+
+class TriggerConnectionCloseTest(TestCase):
+	@override_settings(
+		HIGH_TEMPLAR={
+			'rabbitmq': {
+				'host': 'localhost',
+				'username': 'guest',
+				'password': 'guest'
+			}
+		}
+	)
+	@mock.patch('pika.BlockingConnection')
+	def test_trigger_calls_connection_close(self, mock_connection_class):
+		mock_connection = mock_connection_class.return_value
+		mock_connection.is_closed = False
+
+		data = {'id': 123}
+		rooms = [{'costume': 123}]
+
+		trigger(data, rooms)
+
+		mock_connection.close.assert_called_once()
+

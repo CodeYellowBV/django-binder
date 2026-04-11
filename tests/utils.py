@@ -8,14 +8,17 @@ IMG_SUFFIX = {
 	'jpeg': '.jpg',
 	'png': '.png',
 }
+BYTES_PER_PIXEL = {
+	'RGB': 3,
+	'RGBA': 4,
+}
+
+def image(width, height, mode):
+	return Image.frombytes(mode, (width, height), urandom(width * height * BYTES_PER_PIXEL[mode]))
 
 
-def image(width, height):
-	return Image.frombytes('RGB', (width, height), urandom(width * height * 3))
-
-
-def temp_imagefile(width, height, format):
-	i = image(width, height)
+def temp_imagefile(width, height, format, mode='RGB'):
+	i = image(width, height, mode)
 	f = NamedTemporaryFile(suffix=IMG_SUFFIX[format])
 	i.save(f, format)
 	f.seek(0)

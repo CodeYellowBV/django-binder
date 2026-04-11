@@ -48,14 +48,14 @@ class FileHashView:
         if field in file_type_fields:
             if field_file.name:
                 content_type = guess_type(field_file.name)[0]
-                params.append('content_type=' + content_type)
+                params.append('content_type=' + content_type if content_type is not None else '')
 
         if not params:
             return ''
         else:
             return '?' + '&'.join(params)
 
-    def _get_objs(self, queryset, request=None, annotations=None):
+    def _get_objs(self, queryset, *args, **kwargs):
         params = {
             obj.pk: {
                 field: self._get_params(obj, field)
@@ -66,7 +66,7 @@ class FileHashView:
             for obj in queryset
         }
 
-        data = super()._get_objs(queryset, request, annotations)
+        data = super()._get_objs(queryset, *args, **kwargs)
 
         for obj in data:
             obj.update({

@@ -1,12 +1,11 @@
 import logging
 import time
-import io
 import inspect
 import os
-import hashlib
 import datetime
 import mimetypes
 import functools
+import re
 from collections import defaultdict, namedtuple
 from contextlib import ExitStack
 
@@ -15,11 +14,14 @@ from inspect import getmro
 
 import django
 from django.views.generic import View
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
-from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
+from django.core.files.base import File, ContentFile
+from django.http import HttpResponse,  HttpResponseForbidden, FileResponse, StreamingHttpResponse
 from django.http.request import RawPostDataException, QueryDict
+from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
-from django.db.models import Q, F
+from django.db.models import Q, F, Count, Case, When
 from django.db.models.lookups import Transform
 from django.utils import timezone
 from django.db import transaction
@@ -34,8 +36,69 @@ from .exceptions import (
 )
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
-from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField
-from .json import JsonResponse, jsonloads
+from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField, BinderImageField
+from .json import JsonResponse, jsonloads, jsondumps
+from .route_decorators import list_route
+
+
+# expr: an aggregate expr to get the statistic,
+# filter: a dict of filters to filter the queryset with before getting the aggregate, leading dot not included (optional),
+# group_by: a field to group by separated by dots if following relations (optional),
+# annotations: a list of annotation names that have to be applied to the queryset for the expr to work (optional),
+Stat = namedtuple(
+	'Stat',
+	['expr', 'filters', 'group_by', 'annotations', 'min_value', 'max_values'],
+	defaults=[{}, None, [], None, None],
+)
+
+
+DEFAULT_STATS = {
+	'total_records': Stat(Count(Value(1))),
+}
+
+
+def get_joins_from_queryset(queryset):
+	"""
+	Given a queryset returns a set of lines that are used to determine which
+	tables will be joined and how. In essence this is the FROM-statement and
+	every JOIN-statement in a set as a string.
+
+	This is useful to compare the joins between querysets.
+	"""
+	# So to generate sql we need the compiler and connection for the right db
+	compiler = queryset.query.get_compiler(queryset.db)
+	connection = connections[queryset.db]
+	# Now we will just go through all tables in the alias_map
+	lines = set()
+	for alias in queryset.query.alias_map.values():
+		line, params = alias.as_sql(compiler, connection)
+		# We assert we have no params for now, you need to do custom stuff for
+		# these to appear in joins and substituting params into the sql
+		# is not something we can easily do safely for now, just passing them
+		# along with the str will make use potentially have unhashable lines
+		# which will ruin the set.
+		assert not params
+		lines.add(line)
+	return lines
+
+
+def q_get_flat_filters(q):
+	"""
+	Given a Q-object returns an iterator of all filters used in this Q-object.
+
+	So for example for Q(foo=1, bar=2) this would yield 'foo' and 'bar', but it
+	will also work for more complicated nested Q-objects.
+
+	This is useful to detect which fields are used in a Q-object.
+	"""
+	for child in q.children:
+		if isinstance(child, Q):
+			# If the child is another Q-object we can just yield recursively
+			yield from q_get_flat_filters(child)
+		elif isinstance(child, tuple):
+			# So now the child is a 2-tuple of filter & value, we just need the
+			# filter so we yield that
+			yield child[0]
 
 
 def split_par_aware(content):
@@ -69,6 +132,42 @@ def get_default_annotations(model):
 				annotations.add(attr)
 
 	return annotations
+
+
+def split_path(path):
+	"""
+	This function splits a dot seperated path into a list of keys.
+	The advantage of this function over a simple path.split('.') is that it
+	handles backslash escaping so that keys can contain dot characters.
+	"""
+	path = iter(path)
+	chars = []
+	for char in path:
+		if char == '.':
+			yield ''.join(chars)
+			chars.clear()
+			continue
+		if char == '\\':
+			char = next(path, '')
+		chars.append(char)
+	yield ''.join(chars)
+
+
+def join_path(keys):
+	"""
+	This function joins a list of keys into a dot seperated path.
+	The advantage of this function over a simple '.'.join(keys) is that it
+	handles backslash escaping so that keys can contain dot characters.
+	"""
+	chars = []
+	for i, key in enumerate(keys):
+		if i != 0:
+			chars.append('.')
+		for char in key:
+			if char in '\\.':
+				char = '\\' + char
+			chars.append(char)
+	return ''.join(chars)
 
 
 # Haha kill me now
@@ -220,6 +319,34 @@ def prefix_db_expression(value, prefix):
 		raise ValueError('Unknown expression type, cannot apply db prefix: %s', value)
 
 
+# Prefix a q expression by adding a prefix to all filters. You can also supply
+# an 'antiprefix', if the filter starts with this value it will be removed
+# instead of the prefix being added. This is useful for reversed fields.
+def prefix_q_expression(value, prefix, antiprefix=None, model=None):
+	children = []
+	for child in value.children:
+		if isinstance(child, Q):
+			children.append(prefix_q_expression(child, prefix, antiprefix, model))
+		# pk__in with empty list is often used for identity values since django
+		# doesnt properly support them
+		elif child[0] == 'pk__in' and child[1] == []:
+			children.append(child)
+		elif antiprefix is not None and child[0] == antiprefix:
+			children.append(('pk', child[1]))
+		elif antiprefix is not None and child[0].startswith(antiprefix + '__'):
+			key = child[0][len(antiprefix) + 2:]
+			head = key.split('__', 1)[0]
+			if head != 'pk':
+				try:
+					model._meta.get_field(head)
+				except FieldDoesNotExist:
+					key = 'pk__' + key
+			children.append((key, child[1]))
+		else:
+			children.append((prefix + '__' + child[0], child[1]))
+	return Q(*children, _connector=value.connector, _negated=value.negated)
+
+
 class ModelView(View):
 	# Model this is a view for. Use None for views not tied to a particular model.
 	model = None
@@ -322,6 +449,21 @@ class ModelView(View):
 	#  }
 	virtual_relations = {}
 
+	# A dict that looks like:
+	# {'filter_name': [
+	# 	'field.icontains',
+	# 	'otherField.field:icontains'
+	# ],
+	# }
+	# Allows you to hide multiple filters behind a filter name
+	# see _parse_filter, see api.md > "Filtering by groups (alternative_filters)"
+	# NOTICE: alternative_filters may not contain a field or annotation as key
+	alternative_filters = {}
+
+	# A dict that maps stat name to instances of binder.views.Stat
+	# These statistics can then be used in the stats view
+	stats = {}
+
 	@property
 	def AggStrategy(self):
 		if connections[self.model.objects.db].vendor == 'mysql':
@@ -388,7 +530,7 @@ class ModelView(View):
 
 				# Check if the TRANSACTION_DATABASES is set in the settings.py, and if so, use that instead
 				try:
-					transaction_dbs = django.conf.settings.TRANSACTION_DATABASES
+					transaction_dbs = settings.TRANSACTION_DATABASES
 				except AttributeError:
 					pass
 
@@ -479,7 +621,7 @@ class ModelView(View):
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_objs(self, queryset, request, annotations=None):
+	def _get_objs(self, queryset, request, annotations=None, to_annotate={}):
 		datas = []
 		datas_by_id = {} # Save datas so we can annotate m2m fields later (avoiding a query)
 		objs_by_id = {} # Same for original objects
@@ -497,6 +639,52 @@ class ModelView(View):
 		else:
 			annotations &= set(self.shown_annotations)
 
+		# So now annotations are only being used for showing, so we filter out
+		# all that do not have to be shown
+		to_annotate = {
+			key: value
+			for key, value in to_annotate.items()
+			if key in annotations
+		}
+
+		# So now we will divide annotations based on the joins they do
+		base_joins = get_joins_from_queryset(queryset)
+		annotation_sets = []
+
+		for name, expr in list(to_annotate.items()):
+			annotation_joins = get_joins_from_queryset(
+				self.model.objects.annotate(**{name: expr})
+			)
+			annotation_annotations = {name: expr}
+			# First check if the queryset already does all joins, in that case
+			# we can just add it to the main queryset without any performance
+			# hits
+			if annotation_joins <= base_joins:
+				queryset = queryset.annotate(**annotation_annotations)
+				to_annotate.pop(name)
+				continue
+			# Then try to merge it into the annotation sets
+			i = 0
+			while i < len(annotation_sets):
+				set_joins, set_annotations = annotation_sets[i]
+				# If our joins are a subset of the annotation set we just add
+				# our annotation to the set and break
+				if annotation_joins <= set_joins:
+					set_annotations.update(annotation_annotations)
+					break
+				# If our joins are a superset of the annotation set we take its
+				# annotations and add it to ours
+				elif set_joins <= annotation_joins:
+					annotation_annotations.update(set_annotations)
+					annotation_sets.pop(i)
+				# Go on to the next
+				else:
+					i += 1
+			# If no annotation set existed that matched our joins we create a
+			# new one
+			else:
+				annotation_sets.append((annotation_joins, annotation_annotations))
+
 		for obj in queryset:
 			# So we tend to make binder call queryset.distinct when necessary
 			# to prevent duplicate results, this is however not always possible
@@ -508,12 +696,11 @@ class ModelView(View):
 
 			data = {}
 			for f in fields:
-				if isinstance(f, models.fields.files.FileField):
+				if isinstance(f, models.FileField):
 					file = getattr(obj, f.attname)
 					if file:
 						# {router-view-instance}
 						data[f.name] = self.router.model_route(self.model, obj.id, f)
-
 						# {duplicate-binder-file-field-hash-code}
 						if isinstance(f, BinderFileField):
 							data[f.name] += '?h={}&content_type={}&filename={}'.format(
@@ -527,7 +714,8 @@ class ModelView(View):
 					data[f.name] = getattr(obj, f.attname)
 
 			for a in annotations:
-				data[a] = getattr(obj, a)
+				if a not in to_annotate:
+					data[a] = getattr(obj, a)
 
 			for prop in self.shown_properties:
 				data[prop] = getattr(obj, prop)
@@ -538,6 +726,18 @@ class ModelView(View):
 			datas.append(data) # order matters!
 			datas_by_id[obj.pk] = data
 			objs_by_id[obj.pk] = obj
+
+		for _, set_annotations in annotation_sets:
+			for set_values in (
+				self.model.objects
+				.filter(pk__in=datas_by_id)
+				.annotate(**set_annotations)
+				.values('pk', *set_annotations)
+			):
+				pk_ = set_values.pop('pk')
+				for name, value in set_values.items():
+					datas_by_id[pk_][name] = value
+					setattr(objs_by_id[pk_], name, value)
 
 		self._annotate_objs(datas_by_id, objs_by_id)
 
@@ -562,7 +762,7 @@ class ModelView(View):
 			for obj_id, data in datas_by_id.items():
 				# TODO: Don't require OneToOneFields in the m2m_fields list
 				if isinstance(local_field, models.OneToOneRel):
-					assert(len(idmap[obj_id]) <= 1)
+					assert len(idmap[obj_id]) <= 1
 					data[field_name] = idmap[obj_id][0] if len(idmap[obj_id]) == 1 else None
 				else:
 					data[field_name] = idmap[obj_id]
@@ -578,10 +778,15 @@ class ModelView(View):
 	def _get_obj(self, pk, request, include_annotations=None):
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
+		annotations = include_annotations.get('')
 		results = self._get_objs(
-			annotate(self.get_queryset(request).filter(pk=pk), request, include_annotations.get('')),
+			self.get_queryset(request).filter(pk=pk),
 			request=request,
-			annotations=include_annotations.get(''),
+			annotations=annotations,
+			to_annotate={
+				name: value['expr']
+				for name, value in get_annotations(self.model,  request, annotations).items()
+			},
 		)
 		if results:
 			return results[0]
@@ -753,9 +958,13 @@ class ModelView(View):
 			view.router = self.router
 			for annotations, with_pks in annotation_ids.items():
 				objs = view._get_objs(
-					annotate(view.get_queryset(request).filter(pk__in=with_pks), request, annotations),
+					view.get_queryset(request).filter(pk__in=with_pks),
 					request=request,
 					annotations=annotations,
+					to_annotate={
+						name: value['expr']
+						for name, value in get_annotations(view.model,  request, annotations).items()
+					},
 				)
 				for obj in objs:
 					view._annotate_obj_with_related_withs(obj, withs_per_model[model_name])
@@ -882,12 +1091,9 @@ class ModelView(View):
 	def _get_with_ids(self, pks, request, include_annotations, with_map, where_map):
 		result = {}
 
-		annotations = {}
 		singular_fields = set()
 		rel_ids_by_field_by_id = defaultdict(lambda: defaultdict(list))
 		virtual_fields = set()
-
-		Agg = self.AggStrategy
 
 		for field in with_map:
 			vr = self.virtual_relations.get(field, None)
@@ -899,12 +1105,6 @@ class ModelView(View):
 				for rel, annotations in include_annotations.items()
 				if rel == field or rel.startswith(field + '.')
 			})
-
-			# Model default orders (this sometimes matters)
-			orders = []
-			field_alias = field + '___annotation' if vr else field
-			for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
-				orders.append(prefix_db_expression(o, field_alias))
 
 			# Virtual relation
 			if vr:
@@ -921,51 +1121,43 @@ class ModelView(View):
 				# annotations, so allow for fetching of ids, instead.
 				# This does mean you can't filter on this relation
 				# unless you write a custom filter, too.
-				if isinstance(virtual_annotation, Q):
-					annotations[field_alias] = Agg(virtual_annotation, filter=q, ordering=orders)
-				else:
-					try:
-						func = getattr(self, virtual_annotation)
-					except AttributeError:
-						raise BinderRequestError('Annotation for virtual relation {{{}}}.{{{}}} is {{{}}}, but no method by that name exists.'.format(
-							self.model.__name__, field, virtual_annotation
-						))
-					rel_ids_by_field_by_id[field] = func(request, pks, q)
+				try:
+					func = getattr(self, virtual_annotation)
+				except AttributeError:
+					raise BinderRequestError('Annotation for virtual relation {{{}}}.{{{}}} is {{{}}}, but no method by that name exists.'.format(
+						self.model.__name__, field, virtual_annotation
+					))
+				rel_ids_by_field_by_id[field] = func(request, pks, q)
 			# Actual relation
 			else:
-				if (getattr(self.model, field).__class__ == models.fields.related.ReverseOneToOneDescriptor or
-					not any(f.name == field for f in (list(self.model._meta.many_to_many) + list(self._get_reverse_relations())))):
+				f = self.model._meta.get_field(field)
+
+				if f.one_to_one or f.many_to_one:
 					singular_fields.add(field)
 
-				if Agg != GroupConcat: # HACKK (GROUP_CONCAT can't filter and excludes NULL already)
-					q &= Q(**{field+'__pk__isnull': False})
-				annotations[field_alias] = Agg(field+'__pk', filter=q, ordering=orders)
+				if any(f.name == field for f in self._get_reverse_relations()):
+					rev_field = f.remote_field.name
+					query = (
+						view.model.objects
+						.filter(prefix_q_expression(q, rev_field, field, view.model), **{rev_field + '__in': pks})
+						.values_list(rev_field + '__pk', 'pk')
+						.distinct()
+					)
+				else:
+					# Model default orders (this sometimes matters)
+					orders = []
+					for o in (view.model._meta.ordering if view.model._meta.ordering else BinderModel.Meta.ordering):
+						orders.append(prefix_db_expression(o, field))
+					query = (
+						self.model.objects
+						.order_by(*orders)
+						.filter(q, pk__in=pks, **{field + '__isnull': False})
+						.values_list('pk', field + '__pk')
+						.distinct()
+					)
 
-
-		qs = self.model.objects.filter(pk__in=pks).values('pk').annotate(**annotations)
-		for record in qs:
-			for field in with_map:
-				field_alias = field+'___annotation' if field in virtual_fields else field
-
-				if field_alias in annotations:
-					value = record[field_alias]
-
-					# Make the values distinct.  We can't do this in
-					# the Agg() call, because then we get an error
-					# regarding order by and values needing to be the
-					# same :(
-					# We also can't just put it in a set, because we
-					# need to preserve the ordering.  So we use a set
-					# to keep track of what we've seen and only add
-					# new items.
-					seen_values = set()
-					distinct_values = []
-					for v in value:
-						if v not in seen_values:
-							distinct_values.append(v)
-						seen_values.add(v)
-
-					rel_ids_by_field_by_id[field][record['pk']] += distinct_values
+				for pk, rel_pk in query:
+					rel_ids_by_field_by_id[field][pk].append(rel_pk)
 
 		for field, sub_fields in with_map.items():
 			next = self._follow_related(field)[0].model
@@ -1010,9 +1202,52 @@ class ModelView(View):
 		return FilterDescription(q, need_distinct)
 
 
+	# handle self.alternative_filters as part of _parse_filter
+	def _parse_alternative_filters(self, field, filter_heads, *args, **kwargs):
+		head, tail = re.fullmatch(r'([^.:]*)(.*)', field).groups()
+
+		# split not/any/all of the tail, by default a filter is treated as any
+		#   NOTE: not is_any ==> is_all
+		is_not = bool(re.search(r':not\b', tail))
+
+		is_any = bool(re.match(r':any\b', tail))
+		if is_any:
+			tail = tail[4:]
+		is_all = bool(re.match(r':all\b', tail))
+		if is_all and not is_any:
+			# if both is_any and is_all are true, we want the filter to fail
+			tail = tail[4:]
+
+		alts = []
+		for head in filter_heads:
+			field = head + tail
+			alt = self._parse_filter(field, *args, **kwargs)
+			alts.append(alt)
+		q, needs_distinct = alts[0]
+		for q_, needs_distinct_ in alts[1:]:
+			if is_not == is_all:
+				# :any (default)
+				# :not:all (NOTE that not is maintained inside the filter)
+				q |= q_
+			else:
+				# :all
+				# :not:any (NOTE that not is maintained inside the filter)
+				q &= q_
+			needs_distinct = needs_distinct or needs_distinct_
+		return FilterDescription(q, needs_distinct)
+
 	def _parse_filter(self, field, value, request, include_annotations, partial=''):
 		head, *tail = field.split('.')
 		need_distinct = False
+
+		alt_head = head.split(':')[0]
+		try:
+			# get head without trailing :sorter
+			filter_heads = self.alternative_filters[alt_head]
+		except KeyError:
+			pass
+		else:
+			return self._parse_alternative_filters(field, filter_heads, value, request, include_annotations, partial)
 
 		if not tail:
 			invert = False
@@ -1125,10 +1360,9 @@ class ModelView(View):
 		return (queryset, partial + head, nulls_last)
 
 
-
-	def search(self, queryset, search, request):
+	def _search_base(self, search, request):
 		if not search:
-			return queryset
+			return ~Q(pk__in=[])
 
 		if not (self.searches or self.transformed_searches):
 			raise BinderRequestError('No search fields defined for this view.')
@@ -1142,7 +1376,12 @@ class ModelView(View):
 				q |= Q(**{s: transform(search)})
 			except ValueError:
 				pass
-		return queryset.filter(q)
+
+		return q
+
+
+	def search(self, queryset, search, request):
+		return queryset.filter(self._search_base(search, request))
 
 
 	def filter_deleted(self, queryset, pk, deleted, request):
@@ -1203,13 +1442,23 @@ class ModelView(View):
 
 
 
-	def order_by(self, queryset, request):
+	def _order_by_base(self, queryset, request, annotations):
 		#### order_by
 		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
 
 		orders = []
 		if order_bys:
 			for o in order_bys:
+				# We split of a leading - (descending sorting) and the
+				# suffixes nulls_last and nulls_first
+				head = re.match(r'^-?(.*?)(__nulls_last|__nulls_first)?$', o).group(1)
+				try:
+					expr = annotations.pop(head)
+				except KeyError:
+					pass
+				else:
+					queryset = queryset.annotate(**{head: expr})
+
 				if o.startswith('-'):
 					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], request, partial='-')
 				else:
@@ -1245,16 +1494,29 @@ class ModelView(View):
 		return queryset
 
 
+	def order_by(self, queryset, request):
+		return self._order_by_base(queryset, request, {})
+
+
 	def _annotate_obj_with_related_withs(self, obj, field_results):
 		for (w, (view, ids_dict, is_singular)) in field_results.items():
 			if '.' not in w:
 				if is_singular:
 					try:
 						obj[w] = list(ids_dict[obj['id']])[0]
-					except IndexError:
+					except (IndexError):
+						"""
+						Indexerror => no relation is found
+						KeyERror => No relation is known for this model.
+						"""
 						obj[w] = None
+					except KeyError:
+						pass
 				else:
-					obj[w] = list(ids_dict[obj['id']])
+					try:
+						obj[w] = list(ids_dict[obj['id']])
+					except KeyError:
+						pass
 
 
 	def _generate_meta(self, include_meta, queryset, request, pk=None):
@@ -1264,14 +1526,111 @@ class ModelView(View):
 			# Only 'pk' values should reduce DB server memory a (little?) bit, making
 			# things faster.  Not prefetching related models here makes it faster still.
 			# See also https://code.djangoproject.com/ticket/23771 and related tickets.
-			meta['total_records'] = queryset.prefetch_related(None).values('pk').count()
+			meta['total_records'] = queryset.order_by().prefetch_related(None).values('pk').count()
 
 		return meta
 
 
-	def get(self, request, pk=None, withs=None, include_annotations=None):
-		include_meta = request.GET.get('include_meta', 'total_records').split(',')
+	def _apply_q_with_possible_annotations(self, queryset, q, annotations):
+		for filter in q_get_flat_filters(q):
+			head = filter.split('__', 1)[0]
+			try:
+				expr = annotations.pop(head)
+			except KeyError:
+				pass
+			else:
+				queryset = queryset.annotate(**{head: expr})
 
+		return queryset.filter(q)
+
+
+	def _after_expr(self, request, after_id, include_annotations):
+		"""
+		This method given a request and an id returns a boolean	expression that
+		indicates if a record would show up after the provided id for the
+		ordering specified by this request.
+		"""
+		queryset = self.get_queryset(request)
+		annotations = {
+			name: value['expr']
+			for name, value in self.annotations(request, include_annotations).items()
+		}
+
+		# We do an order by on a copy of annotations so that we see which keys
+		# it pops
+		annotations_copy = annotations.copy()
+		ordering = self._order_by_base(queryset, request, annotations_copy).query.order_by
+		required_annotations = set(annotations) - set(annotations_copy)
+
+		queryset = queryset.annotate(**{name: annotations[name] for name in required_annotations})
+		try:
+			obj = queryset.get(pk=int(after_id))
+		except (ValueError, self.model.DoesNotExist):
+			raise BinderRequestError(f'invalid value for after_id: {after_id!r}')
+
+		# Now we will build up a comparison expr based on the order by
+		whens = []
+
+		for field in ordering:
+			# Fields are generally strings, except in some edge case, where it is an OrderBy expression.
+			# In thase case, we need to change it back to starting (sigh) for compatability reasons
+
+			if type(field) is not str:
+				_field = field
+
+				field = field.expression.name
+
+				if _field.descending:
+					field = f'-{field}'
+				if _field.nulls_first:
+					field = f'{field}__nulls_first'
+				if _field.nulls_last:
+					field = f'{field}__nulls_last'
+
+			# First we have to split of a leading '-' as indicating reverse
+			reverse = field.startswith('-')
+			if reverse:
+				field = field[1:]
+
+			# Then we determine if nulls come last
+			if field.endswith('__nulls_last'):
+				field = field[:-12]
+				nulls_last = True
+			elif field.endswith('__nulls_first'):
+				field = field[:-13]
+				nulls_last = False
+			elif connections[self.model.objects.db].vendor == 'mysql':
+				# In MySQL null is considered to be the lowest possible value for ordering
+				nulls_last = reverse
+			else:
+				# In other databases null is considered to be the highest possible value for ordering
+				nulls_last = not reverse
+
+			# Then we determine what the value is for the obj we need to be after
+			value = obj
+			for attr in field.split('__'):
+				value = getattr(value, attr, None)
+			if isinstance(value, models.Model):
+				value = value.pk
+
+			# Now we add some conditions for the comparison
+			if value is None:
+				# If the value is None, that means we have to add a condition for when the field is not None because only then it is different
+				# What the result should be in that case is determined by nulls last
+				whens.append(When(Q(**{field + '__isnull': False}), then=Value(not nulls_last)))
+			else:
+				# If the field is None we give a result based on nulls last
+				whens.append(When(Q(**{field: None}), then=Value(nulls_last)))
+				# Otherwise we check with comparisons, note that equality is intentionally left open with these two options so in that case we go on to the next field
+				whens.append(When(Q(**{field + '__lt': value}), then=Value(reverse)))
+				whens.append(When(Q(**{field + '__gt': value}), then=Value(not reverse)))
+
+		expr = Case(*whens, default=Value(False))
+
+		return expr, required_annotations
+
+
+	def _get_filtered_queryset_base(self, request, pk=None, include_annotations=None):
 		queryset = self.get_queryset(request)
 		if pk:
 			queryset = queryset.filter(pk=int(pk))
@@ -1287,32 +1646,83 @@ class ModelView(View):
 		#### annotations
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
-		queryset = annotate(queryset, request, include_annotations.get(''))
+
+		annotations = {
+			name: value['expr']
+			for name, value in self.annotations(request, include_annotations).items()
+		}
 
 		#### filters
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
 		for field, values in filters.items():
+
 			for v in values:
 				q, distinct = self._parse_filter(field, v, request, include_annotations)
-				queryset = queryset.filter(q)
+				queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 				if distinct:
 					queryset = queryset.distinct()
 
 		#### search
 		if 'search' in request.GET:
-			queryset = self.search(queryset, request.GET['search'], request)
+			q = self._search_base(request.GET['search'], request)
+			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 
+		#### after
+		try:
+			after = request.GET['after']
+		except KeyError:
+			pass
+		else:
+			after_expr, required_annotations = self._after_expr(request, after, include_annotations)
+			for name in required_annotations:
+				try:
+					expr = annotations.pop(name)
+				except KeyError:
+					pass
+				else:
+					queryset = queryset.annotate(**{name: expr})
+			queryset = queryset.filter(after_expr)
+
+		return queryset, annotations
+
+	def get_filtered_queryset(self, request, *args, **kwargs):
+		"""
+		Returns a scoped queryset with filtering and sorting applied as
+		specified by the request.
+		"""
+		queryset, annotations = self._get_filtered_queryset_base(request, *args, **kwargs)
+		queryset = queryset.annotate(**annotations)
 		queryset = self.order_by(queryset, request)
+		return queryset
+
+	def get(self, request, pk=None, withs=None, include_annotations=None):
+		include_meta = request.GET.get('include_meta', 'total_records').split(',')
+		if include_annotations is None:
+			include_annotations = self._parse_include_annotations(request)
+
+		queryset, annotations = self._get_filtered_queryset_base(request, pk, include_annotations)
 
 		meta = self._generate_meta(include_meta, queryset, request, pk)
 
+		queryset = self._order_by_base(queryset, request, annotations)
 		queryset = self._paginate(queryset, request)
+
+		# We fetch the data with only the currently applied annotations
+		data = self._get_objs(
+			queryset,
+			request=request,
+			annotations=include_annotations.get(''),
+			to_annotate=annotations,
+		)
+
+		# Now we add all remaining annotations to this data
+		data_by_pk = {obj['id']: obj for obj in data}
+		pks = set(data_by_pk)
 
 		#### with
 		# parse wheres from request
-		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(queryset, withs, request=request, include_annotations=include_annotations)
+		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(pks, withs, request=request, include_annotations=include_annotations)
 
-		data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
 		for obj in data:
 			self._annotate_obj_with_related_withs(obj, field_results)
 
@@ -1326,7 +1736,7 @@ class ModelView(View):
 			meta['comment'] = self.comment
 
 		debug = {'request_id': request.request_id}
-		if django.conf.settings.DEBUG and 'debug' in request.GET:
+		if settings.DEBUG and 'debug' in request.GET:
 			debug['queries'] = ['{}s: {}'.format(q['time'], q['sql'].replace('"', '')) for q in django.db.connection.queries]
 			debug['query_count'] = len(django.db.connection.queries)
 
@@ -1436,7 +1846,7 @@ class ModelView(View):
 
 		try:
 			obj.save()
-			assert(obj.pk is not None) # At this point, the object must have been created.
+			assert obj.pk is not None # At this point, the object must have been created.
 		except ValidationError as ve:
 			validation_errors.append(self.binder_validation_error(obj, ve, pk=pk))
 
@@ -1458,15 +1868,23 @@ class ModelView(View):
 
 		# Skip re-fetch and serialization via get_objs if we're in
 		# multi-put (data is discarded!).
-		if getattr(request, '_is_multi_put', False):
+		if (
+			getattr(request, '_is_multi_put', False) or  # Multi put handles its own return data
+			getattr(request, '_is_file_upload', False)  # Dispatch file field handles its own return data
+		):
 			return None
 
 		# Permission checks are done at this point, so we can avoid get_queryset()
 		include_annotations = self._parse_include_annotations(request)
+		annotations = include_annotations.get('')
 		data = self._get_objs(
-			annotate(self.model.objects.filter(pk=obj.pk), request, include_annotations.get('')),
+			self.model.objects.filter(pk=obj.pk),
 			request=request,
-			annotations=include_annotations.get(''),
+			annotations=annotations,
+			to_annotate={
+				name: value['expr']
+				for name, value in get_annotations(self.model,  request, annotations).items()
+			},
 		)[0]
 		data['_meta'] = {'ignored_fields': ignored_fields}
 		return data
@@ -1558,6 +1976,105 @@ class ModelView(View):
 			raise sum(validation_errors, None)
 
 
+	def _resolve_file_path(self, value, request):
+		match = re.match(r'/api/(\w+)/(\d+)/(\w+)/', value)
+		if not match:
+			return None
+
+		model, pk, field = match.groups()
+		try:
+			model = self.router.name_models[model]
+		except KeyError:
+			return None
+
+		view = self.get_model_view(model)
+		if field not in view.file_fields:
+			return None
+
+		try:
+			obj = view.get_queryset(request).get(pk=pk)
+		except model.DoesNotExist:
+			return None
+
+		value = getattr(obj, field)
+		with value.open('rb') as f:
+			return ContentFile(f.read(), value.name)
+
+
+	def _clean_image_file(self, field, value):
+		try:
+			img = Image.open(value)
+		except Exception:
+			raise BinderImageError('Could not parse the file as an image.')
+
+		format = img.format.lower()
+		if not format in ('png', 'gif', 'jpeg'):
+			raise BinderFileTypeIncorrect([{'extension': t, 'mimetype': 'image/' + t} for t in ['jpeg', 'png', 'gif']])
+
+		width, height = img.size
+		if format == 'jpeg':
+			img2 = image_transpose_exif(img)
+
+			if img2 != img:
+				value.seek(0)  # Do not append to the existing file!
+				value.truncate()
+				img2.save(value, 'jpeg')
+				img = img2
+
+		# Determine resize threshold
+		try:
+			max_size = self.image_resize_threshold[field]
+		except TypeError:
+			max_size = self.image_resize_threshold
+
+		try:
+			max_width, max_height = max_size
+		except (TypeError, ValueError):
+			max_width, max_height = max_size, max_size
+
+		try:
+			format_override = self.image_format_override.get(field)
+		except AttributeError:
+			format_override = self.image_format_override
+
+		changes = False
+
+		# FIXME: hardcoded max
+		# Flat out refuse images exceeding this size, to prevent DoS.
+		width_limit, height_limit = max(max_width, 4096), max(max_height, 4096)
+		if width > width_limit or height > height_limit:
+			raise BinderImageSizeExceeded(width_limit, height_limit)
+
+		# Resize images that are too large.
+		if width > max_width or height > max_height:
+			img.thumbnail((max_width, max_height), Image.LANCZOS)
+			logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
+			if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
+				img = img.convert("RGB")
+			if format != 'jpeg':
+				format = 'png'
+			changes = True
+
+		# Saving a JPEG with mode RGBA will crash because JPEG does not support
+		# an alpha channel, so in this case we convert to RGB
+		if format_override == 'jpeg' and img.mode == 'RGBA':
+			img = img.convert('RGB')
+
+		if format_override and format != format_override:
+			format = format_override
+			changes = True
+
+		name, ext = os.path.splitext(value.name)
+		if ext != '.' + format and not (ext == '.jpg' and format == 'jpeg'):
+			ext = '.' + format
+			changes = True
+
+		if changes:
+			filename = name + ext
+			value = ContentFile(b'', name=filename)
+			img.save(value, format)
+
+		return value
 
 
 	# Override _store_field example for a "FOO" field
@@ -1577,7 +2094,6 @@ class ModelView(View):
 			'id', 'pk', 'deleted', '_meta',
 			*self.unwritable_fields,
 			*self.shown_properties,
-			*self.file_fields,
 			*self.annotations(request),
 		]:
 			raise BinderReadOnlyFieldError(self.model.__name__, field)
@@ -1610,6 +2126,7 @@ class ModelView(View):
 							# Hack, set the id directly. This does the actual check, and throws the BinderError in
 							# the same way the old case has.
 							setattr(obj, f.attname, value)
+
 				elif isinstance(f, models.IntegerField):
 					if value is None or value == '':
 						value = None
@@ -1630,6 +2147,7 @@ class ModelView(View):
 								}
 							})
 					setattr(obj, f.attname, value)
+
 				elif isinstance(f, models.TextField):
 					# Django doesn't enforce max_length on TextFields, so we do.
 					if f.max_length is not None:
@@ -1650,6 +2168,46 @@ class ModelView(View):
 								}
 							})
 					setattr(obj, f.attname, value)
+
+				elif isinstance(f, models.FileField):
+					# If the value is a str that matches how we return file
+					# fields we convert it to the correct file
+					if isinstance(value, str):
+						value_ = self._resolve_file_path(value, request)
+						if value_ is not None:
+							value = value_
+
+					if not isinstance(value, File) and value is not None:
+						raise BinderFieldTypeError(self.model.__name__, field)
+
+					if value is not None:
+						if value.size > self.max_upload_size * 10**6:
+							raise BinderFileSizeExceeded(self.max_upload_size)
+
+						if isinstance(f, models.ImageField):
+							allowed_extensions = ['png', 'gif', 'jpg', 'jpeg']
+						elif isinstance(f, BinderFileField):
+							allowed_extensions = f.allowed_extensions
+						else:
+							allowed_extensions = None
+
+						if allowed_extensions is not None:
+							extension = os.path.splitext(value.name)[1][1:].lower()
+							allowed_extensions = {ext.lower() for ext in allowed_extensions}
+							if extension not in allowed_extensions:
+								raise BinderFileTypeIncorrect([{'extension': t} for t in allowed_extensions])
+
+						if isinstance(f, (models.ImageField, BinderImageField)):
+							value = self._clean_image_file(field, value)
+
+					old_value = getattr(obj, f.attname)
+					if old_value.name:
+						@transaction.on_commit
+						def delete_old_file():
+							old_value.storage.delete(old_value.name)
+
+					setattr(obj, f.attname, value)
+
 				else:
 					try:
 						f.to_python(value)
@@ -1762,7 +2320,7 @@ class ModelView(View):
 
 	# Put data and with on one big pile, that's easier for us
 	def _multi_put_parse_request(self, request):
-		body = jsonloads(request.body)
+		body = self._get_request_values(request)
 
 		data = body.get('with', {})
 		if not isinstance(data, dict):
@@ -1825,8 +2383,17 @@ class ModelView(View):
 		# Collect overrides
 		for (cls, mid), data in objects.items():
 			for subcls in getsubclasses(cls):
+				# Get remote field of the subclass
+				remote_field = subcls._meta.pk.remote_field
+
+				# In some scenarios with proxy models
+				# The remote field may not exist
+				# Because proxy models are just pure python wrappers(without its own db table) for other models
+				if remote_field is None:
+					continue
+
 				# Get key of field pointing to subclass
-				subkey = subcls._meta.pk.remote_field.name
+				subkey = remote_field.name
 				# Get id of subclass
 				subid = data.pop(subkey, None)
 				if subid is None:
@@ -1984,7 +2551,7 @@ class ModelView(View):
 			# corresponding view here?  That would make it
 			# more consistent with non-multi-PUT and POST,
 			# also requiring view permissions.
-			qs = model.objects.filter(pk__in=oids).select_for_update()
+			qs = model.objects.filter(pk__in=oids).order_by().select_for_update()
 			for obj in qs:
 				locked_objects[(model, obj.pk)] = obj
 
@@ -2122,7 +2689,65 @@ class ModelView(View):
 		return JsonResponse({'idmap': output})
 
 	def _get_request_values(self, request):
-		return jsonloads(request.body)
+		# So normally we just parse json here but for multipart form data we have some special logic to inject files
+		# The values then would look a bit like this:
+		#
+		# data={"foo": 1, "bar": null, "baz": [1, 2, null]}
+		# file:bar=<FILE>
+		# file:baz.2=<FILE>
+		#
+		# Where the output will be the data but with the null values replaced by the specified files.
+		# The paths that the files use as key have to be in the data and have value null.
+		# This is because we do not want to alter the structure of the data because that gets messy with things like array indexes etc.
+
+		if request.content_type == 'multipart/form-data':
+			# Django only parses multipart automatically on POST, so for PUT/PATCH/DELETE etc we do it manually
+			if request.method == 'POST':
+				fields = request.POST
+				files = request.FILES
+			else:
+				parser = MultiPartParser(request.META, request, request.upload_handlers)
+				fields, files = parser.parse()
+			try:
+				data = fields['data']
+			except KeyError:
+				raise BinderRequestError('data field is required in multipart body')
+		else:
+			data = request.body
+			files = {}
+
+		data = jsonloads(data)
+
+		for path, value in files.items():
+			if not path.startswith('file:'):
+				continue
+			target = data
+			keys = list(split_path(path[5:]))
+			for i, key in enumerate(keys):
+				if isinstance(target, list):
+					try:
+						key = int(key)
+					except ValueError:
+						raise BinderRequestError(
+							'expected integer key at path: ' + join_path(keys[:i + 1])
+						)
+				if not (
+					(isinstance(target, dict) and key in target) or
+					(isinstance(target, list) and 0 <= key < len(target))
+				):
+					raise BinderRequestError(
+						'unexpected key at path: ' + join_path(keys[:i + 1])
+					)
+				if i != len(keys) - 1:
+					target = target[key]
+				elif target[key] is not None:
+					raise BinderRequestError(
+						'expected null at path: ' + join_path(keys)
+					)
+				else:
+					target[key] = value
+
+		return data
 
 	def put(self, request, pk=None):
 		if pk is None:
@@ -2133,13 +2758,24 @@ class ModelView(View):
 		values = self._get_request_values(request)
 
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
+			# Step one does the permission check. We cannot do a select for update here, since the queryeset
+			# of get_queryset can potentially have outer joins on nullable values
+			obj = self.get_queryset(request).get(pk=int(pk))
+
+			# Now that we know we have access to this moel, we can get it again, this time with lock.
+			obj = self.model.objects.select_for_update().get(pk=obj.pk)
+
 			# Permission checks are done at this point, so we can avoid get_queryset()
 			include_annotations = self._parse_include_annotations(request)
+			annotations = include_annotations.get('')
 			old = self._get_objs(
-				annotate(self.model.objects.filter(pk=int(pk)), request, include_annotations.get('')),
-				request,
-				include_annotations.get(''),
+				self.model.objects.filter(pk=int(pk)),
+				request=request,
+				annotations=annotations,
+				to_annotate={
+					name: value['expr']
+					for name, value in get_annotations(self.model,  request, annotations).items()
+				},
 			)[0]
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
@@ -2214,10 +2850,14 @@ class ModelView(View):
 			except ValueError:
 				pass
 
+		# This make sure we do all permission checks. We cannot do a select for update here, since there is a possiblity
+		# that we create a queryset that we cannot use in a for select clause.
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
+			obj = self.get_queryset(request).get(pk=int(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
+		# We now retrieve the model again, without the permission checks, which we already this.
+		obj = self.model.objects.select_for_update().get(pk=obj.pk)
 
 		self.delete_obj(obj, undelete, request)
 
@@ -2287,17 +2927,33 @@ class ModelView(View):
 
 		file_field_name = file_field
 		file_field = getattr(obj, file_field_name)
+		field = self.model._meta.get_field(file_field_name)
 
 		if request.method == 'GET':
 			if not file_field:
 				raise BinderNotFound(file_field_name)
 
-			guess = mimetypes.guess_type(file_field.path)
-			guess = guess[0] if guess and guess[0] else 'application/octet-stream'
+			guess = mimetypes.guess_type(file_field.name)
+			content_type = (guess and guess[0]) or 'application/octet-stream'
+			serve_directly = isinstance(field, BinderFileField) and field.serve_directly
+
+			is_video = content_type and content_type.startswith('video/')
+
 			try:
-				resp = StreamingHttpResponse(open(file_field.path, 'rb'), content_type=guess)
+				if serve_directly:
+					resp = HttpResponse(content_type=content_type)
+					resp[settings.INTERNAL_MEDIA_HEADER] = os.path.join(settings.INTERNAL_MEDIA_LOCATION, file_field.name)
+					# if the filefield does not start with '/' it is likely a http address (S3) instead of path
+					# and because of that we set the redirect url
+					if not file_field.url.startswith('/'):
+						resp['redirect_url'] = file_field.url
+				else:
+					file_handle = file_field.open('rb')
+					resp = FileResponse(file_handle, content_type=content_type)
+					if is_video:
+						resp['Accept-Ranges'] = 'bytes'
 			except FileNotFoundError:
-				logger.error('Expected file {} not found'.format(file_field.path))
+				logger.error('Expected file {} not found'.format(file_field.name))
 				raise BinderNotFound(file_field_name)
 
 			if 'download' in request.GET:
@@ -2308,146 +2964,40 @@ class ModelView(View):
 			return resp
 
 		if request.method == 'POST':
-			self._require_model_perm('change', request)
-
 			try:
 				# Take an arbitrary uploaded file
 				file = next(request.FILES.values())
 			except StopIteration:
 				raise BinderRequestError('File POST should use multipart/form-data (with an arbitrary key for the file data).')
 
-			try:
-				if file.size > self.max_upload_size * 10**6:
-					raise BinderFileSizeExceeded(self.max_upload_size)
+			# Hack to communicate to _store() that we're not interested in
+			# the new data (for perf reasons).
+			request._is_file_upload = True
+			self._store(obj, {file_field_name: file}, request, pk=pk)
 
-				field = self.model._meta.get_field(file_field_name)
+			field = self.model._meta.get_field(file_field_name)
+			path = self.router.model_route(self.model, obj.id, field)
+			# {duplicate-binder-file-field-hash-code}
+			if isinstance(field, BinderFileField):
+				file_field = getattr(obj, file_field_name)
+				path += '?h={}&content_type={}&filename={}'.format(
+					file_field.content_hash,
+					file_field.content_type or '',
+					os.path.basename(file_field.name),
+				)
 
-				if getattr(field, 'allowed_extensions', None) is not None:
-					extension = None if '.' not in file.name else file.name.split('.')[-1]
-
-					if extension not in field.allowed_extensions:
-						raise BinderFileTypeIncorrect([{'extension': t} for t in field.allowed_extensions])
-
-				if isinstance(field, models.fields.files.ImageField):
-					try:
-						img = Image.open(file)
-					except Exception:
-						raise BinderImageError('Could not parse the file as an image.')
-
-					format = img.format.lower()
-					if not format in ('png', 'gif', 'jpeg'):
-						raise BinderFileTypeIncorrect([{'extension': t, 'mimetype': 'image/' + t} for t in ['jpeg', 'png', 'gif']])
-
-					width, height = img.size
-					if format == 'jpeg':
-						img2 = image_transpose_exif(img)
-
-						if img2 != img:
-							file.seek(0)  # Do not append to the existing file!
-							file.truncate()
-							img2.save(file, 'jpeg')
-							img = img2
-
-					# Determine resize threshold
-					try:
-						max_size = self.image_resize_threshold[file_field_name]
-					except TypeError:
-						max_size = self.image_resize_threshold
-
-					try:
-						max_width, max_height = max_size
-					except (TypeError, ValueError):
-						max_width, max_height = max_size, max_size
-
-					try:
-						format_override = self.image_format_override.get(file_field_name)
-					except AttributeError:
-						format_override = self.image_format_override
-
-					changes = False
-
-					# FIXME: hardcoded max
-					# Flat out refuse images exceeding this size, to prevent DoS.
-					width_limit, height_limit = max(max_width, 4096), max(max_height, 4096)
-					if width > width_limit or height > height_limit:
-						raise BinderImageSizeExceeded(width_limit, height_limit)
-
-					# Resize images that are too large.
-					if width > max_width or height > max_height:
-						img.thumbnail((max_width, max_height), Image.ANTIALIAS)
-						logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
-						if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
-							img = img.convert("RGB")
-						if format != 'jpeg':
-							format = 'png'
-						changes = True
-
-					if format_override and format != format_override:
-						format = format_override
-						changes = True
-
-					filename = '{}.{}'.format(os.path.basename(file.name), format)
-
-					if changes:
-						file = io.BytesIO()
-						img.save(file, format)
-				else:
-					filename = file.name
-
-				# FIXME: duplicate code
-				if file_field:
-					try:
-						old_hash = hashlib.sha256()
-						for c in file_field.file.chunks():
-							old_hash.update(c)
-						old_hash = old_hash.hexdigest()
-					except FileNotFoundError:
-						logger.warning('Old file {} missing!'.format(file_field))
-						old_hash = None
-				else:
-					old_hash = None
-
-				file_field.delete(save=False)
-				# This triggers a save on obj
-				file_field.save(filename, django.core.files.File(file))
-
-				# FIXME: duplicate code
-				new_hash = hashlib.sha256()
-				for c in file_field.file.chunks():
-					new_hash.update(c)
-				new_hash = new_hash.hexdigest()
-
-				logger.info('POST updated {}[{}].{}: {} -> {}'.format(self._model_name(), pk, file_field_name, old_hash, new_hash))
-				path = self.router.model_route(self.model, obj.id, field)
-
-				# {duplicate-binder-file-field-hash-code}
-				if isinstance(field, BinderFileField):
-					path += '?h={}&content_type={}&filename={}'.format(
-						file_field.content_hash,
-						file_field.content_type or '',
-						os.path.basename(file_field.name),
-					)
-
-				return JsonResponse( {"data": {file_field_name: path}} )
-
-			except ValidationError as ve:
-				raise self.binder_validation_error(obj, ve, pk=pk)
+			return JsonResponse({'data': {file_field_name: path}})
 
 		if request.method == 'DELETE':
-			self._require_model_perm('change', request)
 			if not file_field:
 				raise BinderIsDeleted()
 
-			# FIXME: duplicate code
-			old_hash = hashlib.sha256()
-			for c in file_field.file.chunks():
-				old_hash.update(c)
-			old_hash = old_hash.hexdigest()
+			# Hack to communicate to _store() that we're not interested in
+			# the new data (for perf reasons).
+			request._is_file_upload = True
+			self._store(obj, {file_field_name: None}, request, pk=pk)
 
-			file_field.delete()
-
-			logger.info('DELETEd {}[{}].{}: {}'.format(self._model_name(), pk, file_field_name, old_hash))
-			return JsonResponse( {"data": {file_field_name: None}} )
+			return JsonResponse({'data': {file_field_name: None}})
 
 
 
@@ -2455,7 +3005,7 @@ class ModelView(View):
 		try:
 			method = getattr(self, 'filefield_get_name_' + file_field.field.name)
 		except AttributeError:
-			return os.path.basename(file_field.path)
+			return os.path.basename(file_field.name)
 		return method(instance=instance, request=request, file_field=file_field)
 
 
@@ -2466,7 +3016,7 @@ class ModelView(View):
 
 		debug = kwargs['history'] == 'debug'
 
-		if debug and not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
+		if debug and not settings.ENABLE_DEBUG_ENDPOINTS:
 			logger.warning('Debug endpoints disabled.')
 			return HttpResponseForbidden('Debug endpoints disabled.')
 
@@ -2474,7 +3024,131 @@ class ModelView(View):
 		if debug:
 			return history.view_changesets_debug(request, changesets.order_by('-id'))
 		else:
-			return history.view_changesets(request, changesets.order_by('-id'))
+			return history.view_changesets(request, changesets.order_by('-id'), self.model, pk)
+
+
+	@list_route('stats', methods=['GET'])
+	def stats_view(self, request):
+		# We only apply annotations when used, so we can just pretend everything is included to simplify stuff
+		try:
+			annotations = self.model.Annotations
+		except AttributeError:
+			include_annotations = {'': []}
+		else:
+			include_annotations = {'': [
+				attr
+				for attr in dir(annotations)
+				if not (attr.startswith('__') and attr.endswith('__'))
+			]}
+
+		queryset, annotations = self._get_filtered_queryset_base(request, None, include_annotations)
+
+		try:
+			stats = request.GET['stats']
+		except KeyError:
+			stats = []
+		else:
+			stats = stats.split(',')
+
+		return JsonResponse({
+			stat: self._get_stat(request, queryset, stat, annotations.copy(), include_annotations)
+			for stat in stats
+		})
+
+
+	def _get_stat(self, request, queryset, stat, annotations, include_annotations):
+		# NOTE: uses annotations! If called multiple times, provide a copy
+		# Get stat definition
+		try:
+			stat = self.stats[stat]
+		except KeyError:
+			try:
+				stat = DEFAULT_STATS[stat]
+			except KeyError:
+				raise BinderRequestError(f'unknown stat: {stat}')
+
+		# Apply filters
+		for key, value in stat.filters.items():
+			q, distinct = self._parse_filter(key, value, request, include_annotations)
+			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
+			if distinct:
+				queryset = queryset.distinct()
+
+		# Apply required annotations
+		for key in stat.annotations:
+			try:
+				expr = annotations.pop(key)
+			except KeyError:
+				pass
+			else:
+				queryset = queryset.annotate(**{key: expr})
+
+		if stat.group_by is None:
+			# No group by so just return a simple stat
+			return {
+				'value': queryset.aggregate(result=stat.expr)['result'],
+				'filters': stat.filters,
+			}
+
+		group_by = stat.group_by.replace('.', '__')
+
+		value = {
+			# The jsonloads/jsondumps is to make sure we can handle different
+			# types as keys, an example is dates.
+			jsonloads(jsondumps(key)): value
+			for key, value in (
+				queryset
+				.order_by()
+				.exclude(**{group_by: None})
+				.values(group_by)
+				.annotate(_binder_stat=stat.expr)
+				.values_list(group_by, '_binder_stat')
+			)
+		}
+
+		other = 0
+		if stat.min_value is not None:
+			min_value = stat.min_value * sum(value.values())
+			new_value = {}
+
+			others = 0
+			for key, sub_value in value.items():
+				if sub_value >= min_value:
+					new_value[key] = sub_value
+				else:
+					other += sub_value
+					others += 1
+
+			if others > 1:
+				value = new_value
+			else:
+				other = 0
+
+		elif stat.max_values is not None:
+			keys = sorted(value, key=lambda key: value[key], reverse=True)
+			for key in keys[stat.max_values:]:
+				other += value.pop(key)
+
+		return {
+			'value': value,
+			'other': other,
+			'group_by': stat.group_by,
+			'filters': stat.filters,
+		}
+
+
+	def _apply_annotations(self, queryset, annotations, *fields):
+		for field in fields:
+			if field is None:
+				continue
+			field = field.split('__', 1)[0]
+			try:
+				annotation = annotations.pop(field)
+			except KeyError:
+				pass
+			else:
+				queryset = queryset.annotate(**{field: annotation})
+		return queryset
 
 
 
@@ -2496,7 +3170,7 @@ def debug_changesets_24h(request):
 		logger.warning('Not authenticated.')
 		return HttpResponseForbidden('Not authenticated.')
 
-	if not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
+	if not settings.ENABLE_DEBUG_ENDPOINTS:
 		logger.warning('Debug endpoints disabled.')
 		return HttpResponseForbidden('Debug endpoints disabled.')
 

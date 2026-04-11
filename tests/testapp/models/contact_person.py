@@ -7,6 +7,13 @@ class ContactPerson(BinderModel):
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
+	@classmethod
+	def format_instance_for_history(cls, id: int):
+		try:
+			return ContactPerson.objects.get(id=id).name
+		except:
+			return 'deleted? ' + str(id)
+
 	def __str__(self):
 		return 'contact_person %d: %s' % (self.pk, self.name)
 

@@ -18,8 +18,8 @@ if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
 			r = self.client.login(username='testuser', password='test')
 			self.assertTrue(r)
 
-			Zoo(name='Burgers Zoo', opening_time='11:00:00Z').save()
-			Zoo(name='Artis', opening_time='09:00:00Z').save()
+			Zoo(name='Burgers Zoo', opening_time='11:00:00').save()
+			Zoo(name='Artis', opening_time='09:00:00').save()
 
 
 		def test_time_filter_exact_match(self):
@@ -31,6 +31,19 @@ if os.environ.get('BINDER_TEST_MYSQL', '0') != '1':
 			self.assertEqual('Artis', result['data'][0]['name'])
 
 			response = self.client.get('/zoo/', data={'.opening_time': '11:00:00Z'})
+
+			result = jsonloads(response.content)
+			self.assertEqual(1, len(result['data']))
+			self.assertEqual('Burgers Zoo', result['data'][0]['name'])
+
+			response = self.client.get('/zoo/', data={'.opening_time': '09:00:00.000+00:00'})
+			self.assertEqual(response.status_code, 200)
+
+			result = jsonloads(response.content)
+			self.assertEqual(1, len(result['data']))
+			self.assertEqual('Artis', result['data'][0]['name'])
+
+			response = self.client.get('/zoo/', data={'.opening_time': '11:00:00.000000+0000'})
 
 			result = jsonloads(response.content)
 			self.assertEqual(1, len(result['data']))

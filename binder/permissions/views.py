@@ -9,7 +9,7 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 
 from binder.exceptions import BinderForbidden, BinderNotFound
-from binder.views import ModelView
+from binder.views import ModelView, FilterDescription
 
 
 
@@ -38,6 +38,144 @@ class Scope(Enum):
 	CHANGE = 'change'
 	DELETE = 'delete'
 
+
+def is_q_child_equal(lchild, rchild):
+	if isinstance(lchild, Q) and isinstance(rchild, Q):
+		return (
+			lchild.negated == rchild.negated and
+			lchild.connector == rchild.connector and
+			len(lchild.children) == len(rchild.children) and
+			all(
+				is_q_child_equal(lsubchild, rsubchild)
+				for lsubchild, rsubchild in zip(lchild.children, rchild.children)
+			)
+		)
+	else:
+		return lchild == rchild
+
+
+def is_q_child_always_true(child):
+	return is_q_child_equal(child, ~Q(pk__in=[]))
+
+
+
+def q_normalize(q):
+	children = q.children
+	connector = q.connector
+	negated = q.negated
+
+	# Always use AND for 1 child
+	if len(children) == 1:
+		connector = Q.AND
+
+	# If we have a negated q with multiple children push all negates to the
+	# children
+	if negated and len(children) != 1:
+		children = [
+			Q(
+				*child.children,
+				_connector=child.connector,
+				_negated=not child.negated,
+			)
+			if isinstance(child, Q) else
+			Q(child, _negated=True)
+			for child in q.children
+		]
+		connector = {Q.AND: Q.OR, Q.OR: Q.AND}[connector]
+		negated = False
+
+	# Normalize and flatten children
+	flat_children = []
+	for child in children:
+		if isinstance(child, Q):
+			child = q_normalize(child)
+		if isinstance(child, Q) and child.connector == connector and not child.negated:
+			flat_children.extend(child.children)
+		else:
+			flat_children.append(child)
+
+	return Q(*flat_children, _connector=connector, _negated=negated)
+
+
+def is_q_stricter(lhs, rhs, *, normalize=True):
+	"""
+	For 2 Q-objects, lhs and rhs, returns if lhs is by definition always
+	stricter than or equally as strict as rhs.
+
+	This function is not complete. It is guaranteed that it will never give
+	false positives, but false negatives can and will happen.
+	"""
+	if normalize:
+		lhs = q_normalize(lhs)
+		rhs = q_normalize(rhs)
+
+	# We treat everything as a non negated AND
+	if lhs.connector != Q.AND or lhs.negated:
+		lhs = Q(lhs)
+	if rhs.connector != Q.AND or rhs.negated:
+		rhs = Q(rhs)
+
+	# If every filter of rhs is also in lhs, then lhs is by definition a
+	# stricter version or rhs
+	return all(
+		any(
+			is_q_child_equal(lchild, rchild)
+			for lchild in lhs.children
+		)
+		for rchild in rhs.children
+		if not is_q_child_always_true(rchild)
+	)
+
+
+def smart_q_or(*qs):
+	"""
+	This function combines any amount of Q-objects into one Q-object with an
+	OR. But does some smart optimizations when doing so by omitting some
+	redundant Q-objects. This can then in turn lead to the omission of
+	redundant joins which can lead to significant performance gains.
+	"""
+
+	# We flatten and normalize all Q-objects
+	flat_qs = []
+	for q in map(q_normalize, qs):
+		if q.connector == Q.OR and not q.negated:
+			for child in q.children:
+				if not isinstance(child, Q):
+					child = Q(child)
+				flat_qs.append(child)
+		else:
+			flat_qs.append(q)
+
+	# We filter out all Q-objects that are just a stricter version of one
+	# of the other Q-objects
+	filtered_qs = []
+	for new in flat_qs:
+		if any(
+			is_q_stricter(new, old, normalize=False)
+			for old in filtered_qs
+		):
+			continue
+		filtered_qs = [
+			*(
+				old
+				for old in filtered_qs
+				if not is_q_stricter(old, new, normalize=False)
+			),
+			new,
+		]
+
+	# We combine all filtered Q-objects into one
+	try:
+		combined_q, *filtered_qs = filtered_qs
+	except ValueError:
+		# So apparantly we have no Q-objects, then we just return an Q-object
+		# that is always False
+		combined_q = Q(pk__in=[])
+	else:
+		for q in filtered_qs:
+			combined_q |= q
+
+	return combined_q
 
 
 class PermissionView(ModelView):
@@ -172,7 +310,7 @@ class PermissionView(ModelView):
 
 
 	def _scope_view_all(self, request):
-		return Q(pk__isnull=False)
+		return ~Q(pk__in=[])
 
 
 
@@ -273,6 +411,8 @@ class PermissionView(ModelView):
 		scopes = self._require_model_perm('view', request)
 		scope_queries = []
 		scope_querysets = []
+		need_distinct = False
+
 		for s in scopes:
 			scope_name = '_scope_view_{}'.format(s)
 			scope_func = getattr(self, scope_name, None)
@@ -286,6 +426,9 @@ class PermissionView(ModelView):
 			# filtering on annotations, which Q objects don't.
 			if isinstance(query_or_q, Q):
 				scope_queries.append(query_or_q)
+			elif isinstance(query_or_q, FilterDescription):
+				scope_queries.append(query_or_q.filter)
+				need_distinct = need_distinct or query_or_q.need_distinct
 			else:
 				# Reset the ORDER BY at least to get a faster query.
 				# Even better performance could be gained if
@@ -299,11 +442,16 @@ class PermissionView(ModelView):
 			qs = reduce(lambda scope_qs, qs: qs.union(scope_qs), scope_querysets)
 			scope_queries.append(Q(pk__in=qs))
 
-		subfilter = reduce(lambda scope_query, q: q | scope_query, scope_queries)
+		subfilter = smart_q_or(*scope_queries)
 
 		self._save_scope(request, Scope.VIEW)
 
-		return queryset.filter(subfilter)
+		queryset = queryset.filter(subfilter)
+
+		if need_distinct:
+			queryset = queryset.distinct()
+
+		return queryset
 
 
 
@@ -359,8 +507,8 @@ class PermissionView(ModelView):
 			raise BinderNotFound()
 
 		# We must have permission to view the object. If not we can not view the history
-		data = self._get_objs(self.get_queryset(request), request=request)
-		if not data:
+		data = self.get_queryset(request).filter(pk=pk)
+		if not data.exists():
 			raise BinderNotFound()
 
 		return super().view_history(request, pk, **kwargs)

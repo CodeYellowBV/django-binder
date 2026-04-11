@@ -1,57 +1,12 @@
 from importlib import import_module
 
-import django
 from django.apps import apps
-from django.urls import reverse
+from django.urls import reverse, re_path
 
 from binder.views import ModelView
-from .exceptions import BinderRequestError, BinderCSRFFailure, BinderMethodNotAllowed, BinderNotFound
+from .exceptions import BinderRequestError, BinderCSRFFailure
 
-
-def _route_decorator(is_detail, name=None, methods=None, extra_route='', unauthenticated=False, *, fetch_obj=False):
-	def decorator(func):
-		def wrapper(self, request=None, *args, **kwargs):
-			if methods is not None and request.method not in methods:
-				raise BinderMethodNotAllowed(methods)
-
-			if fetch_obj:
-				if 'pk' in kwargs:
-					pk = kwargs['pk']
-					del kwargs['pk']
-
-					try:
-						kwargs['obj'] = self.get_queryset(request).get(pk=pk)
-					except self.model.DoesNotExist:
-						raise BinderNotFound()
-				else:
-					if len(args) == 0:
-						raise Exception('Can not fetch_obj if there is no pk!')
-
-					args = list(args)
-					pk = args[0]
-					try:
-						args[0] = self.get_queryset(request).get(pk=pk)
-					except self.model.DoesNotExist:
-						raise BinderNotFound()
-
-			return func(self, request, *args, **kwargs)
-		if is_detail:
-			wrapper.detail_route = True
-		else:
-			wrapper.list_route = True
-
-		wrapper.route_name = name
-		wrapper.extra_route = extra_route
-		wrapper.unauthenticated = unauthenticated
-		return wrapper
-	return decorator
-
-
-def list_route(*args, **kwargs):
-	return _route_decorator(False, *args, **kwargs)
-
-def detail_route(*args, **kwargs):
-	return _route_decorator(True, *args, **kwargs)
+from .route_decorators import _route_decorator, list_route, detail_route  # noqa: for backwards compatibility
 
 
 
@@ -171,18 +126,18 @@ class Router(object):
 			name = view.model.__name__ if view.model else route.route
 			# List and detail endpoints
 			if route.list_endpoint:
-				urls.append(django.conf.urls.url(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
+				urls.append(re_path(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 			if route.detail_endpoint:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), {'router': self}, name=name))
+				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 
 			# History views
 			if view.model and hasattr(view.model, 'Binder') and view.model.Binder.history:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/$'.format(route.route), view.as_view(), {'history': 'normal', 'router': self}, name=name))
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/history/debug/$'.format(route.route), view.as_view(), {'history': 'debug', 'router': self}, name=name))
+				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/history/$'.format(route.route), view.as_view(), {'history': 'normal', 'router': self}, name=name))
+				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/history/debug/$'.format(route.route), view.as_view(), {'history': 'debug', 'router': self}, name=name))
 
 			# File field endpoints
 			for ff in view.file_fields:
-				urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/{}/$'.format(route.route, ff),
+				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/{}/$'.format(route.route, ff),
 						view.as_view(), {'file_field': ff, 'router': self}, name='{}.{}'.format(name, ff)))
 
 			# Custom endpoints
@@ -195,10 +150,10 @@ class Router(object):
 					if method.unauthenticated:
 						kwargs['unauthenticated'] = True
 					if hasattr(method, 'detail_route'):
-						urls.append(django.conf.urls.url(r'^{}/(?P<pk>[0-9]+)/{}/{}$'.format(route.route, route_name, extra),
+						urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/{}/{}$'.format(route.route, route_name, extra),
 								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
 					if hasattr(method, 'list_route'):
-						urls.append(django.conf.urls.url(r'^{}/{}/{}$'.format(route.route, route_name, extra),
+						urls.append(re_path(r'^{}/{}/{}$'.format(route.route, route_name, extra),
 								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
 
 		return urls

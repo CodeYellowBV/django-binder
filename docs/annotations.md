@@ -2,6 +2,10 @@
 Annotations are a way of adding query expressions that behave like read-only
 fields to models. This means you can read / filter / sort these fields.
 
+Changing the value or saving annotations from the frontend is automatically
+ignored since they are read-only fields. And they are put in the `ignored_fields`
+of the reponse.
+
 ## Specifying Annotations
 You can specify annotations by adding a class called `Annotations` to your
 `BinderModel`. Here you simply say `foo = expr` to add an annotation named `foo` that
