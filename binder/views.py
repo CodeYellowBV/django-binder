@@ -14,13 +14,14 @@ from inspect import getmro
 
 import django
 from django.views.generic import View
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.core.files.base import File, ContentFile
-from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden
+from django.http import HttpResponse, StreamingHttpResponse, HttpResponseForbidden, FileResponse
 from django.http.request import RawPostDataException, QueryDict
 from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
-from django.db.models import Q, F
+from django.db.models import Q, F, Count, Case, When
 from django.db.models.lookups import Transform
 from django.utils import timezone
 from django.db import transaction
@@ -36,7 +37,68 @@ from .exceptions import (
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField, BinderImageField
-from .json import JsonResponse, jsonloads
+from .json import JsonResponse, jsonloads, jsondumps
+from .route_decorators import list_route
+
+
+# expr: an aggregate expr to get the statistic,
+# filter: a dict of filters to filter the queryset with before getting the aggregate, leading dot not included (optional),
+# group_by: a field to group by separated by dots if following relations (optional),
+# annotations: a list of annotation names that have to be applied to the queryset for the expr to work (optional),
+Stat = namedtuple(
+	'Stat',
+	['expr', 'filters', 'group_by', 'annotations', 'min_value', 'max_values'],
+	defaults=[{}, None, [], None, None],
+)
+
+
+DEFAULT_STATS = {
+	'total_records': Stat(Count(Value(1))),
+}
+
+
+def get_joins_from_queryset(queryset):
+	"""
+	Given a queryset returns a set of lines that are used to determine which
+	tables will be joined and how. In essence this is the FROM-statement and
+	every JOIN-statement in a set as a string.
+
+	This is useful to compare the joins between querysets.
+	"""
+	# So to generate sql we need the compiler and connection for the right db
+	compiler = queryset.query.get_compiler(queryset.db)
+	connection = connections[queryset.db]
+	# Now we will just go through all tables in the alias_map
+	lines = set()
+	for alias in queryset.query.alias_map.values():
+		line, params = alias.as_sql(compiler, connection)
+		# We assert we have no params for now, you need to do custom stuff for
+		# these to appear in joins and substituting params into the sql
+		# is not something we can easily do safely for now, just passing them
+		# along with the str will make use potentially have unhashable lines
+		# which will ruin the set.
+		assert not params
+		lines.add(line)
+	return lines
+
+
+def q_get_flat_filters(q):
+	"""
+	Given a Q-object returns an iterator of all filters used in this Q-object.
+
+	So for example for Q(foo=1, bar=2) this would yield 'foo' and 'bar', but it
+	will also work for more complicated nested Q-objects.
+
+	This is useful to detect which fields are used in a Q-object.
+	"""
+	for child in q.children:
+		if isinstance(child, Q):
+			# If the child is another Q-object we can just yield recursively
+			yield from q_get_flat_filters(child)
+		elif isinstance(child, tuple):
+			# So now the child is a 2-tuple of filter & value, we just need the
+			# filter so we yield that
+			yield child[0]
 
 
 def split_par_aware(content):
@@ -386,6 +448,21 @@ class ModelView(View):
 	#  }
 	virtual_relations = {}
 
+	# A dict that looks like:
+	# {'filter_name': [
+	# 	'field.icontains',
+	# 	'otherField.field:icontains'
+	# ],
+	# }
+	# Allows you to hide multiple filters behind a filter name
+	# see _parse_filter, see api.md > "Filtering by groups (alternative_filters)"
+	# NOTICE: alternative_filters may not contain a field or annotation as key
+	alternative_filters = {}
+
+	# A dict that maps stat name to instances of binder.views.Stat
+	# These statistics can then be used in the stats view
+	stats = {}
+
 	@property
 	def AggStrategy(self):
 		if connections[self.model.objects.db].vendor == 'mysql':
@@ -452,7 +529,7 @@ class ModelView(View):
 
 				# Check if the TRANSACTION_DATABASES is set in the settings.py, and if so, use that instead
 				try:
-					transaction_dbs = django.conf.settings.TRANSACTION_DATABASES
+					transaction_dbs = settings.TRANSACTION_DATABASES
 				except AttributeError:
 					pass
 
@@ -543,7 +620,7 @@ class ModelView(View):
 	# Kinda like model_to_dict() for multiple objects.
 	# Return a list of dictionaries, one per object in the queryset.
 	# Includes a list of ids for all m2m fields (including reverse relations).
-	def _get_objs(self, queryset, request, annotations=None):
+	def _get_objs(self, queryset, request, annotations=None, to_annotate={}):
 		datas = []
 		datas_by_id = {} # Save datas so we can annotate m2m fields later (avoiding a query)
 		objs_by_id = {} # Same for original objects
@@ -560,6 +637,52 @@ class ModelView(View):
 			annotations -= set(self.hidden_annotations)
 		else:
 			annotations &= set(self.shown_annotations)
+
+		# So now annotations are only being used for showing, so we filter out
+		# all that do not have to be shown
+		to_annotate = {
+			key: value
+			for key, value in to_annotate.items()
+			if key in annotations
+		}
+
+		# So now we will divide annotations based on the joins they do
+		base_joins = get_joins_from_queryset(queryset)
+		annotation_sets = []
+
+		for name, expr in list(to_annotate.items()):
+			annotation_joins = get_joins_from_queryset(
+				self.model.objects.annotate(**{name: expr})
+			)
+			annotation_annotations = {name: expr}
+			# First check if the queryset already does all joins, in that case
+			# we can just add it to the main queryset without any performance
+			# hits
+			if annotation_joins <= base_joins:
+				queryset = queryset.annotate(**annotation_annotations)
+				to_annotate.pop(name)
+				continue
+			# Then try to merge it into the annotation sets
+			i = 0
+			while i < len(annotation_sets):
+				set_joins, set_annotations = annotation_sets[i]
+				# If our joins are a subset of the annotation set we just add
+				# our annotation to the set and break
+				if annotation_joins <= set_joins:
+					set_annotations.update(annotation_annotations)
+					break
+				# If our joins are a superset of the annotation set we take its
+				# annotations and add it to ours
+				elif set_joins <= annotation_joins:
+					annotation_annotations.update(set_annotations)
+					annotation_sets.pop(i)
+				# Go on to the next
+				else:
+					i += 1
+			# If no annotation set existed that matched our joins we create a
+			# new one
+			else:
+				annotation_sets.append((annotation_joins, annotation_annotations))
 
 		for obj in queryset:
 			# So we tend to make binder call queryset.distinct when necessary
@@ -590,7 +713,8 @@ class ModelView(View):
 					data[f.name] = getattr(obj, f.attname)
 
 			for a in annotations:
-				data[a] = getattr(obj, a)
+				if a not in to_annotate:
+					data[a] = getattr(obj, a)
 
 			for prop in self.shown_properties:
 				data[prop] = getattr(obj, prop)
@@ -601,6 +725,18 @@ class ModelView(View):
 			datas.append(data) # order matters!
 			datas_by_id[obj.pk] = data
 			objs_by_id[obj.pk] = obj
+
+		for _, set_annotations in annotation_sets:
+			for set_values in (
+				self.model.objects
+				.filter(pk__in=datas_by_id)
+				.annotate(**set_annotations)
+				.values('pk', *set_annotations)
+			):
+				pk_ = set_values.pop('pk')
+				for name, value in set_values.items():
+					datas_by_id[pk_][name] = value
+					setattr(objs_by_id[pk_], name, value)
 
 		self._annotate_objs(datas_by_id, objs_by_id)
 
@@ -625,7 +761,7 @@ class ModelView(View):
 			for obj_id, data in datas_by_id.items():
 				# TODO: Don't require OneToOneFields in the m2m_fields list
 				if isinstance(local_field, models.OneToOneRel):
-					assert(len(idmap[obj_id]) <= 1)
+					assert len(idmap[obj_id]) <= 1
 					data[field_name] = idmap[obj_id][0] if len(idmap[obj_id]) == 1 else None
 				else:
 					data[field_name] = idmap[obj_id]
@@ -641,10 +777,15 @@ class ModelView(View):
 	def _get_obj(self, pk, request, include_annotations=None):
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
+		annotations = include_annotations.get('')
 		results = self._get_objs(
-			annotate(self.get_queryset(request).filter(pk=pk), request, include_annotations.get('')),
+			self.get_queryset(request).filter(pk=pk),
 			request=request,
-			annotations=include_annotations.get(''),
+			annotations=annotations,
+			to_annotate={
+				name: value['expr']
+				for name, value in get_annotations(self.model,  request, annotations).items()
+			},
 		)
 		if results:
 			return results[0]
@@ -816,9 +957,13 @@ class ModelView(View):
 			view.router = self.router
 			for annotations, with_pks in annotation_ids.items():
 				objs = view._get_objs(
-					annotate(view.get_queryset(request).filter(pk__in=with_pks), request, annotations),
+					view.get_queryset(request).filter(pk__in=with_pks),
 					request=request,
 					annotations=annotations,
+					to_annotate={
+						name: value['expr']
+						for name, value in get_annotations(view.model,  request, annotations).items()
+					},
 				)
 				for obj in objs:
 					view._annotate_obj_with_related_withs(obj, withs_per_model[model_name])
@@ -1056,9 +1201,52 @@ class ModelView(View):
 		return FilterDescription(q, need_distinct)
 
 
+	# handle self.alternative_filters as part of _parse_filter
+	def _parse_alternative_filters(self, field, filter_heads, *args, **kwargs):
+		head, tail = re.fullmatch(r'([^.:]*)(.*)', field).groups()
+
+		# split not/any/all of the tail, by default a filter is treated as any
+		#   NOTE: not is_any ==> is_all
+		is_not = bool(re.search(r':not\b', tail))
+
+		is_any = bool(re.match(r':any\b', tail))
+		if is_any:
+			tail = tail[4:]
+		is_all = bool(re.match(r':all\b', tail))
+		if is_all and not is_any:
+			# if both is_any and is_all are true, we want the filter to fail
+			tail = tail[4:]
+
+		alts = []
+		for head in filter_heads:
+			field = head + tail
+			alt = self._parse_filter(field, *args, **kwargs)
+			alts.append(alt)
+		q, needs_distinct = alts[0]
+		for q_, needs_distinct_ in alts[1:]:
+			if is_not == is_all:
+				# :any (default)
+				# :not:all (NOTE that not is maintained inside the filter)
+				q |= q_
+			else:
+				# :all
+				# :not:any (NOTE that not is maintained inside the filter)
+				q &= q_
+			needs_distinct = needs_distinct or needs_distinct_
+		return FilterDescription(q, needs_distinct)
+
 	def _parse_filter(self, field, value, request, include_annotations, partial=''):
 		head, *tail = field.split('.')
 		need_distinct = False
+
+		alt_head = head.split(':')[0]
+		try:
+			# get head without trailing :sorter
+			filter_heads = self.alternative_filters[alt_head]
+		except KeyError:
+			pass
+		else:
+			return self._parse_alternative_filters(field, filter_heads, value, request, include_annotations, partial)
 
 		if not tail:
 			invert = False
@@ -1171,10 +1359,9 @@ class ModelView(View):
 		return (queryset, partial + head, nulls_last)
 
 
-
-	def search(self, queryset, search, request):
+	def _search_base(self, search, request):
 		if not search:
-			return queryset
+			return ~Q(pk__in=[])
 
 		if not (self.searches or self.transformed_searches):
 			raise BinderRequestError('No search fields defined for this view.')
@@ -1188,7 +1375,12 @@ class ModelView(View):
 				q |= Q(**{s: transform(search)})
 			except ValueError:
 				pass
-		return queryset.filter(q)
+
+		return q
+
+
+	def search(self, queryset, search, request):
+		return queryset.filter(self._search_base(search, request))
 
 
 	def filter_deleted(self, queryset, pk, deleted, request):
@@ -1249,13 +1441,23 @@ class ModelView(View):
 
 
 
-	def order_by(self, queryset, request):
+	def _order_by_base(self, queryset, request, annotations):
 		#### order_by
 		order_bys = list(filter(None, request.GET.get('order_by', '').split(',')))
 
 		orders = []
 		if order_bys:
 			for o in order_bys:
+				# We split of a leading - (descending sorting) and the
+				# suffixes nulls_last and nulls_first
+				head = re.match(r'^-?(.*?)(__nulls_last|__nulls_first)?$', o).group(1)
+				try:
+					expr = annotations.pop(head)
+				except KeyError:
+					pass
+				else:
+					queryset = queryset.annotate(**{head: expr})
+
 				if o.startswith('-'):
 					queryset, order, nulls_last = self._parse_order_by(queryset, o[1:], request, partial='-')
 				else:
@@ -1291,16 +1493,29 @@ class ModelView(View):
 		return queryset
 
 
+	def order_by(self, queryset, request):
+		return self._order_by_base(queryset, request, {})
+
+
 	def _annotate_obj_with_related_withs(self, obj, field_results):
 		for (w, (view, ids_dict, is_singular)) in field_results.items():
 			if '.' not in w:
 				if is_singular:
 					try:
 						obj[w] = list(ids_dict[obj['id']])[0]
-					except IndexError:
+					except (IndexError):
+						"""
+						Indexerror => no relation is found
+						KeyERror => No relation is known for this model.
+						"""
 						obj[w] = None
+					except KeyError:
+						pass
 				else:
-					obj[w] = list(ids_dict[obj['id']])
+					try:
+						obj[w] = list(ids_dict[obj['id']])
+					except KeyError:
+						pass
 
 
 	def _generate_meta(self, include_meta, queryset, request, pk=None):
@@ -1310,16 +1525,111 @@ class ModelView(View):
 			# Only 'pk' values should reduce DB server memory a (little?) bit, making
 			# things faster.  Not prefetching related models here makes it faster still.
 			# See also https://code.djangoproject.com/ticket/23771 and related tickets.
-			meta['total_records'] = queryset.prefetch_related(None).values('pk').count()
+			meta['total_records'] = queryset.order_by().prefetch_related(None).values('pk').count()
 
 		return meta
 
 
-	def get_filtered_queryset(self, request, pk=None, include_annotations=None):
+	def _apply_q_with_possible_annotations(self, queryset, q, annotations):
+		for filter in q_get_flat_filters(q):
+			head = filter.split('__', 1)[0]
+			try:
+				expr = annotations.pop(head)
+			except KeyError:
+				pass
+			else:
+				queryset = queryset.annotate(**{head: expr})
+
+		return queryset.filter(q)
+
+
+	def _after_expr(self, request, after_id, include_annotations):
 		"""
-		Returns a scoped queryset with filtering and sorting applied as
-		specified by the request.
+		This method given a request and an id returns a boolean	expression that
+		indicates if a record would show up after the provided id for the
+		ordering specified by this request.
 		"""
+		queryset = self.get_queryset(request)
+		annotations = {
+			name: value['expr']
+			for name, value in self.annotations(request, include_annotations).items()
+		}
+
+		# We do an order by on a copy of annotations so that we see which keys
+		# it pops
+		annotations_copy = annotations.copy()
+		ordering = self._order_by_base(queryset, request, annotations_copy).query.order_by
+		required_annotations = set(annotations) - set(annotations_copy)
+
+		queryset = queryset.annotate(**{name: annotations[name] for name in required_annotations})
+		try:
+			obj = queryset.get(pk=int(after_id))
+		except (ValueError, self.model.DoesNotExist):
+			raise BinderRequestError(f'invalid value for after_id: {after_id!r}')
+
+		# Now we will build up a comparison expr based on the order by
+		whens = []
+
+		for field in ordering:
+			# Fields are generally strings, except in some edge case, where it is an OrderBy expression.
+			# In thase case, we need to change it back to starting (sigh) for compatability reasons
+
+			if type(field) is not str:
+				_field = field
+
+				field = field.expression.name
+
+				if _field.descending:
+					field = f'-{field}'
+				if _field.nulls_first:
+					field = f'{field}__nulls_first'
+				if _field.nulls_last:
+					field = f'{field}__nulls_last'
+
+			# First we have to split of a leading '-' as indicating reverse
+			reverse = field.startswith('-')
+			if reverse:
+				field = field[1:]
+
+			# Then we determine if nulls come last
+			if field.endswith('__nulls_last'):
+				field = field[:-12]
+				nulls_last = True
+			elif field.endswith('__nulls_first'):
+				field = field[:-13]
+				nulls_last = False
+			elif connections[self.model.objects.db].vendor == 'mysql':
+				# In MySQL null is considered to be the lowest possible value for ordering
+				nulls_last = reverse
+			else:
+				# In other databases null is considered to be the highest possible value for ordering
+				nulls_last = not reverse
+
+			# Then we determine what the value is for the obj we need to be after
+			value = obj
+			for attr in field.split('__'):
+				value = getattr(value, attr, None)
+			if isinstance(value, models.Model):
+				value = value.pk
+
+			# Now we add some conditions for the comparison
+			if value is None:
+				# If the value is None, that means we have to add a condition for when the field is not None because only then it is different
+				# What the result should be in that case is determined by nulls last
+				whens.append(When(Q(**{field + '__isnull': False}), then=Value(not nulls_last)))
+			else:
+				# If the field is None we give a result based on nulls last
+				whens.append(When(Q(**{field: None}), then=Value(nulls_last)))
+				# Otherwise we check with comparisons, note that equality is intentionally left open with these two options so in that case we go on to the next field
+				whens.append(When(Q(**{field + '__lt': value}), then=Value(reverse)))
+				whens.append(When(Q(**{field + '__gt': value}), then=Value(not reverse)))
+
+		expr = Case(*whens, default=Value(False))
+
+		return expr, required_annotations
+
+
+	def _get_filtered_queryset_base(self, request, pk=None, include_annotations=None):
 		queryset = self.get_queryset(request)
 		if pk:
 			queryset = queryset.filter(pk=int(pk))
@@ -1336,43 +1646,80 @@ class ModelView(View):
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
 
-		queryset = annotate(queryset, request, include_annotations.get(''))
+		annotations = {
+			name: value['expr']
+			for name, value in self.annotations(request, include_annotations).items()
+		}
 
 		#### filters
 		filters = {k.lstrip('.'): v for k, v in request.GET.lists() if k.startswith('.')}
 		for field, values in filters.items():
+
 			for v in values:
 				q, distinct = self._parse_filter(field, v, request, include_annotations)
-				queryset = queryset.filter(q)
+				queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 				if distinct:
 					queryset = queryset.distinct()
 
 		#### search
 		if 'search' in request.GET:
-			queryset = self.search(queryset, request.GET['search'], request)
+			q = self._search_base(request.GET['search'], request)
+			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
 
+		#### after
+		try:
+			after = request.GET['after']
+		except KeyError:
+			pass
+		else:
+			after_expr, required_annotations = self._after_expr(request, after, include_annotations)
+			for name in required_annotations:
+				try:
+					expr = annotations.pop(name)
+				except KeyError:
+					pass
+				else:
+					queryset = queryset.annotate(**{name: expr})
+			queryset = queryset.filter(after_expr)
+
+		return queryset, annotations
+
+	def get_filtered_queryset(self, request, *args, **kwargs):
+		"""
+		Returns a scoped queryset with filtering and sorting applied as
+		specified by the request.
+		"""
+		queryset, annotations = self._get_filtered_queryset_base(request, *args, **kwargs)
+		queryset = queryset.annotate(**annotations)
 		queryset = self.order_by(queryset, request)
-
 		return queryset
-
 
 	def get(self, request, pk=None, withs=None, include_annotations=None):
 		include_meta = request.GET.get('include_meta', 'total_records').split(',')
 		if include_annotations is None:
 			include_annotations = self._parse_include_annotations(request)
 
-		queryset = self.get_filtered_queryset(request, pk, include_annotations)
+		queryset, annotations = self._get_filtered_queryset_base(request, pk, include_annotations)
 
 		meta = self._generate_meta(include_meta, queryset, request, pk)
 
+		queryset = self._order_by_base(queryset, request, annotations)
 		queryset = self._paginate(queryset, request)
+
+		# We fetch the data with only the currently applied annotations
+		data = self._get_objs(
+			queryset,
+			request=request,
+			annotations=include_annotations.get(''),
+			to_annotate=annotations,
+		)
+
+		# Now we add all remaining annotations to this data
+		data_by_pk = {obj['id']: obj for obj in data}
+		pks = set(data_by_pk)
 
 		#### with
 		# parse wheres from request
-		data = self._get_objs(queryset, request=request, annotations=include_annotations.get(''))
-
-		pks = [obj['id'] for obj in data]
-
 		extras, extras_mapping, extras_reverse_mapping, field_results = self._get_withs(pks, withs, request=request, include_annotations=include_annotations)
 
 		for obj in data:
@@ -1388,7 +1735,7 @@ class ModelView(View):
 			meta['comment'] = self.comment
 
 		debug = {'request_id': request.request_id}
-		if django.conf.settings.DEBUG and 'debug' in request.GET:
+		if settings.DEBUG and 'debug' in request.GET:
 			debug['queries'] = ['{}s: {}'.format(q['time'], q['sql'].replace('"', '')) for q in django.db.connection.queries]
 			debug['query_count'] = len(django.db.connection.queries)
 
@@ -1500,7 +1847,7 @@ class ModelView(View):
 
 		try:
 			obj.save(only_validate=only_validate)
-			assert(obj.pk is not None)  # At this point, the object must have been created.
+			assert obj.pk is not None # At this point, the object must have been created.
 		except ValidationError as ve:
 			validation_errors.append(self.binder_validation_error(obj, ve, pk=pk))
 
@@ -1530,10 +1877,15 @@ class ModelView(View):
 
 		# Permission checks are done at this point, so we can avoid get_queryset()
 		include_annotations = self._parse_include_annotations(request)
+		annotations = include_annotations.get('')
 		data = self._get_objs(
-			annotate(self.model.objects.filter(pk=obj.pk), request, include_annotations.get('')),
+			self.model.objects.filter(pk=obj.pk),
 			request=request,
-			annotations=include_annotations.get(''),
+			annotations=annotations,
+			to_annotate={
+				name: value['expr']
+				for name, value in get_annotations(self.model,  request, annotations).items()
+			},
 		)[0]
 		data['_meta'] = {'ignored_fields': ignored_fields}
 		return data
@@ -1699,7 +2051,7 @@ class ModelView(View):
 
 		# Resize images that are too large.
 		if width > max_width or height > max_height:
-			img.thumbnail((max_width, max_height), Image.ANTIALIAS)
+			img.thumbnail((max_width, max_height), Image.LANCZOS)
 			logger.info('image dimensions ({}x{}) exceeded ({}, {}), resizing.'.format(width, height, max_width, max_height))
 			if img.mode not in ["1", "L", "P", "RGB", "RGBA"]:
 				img = img.convert("RGB")
@@ -2035,8 +2387,17 @@ class ModelView(View):
 		# Collect overrides
 		for (cls, mid), data in objects.items():
 			for subcls in getsubclasses(cls):
+				# Get remote field of the subclass
+				remote_field = subcls._meta.pk.remote_field
+
+				# In some scenarios with proxy models
+				# The remote field may not exist
+				# Because proxy models are just pure python wrappers(without its own db table) for other models
+				if remote_field is None:
+					continue
+
 				# Get key of field pointing to subclass
-				subkey = subcls._meta.pk.remote_field.name
+				subkey = remote_field.name
 				# Get id of subclass
 				subid = data.pop(subkey, None)
 				if subid is None:
@@ -2194,7 +2555,7 @@ class ModelView(View):
 			# corresponding view here?  That would make it
 			# more consistent with non-multi-PUT and POST,
 			# also requiring view permissions.
-			qs = model.objects.filter(pk__in=oids).select_for_update()
+			qs = model.objects.filter(pk__in=oids).order_by().select_for_update()
 			for obj in qs:
 				locked_objects[(model, obj.pk)] = obj
 
@@ -2401,13 +2762,24 @@ class ModelView(View):
 		values = self._get_request_values(request)
 
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
+			# Step one does the permission check. We cannot do a select for update here, since the queryeset
+			# of get_queryset can potentially have outer joins on nullable values
+			obj = self.get_queryset(request).get(pk=int(pk))
+
+			# Now that we know we have access to this moel, we can get it again, this time with lock.
+			obj = self.model.objects.select_for_update().get(pk=obj.pk)
+
 			# Permission checks are done at this point, so we can avoid get_queryset()
 			include_annotations = self._parse_include_annotations(request)
+			annotations = include_annotations.get('')
 			old = self._get_objs(
-				annotate(self.model.objects.filter(pk=int(pk)), request, include_annotations.get('')),
-				request,
-				include_annotations.get(''),
+				self.model.objects.filter(pk=int(pk)),
+				request=request,
+				annotations=annotations,
+				to_annotate={
+					name: value['expr']
+					for name, value in get_annotations(self.model,  request, annotations).items()
+				},
 			)[0]
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
@@ -2482,10 +2854,14 @@ class ModelView(View):
 			except ValueError:
 				pass
 
+		# This make sure we do all permission checks. We cannot do a select for update here, since there is a possiblity
+		# that we create a queryset that we cannot use in a for select clause.
 		try:
-			obj = self.get_queryset(request).select_for_update().get(pk=int(pk))
+			obj = self.get_queryset(request).get(pk=int(pk))
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
+		# We now retrieve the model again, without the permission checks, which we already this.
+		obj = self.model.objects.select_for_update().get(pk=obj.pk)
 
 		self.delete_obj(obj, undelete, request)
 
@@ -2559,17 +2935,33 @@ class ModelView(View):
 
 		file_field_name = file_field
 		file_field = getattr(obj, file_field_name)
+		field = self.model._meta.get_field(file_field_name)
 
 		if request.method == 'GET':
 			if not file_field:
 				raise BinderNotFound(file_field_name)
 
-			guess = mimetypes.guess_type(file_field.path)
-			guess = guess[0] if guess and guess[0] else 'application/octet-stream'
+			guess = mimetypes.guess_type(file_field.name)
+			content_type = (guess and guess[0]) or 'application/octet-stream'
+			serve_directly = isinstance(field, BinderFileField) and field.serve_directly
+
+			is_video = content_type and content_type.startswith('video/')
+
 			try:
-				resp = StreamingHttpResponse(open(file_field.path, 'rb'), content_type=guess)
+				if serve_directly:
+					resp = HttpResponse(content_type=content_type)
+					resp[settings.INTERNAL_MEDIA_HEADER] = os.path.join(settings.INTERNAL_MEDIA_LOCATION, file_field.name)
+					# if the filefield does not start with '/' it is likely a http address (S3) instead of path
+					# and because of that we set the redirect url
+					if not file_field.url.startswith('/'):
+						resp['redirect_url'] = file_field.url
+				else:
+					file_handle = file_field.open('rb')
+					resp = FileResponse(file_handle, content_type=content_type)
+					if is_video:
+						resp['Accept-Ranges'] = 'bytes'
 			except FileNotFoundError:
-				logger.error('Expected file {} not found'.format(file_field.path))
+				logger.error('Expected file {} not found'.format(file_field.name))
 				raise BinderNotFound(file_field_name)
 
 			if 'download' in request.GET:
@@ -2621,7 +3013,7 @@ class ModelView(View):
 		try:
 			method = getattr(self, 'filefield_get_name_' + file_field.field.name)
 		except AttributeError:
-			return os.path.basename(file_field.path)
+			return os.path.basename(file_field.name)
 		return method(instance=instance, request=request, file_field=file_field)
 
 
@@ -2632,7 +3024,7 @@ class ModelView(View):
 
 		debug = kwargs['history'] == 'debug'
 
-		if debug and not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
+		if debug and not settings.ENABLE_DEBUG_ENDPOINTS:
 			logger.warning('Debug endpoints disabled.')
 			return HttpResponseForbidden('Debug endpoints disabled.')
 
@@ -2640,7 +3032,131 @@ class ModelView(View):
 		if debug:
 			return history.view_changesets_debug(request, changesets.order_by('-id'))
 		else:
-			return history.view_changesets(request, changesets.order_by('-id'))
+			return history.view_changesets(request, changesets.order_by('-id'), self.model, pk)
+
+
+	@list_route('stats', methods=['GET'])
+	def stats_view(self, request):
+		# We only apply annotations when used, so we can just pretend everything is included to simplify stuff
+		try:
+			annotations = self.model.Annotations
+		except AttributeError:
+			include_annotations = {'': []}
+		else:
+			include_annotations = {'': [
+				attr
+				for attr in dir(annotations)
+				if not (attr.startswith('__') and attr.endswith('__'))
+			]}
+
+		queryset, annotations = self._get_filtered_queryset_base(request, None, include_annotations)
+
+		try:
+			stats = request.GET['stats']
+		except KeyError:
+			stats = []
+		else:
+			stats = stats.split(',')
+
+		return JsonResponse({
+			stat: self._get_stat(request, queryset, stat, annotations.copy(), include_annotations)
+			for stat in stats
+		})
+
+
+	def _get_stat(self, request, queryset, stat, annotations, include_annotations):
+		# NOTE: uses annotations! If called multiple times, provide a copy
+		# Get stat definition
+		try:
+			stat = self.stats[stat]
+		except KeyError:
+			try:
+				stat = DEFAULT_STATS[stat]
+			except KeyError:
+				raise BinderRequestError(f'unknown stat: {stat}')
+
+		# Apply filters
+		for key, value in stat.filters.items():
+			q, distinct = self._parse_filter(key, value, request, include_annotations)
+			queryset = self._apply_q_with_possible_annotations(queryset, q, annotations)
+			if distinct:
+				queryset = queryset.distinct()
+
+		# Apply required annotations
+		for key in stat.annotations:
+			try:
+				expr = annotations.pop(key)
+			except KeyError:
+				pass
+			else:
+				queryset = queryset.annotate(**{key: expr})
+
+		if stat.group_by is None:
+			# No group by so just return a simple stat
+			return {
+				'value': queryset.aggregate(result=stat.expr)['result'],
+				'filters': stat.filters,
+			}
+
+		group_by = stat.group_by.replace('.', '__')
+
+		value = {
+			# The jsonloads/jsondumps is to make sure we can handle different
+			# types as keys, an example is dates.
+			jsonloads(jsondumps(key)): value
+			for key, value in (
+				queryset
+				.order_by()
+				.exclude(**{group_by: None})
+				.values(group_by)
+				.annotate(_binder_stat=stat.expr)
+				.values_list(group_by, '_binder_stat')
+			)
+		}
+
+		other = 0
+		if stat.min_value is not None:
+			min_value = stat.min_value * sum(value.values())
+			new_value = {}
+
+			others = 0
+			for key, sub_value in value.items():
+				if sub_value >= min_value:
+					new_value[key] = sub_value
+				else:
+					other += sub_value
+					others += 1
+
+			if others > 1:
+				value = new_value
+			else:
+				other = 0
+
+		elif stat.max_values is not None:
+			keys = sorted(value, key=lambda key: value[key], reverse=True)
+			for key in keys[stat.max_values:]:
+				other += value.pop(key)
+
+		return {
+			'value': value,
+			'other': other,
+			'group_by': stat.group_by,
+			'filters': stat.filters,
+		}
+
+
+	def _apply_annotations(self, queryset, annotations, *fields):
+		for field in fields:
+			if field is None:
+				continue
+			field = field.split('__', 1)[0]
+			try:
+				annotation = annotations.pop(field)
+			except KeyError:
+				pass
+			else:
+				queryset = queryset.annotate(**{field: annotation})
+		return queryset
 
 
 
@@ -2662,7 +3178,7 @@ def debug_changesets_24h(request):
 		logger.warning('Not authenticated.')
 		return HttpResponseForbidden('Not authenticated.')
 
-	if not django.conf.settings.ENABLE_DEBUG_ENDPOINTS:
+	if not settings.ENABLE_DEBUG_ENDPOINTS:
 		logger.warning('Debug endpoints disabled.')
 		return HttpResponseForbidden('Debug endpoints disabled.')
 

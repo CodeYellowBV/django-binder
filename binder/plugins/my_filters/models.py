@@ -1,5 +1,4 @@
 from django.db import models
-from django.contrib.postgres.fields import JSONField
 from django.conf import settings
 
 from ...models import BinderModel
@@ -13,7 +12,8 @@ class MyFilter(BinderModel):
     )
     view = models.TextField()
     name = models.TextField()
-    params = JSONField()
+    params = models.JSONField()
+    columns = models.JSONField(default=list, blank=True)
     default = models.BooleanField(default=False)
 
     class Meta(BinderModel.Meta):

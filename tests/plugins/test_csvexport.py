@@ -1,4 +1,5 @@
 from PIL import Image
+from binder.plugins.views.csvexport import ExcelFileAdapter
 from os import urandom
 from tempfile import NamedTemporaryFile
 import io
@@ -7,7 +8,8 @@ from django.test import TestCase, Client
 from django.core.files import File
 from django.contrib.auth.models import User
 
-from ..testapp.models import Picture, Animal, PictureBook, Caretaker
+from ..testapp.models import Picture, Animal, Caretaker, PictureBook
+from ..testapp.views import PictureView
 import csv
 import openpyxl
 
@@ -72,7 +74,8 @@ class CsvExportTest(TestCase):
 			tmp.write(response.content)
 
 			wb = openpyxl.load_workbook(tmp.name)
-			sheet = wb._sheets[1]
+			self.assertEqual(1, len(wb._sheets))
+			sheet = wb._sheets[0]
 
 			_values = list(sheet.values)
 
@@ -135,7 +138,7 @@ class CsvExportTest(TestCase):
 			tmp.write(response.content)
 
 			wb = openpyxl.load_workbook(tmp.name)
-			sheet = wb._sheets[1]
+			sheet = wb._sheets[0]
 
 			_values = list(sheet.values)
 
@@ -149,6 +152,67 @@ class CsvExportTest(TestCase):
 							 [self.pictures[1].id, str(self.pictures[1].animal_id), (self.pictures[1].id ** 2)])
 			self.assertEqual(list(_values[3]),
 							 [self.pictures[2].id, str(self.pictures[2].animal_id), (self.pictures[2].id ** 2)])
+
+	def test_csv_export_custom_limit(self):
+		old_limit = PictureView.csv_settings.limit;
+		PictureView.csv_settings.limit = 1
+		response = self.client.get('/picture/download/')
+		self.assertEqual(200, response.status_code)
+		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
+
+		# Header
+		self.assertEqual(next(response_data), ['picture identifier', 'animal identifier', 'squared picture identifier'])
+		# 1 REcord
+		self.assertIsNotNone(next(response_data))
+
+		# EOF
+		with self.assertRaises(StopIteration):
+			self.assertIsNone(next(response_data))
+
+		###### Limit 2
+		PictureView.csv_settings.limit = 2
+		response = self.client.get('/picture/download/')
+		self.assertEqual(200, response.status_code)
+		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
+
+		# Header
+		self.assertEqual(next(response_data), ['picture identifier', 'animal identifier', 'squared picture identifier'])
+		# 1 REcord
+		self.assertIsNotNone(next(response_data))
+		# 2 Records
+		self.assertIsNotNone(next(response_data))
+		# EOF
+		with self.assertRaises(StopIteration):
+			self.assertIsNone(next(response_data))
+
+		PictureView.csv_settings.limit = old_limit;
+
+	def test_csv_settings_limit_none_working(self):
+		# Limit None should download everything
+
+		old_limit = PictureView.csv_settings.limit;
+		PictureView.csv_settings.limit = None
+		response = self.client.get('/picture/download/')
+		self.assertEqual(200, response.status_code)
+		response_data = csv.reader(io.StringIO(response.content.decode("utf-8")))
+
+		# Header
+		self.assertEqual(next(response_data), ['picture identifier', 'animal identifier', 'squared picture identifier'])
+		# 3 REcords, everything we have in the database
+		self.assertIsNotNone(next(response_data))
+		self.assertIsNotNone(next(response_data))
+		self.assertIsNotNone(next(response_data))
+
+		# EOF
+		with self.assertRaises(StopIteration):
+			self.assertIsNone(next(response_data))
+
+		PictureView.csv_settings.limit = old_limit;
+
+class TestExcelFileAdapter(TestCase):
+    def test_one_sheet_after_init(self):
+        file_adapter = ExcelFileAdapter(None)
+        self.assertEqual(len(file_adapter.work_book.worksheets), 1)
 
 	def test_none_foreign_key(self):
 		"""

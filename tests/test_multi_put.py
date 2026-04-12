@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 
 from binder.json import jsonloads
 
-from .testapp.models import Animal, Zoo, ZooEmployee, ContactPerson, Nickname, NullableNickname
+from .testapp.models import Animal, Zoo, ZooEmployee, ContactPerson, Nickname, NullableNickname,Donor
 from .compare import assert_json, MAYBE, ANY
 
 
@@ -553,6 +553,20 @@ class MultiPutTest(TestCase):
 		self.assertEqual(stimpy.nickname.id, nickname_id)
 
 
+	def test_multi_put_with_ordering_to_nullable_foreign_key(self):
+		donor = Donor(name='Frits')
+		donor.save()
+
+		model_data = {"data": [{
+				'id': donor.pk,
+				'name': 'Scooby Doo',
+			}]
+		}
+		response = self.client.put('/donor/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+
+
 class MultiPutDeletionsTest(TestCase):
 
 	def setUp(self):
@@ -639,3 +653,17 @@ class MultiPutDeletionsTest(TestCase):
 		}
 		response = self.client.put('/animal/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 418)
+
+
+	def test_deletions_with_nullable_ordering(self):
+		donor = Donor(name='Frits')
+		donor.save()
+
+		model_data = {
+			'deletions': [donor.id],
+		}
+		response = self.client.put('/donor/', data=json.dumps(model_data), content_type='application/json')
+		self.assertEqual(response.status_code, 200)
+
+		with self.assertRaises(Donor.DoesNotExist):
+			donor.refresh_from_db()

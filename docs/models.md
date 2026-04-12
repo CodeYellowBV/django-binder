@@ -62,6 +62,12 @@ When manually changed, Django will then correctly make new migration files.
 
 ---
 
+#### Extra options
+
+* `allowed_extensions` (default: `None`): limits the file extensions that can be uploaded
+* `serve_directly` (default: `False`): delegates file serving to the web server (e.g. nginx)
+  * Requires configuration of `INTERNAL_MEDIA_HEADER` and `INTERNAL_MEDIA_LOCATION` in `settings.py`
+
 ## Enums
 
 Binder makes it easy to use enums.
@@ -92,6 +98,36 @@ class Animal(BinderModel):
 		history = True
 ```
 
+You can also exclude specific fields from history tracking by setting `exclude_history_fields`:
+
+```python
+from binder.models import BinderModel
+
+class Animal(BinderModel):
+	name = models.TextField()
+	secret_notes = models.TextField()  # This field won't be tracked
+	
+	class Binder:
+		history = True
+		exclude_history_fields = ['secret_notes']
+```
+
+You can also include reverse relations in history tracking by setting `include_reverse_relations`. This is useful if you want to track when related objects are created or deleted on the parent model.
+
+```python
+class Zoo(BinderModel):
+	# ...
+
+	class Binder:
+		history = True
+		include_reverse_relations = ['animals']
+
+class Animal(BinderModel):
+	zoo = models.ForeignKey(Zoo, related_name='animals', on_delete=models.CASCADE)
+
+	# History on the child model is not required for this to work
+```
+
 Saving the model will result in one changeset. With a changeset, the user that changed it and datetime is saved.
 
 A changeset contains changes for each field that has been changed to a new value. For each change, you can see the old value and the new value.
@@ -117,3 +153,20 @@ urlpatterns = [
 TODO: verify if this actually works.
 
 Also make sure that `ENABLE_DEBUG_ENDPOINTS = True` in your `settings.py`.
+
+### Showing display names for foreign keys
+
+By default, whenever a foreign key field is changed (reassigned), the old ID and the new ID are shown in the history.
+
+If you want to show something else (e.g. the name instead of the ID),
+
+you need to override the `format_instance_for_history` method on the target model, for instance if your target model is `ContactPerson`:
+
+```python
+@classmethod
+def format_instance_for_history(cls, id: int):
+	try:
+		return ContactPerson.objects.get(id=id).name
+	except:
+		return 'deleted? ' + str(id)
+```
