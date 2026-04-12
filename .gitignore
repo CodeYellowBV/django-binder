@@ -11,3 +11,4 @@ venv
 .tox/
 .coverage
 .vscode/
+.idea/
