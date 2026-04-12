@@ -17,8 +17,8 @@ from django.views.generic import View
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.core.files.base import File, ContentFile
-from django.http import HttpResponse,  HttpResponseForbidden, FileResponse
-from django.http.request import RawPostDataException
+from django.http import HttpResponse,  HttpResponseForbidden, FileResponse, StreamingHttpResponse
+from django.http.request import RawPostDataException, QueryDict
 from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
 from django.db.models import Q, F, Count, Case, When
@@ -29,7 +29,11 @@ from django.db.models.expressions import BaseExpression, Value, CombinedExpressi
 from django.db.models.fields.reverse_related import ForeignObjectRel
 
 
-from .exceptions import BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded, BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound, BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI
+from .exceptions import (
+	BinderException, BinderFieldTypeError, BinderFileSizeExceeded, BinderForbidden, BinderImageError, BinderImageSizeExceeded,
+	BinderInvalidField, BinderIsDeleted, BinderIsNotDeleted, BinderMethodNotAllowed, BinderNotAuthenticated, BinderNotFound,
+	BinderReadOnlyFieldError, BinderRequestError, BinderValidationError, BinderFileTypeIncorrect, BinderInvalidURI, BinderSkipSave
+)
 from . import history
 from .orderable_agg import OrderableArrayAgg, GroupConcat, StringAgg
 from .models import FieldFilter, BinderModel, ContextAnnotation, OptionalAnnotation, BinderFileField, BinderImageField
@@ -392,6 +396,9 @@ class ModelView(View):
 	# NOTE: custom _store__foo() methods will still be called for unupdatable fields.
 	unupdatable_fields = []
 
+	# Allow validation without saving.
+	allow_standalone_validation = False
+
 	# Fields to use for ?search=foo. Empty tuple for disabled search.
 	# NOTE: only string fields and 'id' are supported.
 	# id is hardcoded to be treated as an integer.
@@ -513,6 +520,10 @@ class ModelView(View):
 
 		response = None
 		try:
+			# only allow standalone validation if you know what you are doing
+			if 'validate' in request.GET and request.GET['validate'] == 'true' and not self.allow_standalone_validation:
+				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly.')
+
 			#### START TRANSACTION
 			with ExitStack() as stack, history.atomic(source='http', user=request.user, uuid=request.request_id):
 				transaction_dbs = ['default']
@@ -2265,6 +2276,18 @@ class ModelView(View):
 
 
 
+	def _abort_when_standalone_validation(self, request):
+		"""Raise a `BinderSkipSave` exception when this is a validation request."""
+		if 'validate' in request.GET and request.GET['validate'] == 'true':
+			if self.allow_standalone_validation:
+				params = QueryDict(request.body)
+				raise BinderSkipSave
+			else:
+				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly ' \
+					'by setting the `allow_standalone_validation` property on this view (see documentation).')
+
+
+
 	def _obj_diff(self, old, new, name):
 		if isinstance(old, dict) and isinstance(new, dict):
 			changes = []
@@ -2642,6 +2665,8 @@ class ModelView(View):
 	def multi_put(self, request):
 		logger.info('ACTIVATING THE MULTI-PUT!!!1!')
 
+		self._abort_when_standalone_validation(request)
+
 		# Hack to communicate to _store() that we're not interested in
 		# the new data (for perf reasons).
 		request._is_multi_put = True
@@ -2729,6 +2754,8 @@ class ModelView(View):
 
 		self._require_model_perm('change', request, pk)
 
+		self._abort_when_standalone_validation(request)
+
 		values = self._get_request_values(request)
 
 		try:
@@ -2785,6 +2812,8 @@ class ModelView(View):
 		if pk is not None:
 			return self.delete(request, pk, undelete=True)
 
+		self._abort_when_standalone_validation(request)
+
 		values = self._get_request_values(request)
 
 		data = self._store(self.model(), values, request)
@@ -2810,6 +2839,8 @@ class ModelView(View):
 
 		if pk is None:
 			raise BinderMethodNotAllowed()
+
+		self._abort_when_standalone_validation(request)
 
 		if not skip_body_check:
 			# FIXME: ugly workaround, remove when Django bug fixed
