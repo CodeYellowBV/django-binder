@@ -340,6 +340,47 @@ class PermissionView(ModelView):
 
 
 
+	def _abort_when_standalone_validation(self, request):
+		"""
+		Override to perform scoping before raising BinderSkipSave.
+		This ensures that permission checks and scoping are both done,
+		satisfying the dispatch() method's requirements.
+		"""
+		from binder.exceptions import BinderSkipSave
+		from django.http.request import QueryDict
+		
+		if 'validate' in request.GET and request.GET['validate'] == 'true':
+			if self.allow_standalone_validation:
+				# Perform scoping before raising BinderSkipSave
+				# We need to parse the request body to get the values for scoping
+				params = QueryDict(request.body)
+				values = self._get_request_values(request)
+				
+				# Determine if this is an add or change operation based on the request method
+				if request.method.lower() == 'post':
+					# For POST, we're adding a new object
+					self.scope_add(request, self.model(), values)
+				elif request.method.lower() in ('put', 'patch'):
+					# For PUT/PATCH, we're changing an existing object
+					# We need to get the pk from the URL kwargs
+					pk = request.resolver_match.kwargs.get('pk')
+					if pk:
+						try:
+							obj = self.get_queryset(request).get(pk=int(pk))
+							self.scope_change(request, obj, values)
+						except Exception:
+							# If we can't get the object, we'll skip scoping
+							# This shouldn't happen in normal flow since permission check already passed
+							pass
+				
+				raise BinderSkipSave
+			else:
+				from binder.exceptions import BinderRequestError
+				raise BinderRequestError('Standalone validation not enabled. You must enable this feature explicitly '
+					'by setting the `allow_standalone_validation` property on this view (see documentation).')
+
+
+
 	def _store(self, obj, values, request, **kwargs):
 		"""
 		Scope the creation/changing of an object

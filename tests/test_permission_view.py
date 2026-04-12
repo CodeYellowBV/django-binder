@@ -861,3 +861,84 @@ class ForUpdateErrorNotOccurringTest(TestCase):
 		print(res.json())
 
 		self.assertEqual(200, res.status_code)
+
+
+class TestStandaloneValidationWithPermissions(TestCase):
+	def setUp(self):
+		super().setUp()
+
+		u = User(username='testuser', is_active=True, is_superuser=False)
+		u.set_password('test')
+		u.save()
+
+		self.client = Client()
+		r = self.client.login(username='testuser', password='test')
+		self.assertTrue(r)
+
+		self.country = Country.objects.create(name='Netherlands')
+		self.city = City.objects.create(name='Amsterdam', country=self.country)
+		
+		# Enable standalone validation for CityView
+		from .testapp.views.city import CityView
+		CityView.allow_standalone_validation = True
+
+	@override_settings(BINDER_PERMISSION={
+		'default': [
+			('testapp.view_city', 'all'),
+			('testapp.change_city', 'all'),
+		],
+	})
+	def test_put_with_validate_true_and_permissions(self):
+		"""Test that validation with ?validate=true works with permission checks"""
+		# This should not raise "No permission check done" or "No change scoping done!"
+		res = self.client.put(f'/city/{self.city.id}/?validate=true', data=jsondumps({
+			'name': 'Rotterdam',
+		}), content_type='application/json')
+		
+		# Should get a 200 response with validation errors (or empty if valid)
+		self.assertEqual(res.status_code, 200)
+		response_data = jsonloads(res.content)
+		# The response should contain validation information
+		self.assertIn('data', response_data)
+
+	@override_settings(BINDER_PERMISSION={
+		'default': [
+			('testapp.view_city', 'all'),
+			('testapp.add_city', 'all'),
+		],
+	})
+	def test_post_with_validate_true_and_permissions(self):
+		"""Test that validation with ?validate=true works for POST with permission checks"""
+		res = self.client.post('/city/?validate=true', data=jsondumps({
+			'name': 'Utrecht',
+			'country': self.country.id,
+		}), content_type='application/json')
+		
+		# Should get a 200 response with validation errors (or empty if valid)
+		self.assertEqual(res.status_code, 200)
+		response_data = jsonloads(res.content)
+		# The response should contain validation information
+		self.assertIn('data', response_data)
+
+	@override_settings(BINDER_PERMISSION={
+		'default': [
+			('testapp.view_city', 'all'),
+			('testapp.change_city', 'all'),
+		],
+	})
+	def test_put_with_validate_true_without_permission_fails(self):
+		"""Test that validation still respects permission checks"""
+		# Remove change permission
+		with override_settings(BINDER_PERMISSION={
+			'default': [
+				('testapp.view_city', 'all'),
+			],
+		}):
+			res = self.client.put(f'/city/{self.city.id}/?validate=true', data=jsondumps({
+				'name': 'Rotterdam',
+			}), content_type='application/json')
+			
+			# Should get a 403 Forbidden response
+			self.assertEqual(res.status_code, 403)
+			response_data = jsonloads(res.content)
+			self.assertEqual(response_data['code'], 'Forbidden')
