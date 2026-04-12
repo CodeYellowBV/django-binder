@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+docker compose build binder
+
+docker compose run --rm binder python -m unittest "$@"

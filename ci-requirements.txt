@@ -1,4 +1,4 @@
-psycopg2<2.9
+psycopg2<3.2.3
 mysqlclient
 Pillow
 django-request-id
@@ -8,3 +8,4 @@ codecov
 coverage
 django-hijack<3.0.0
 openpyxl
+pika

@@ -11,7 +11,7 @@ os.chdir(os.path.normpath(os.path.join(os.path.abspath(__file__), os.pardir)))
 
 setup(
 	name='django-binder',
-	version='1.5.0',
+	version='1.7.0',
 	package_dir={'binder': 'binder'},
 	packages=find_packages(),
 	include_package_data=True,
@@ -21,34 +21,36 @@ setup(
 	url='https://github.com/CodeYellowBV/django-binder',
 	author='Marcel Moreaux',
 	author_email='marcel@codeyellow.nl',
-	test_suite='tests',
 	classifiers=[
 		'Environment :: Web Environment',
 		'Framework :: Django',
-		'Framework :: Django :: 2.0',
+		'Framework :: Django :: 3.0',
+		'Framework :: Django :: 4.0',
+		'Framework :: Django :: 5.0',
 		'Intended Audience :: Developers',
 		'License :: OSI Approved :: MIT License',
 		'Operating System :: OS Independent',
 		'Programming Language :: Python',
 		'Programming Language :: Python :: 3',
-		'Programming Language :: Python :: 3.4',
-		'Programming Language :: Python :: 3.5',
 		'Topic :: Internet :: WWW/HTTP',
 		'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
 	],
 	install_requires=[
-		'Django >= 2.0, < 4.0',
+		'Django >= 3.0, < 6.0',
 		'Pillow >= 3.2.0',
 		'django-request-id >= 1.0.0',
 		'requests >= 2.13.0',
+		'pika == 1.3.2',
 	],
-	tests_require=[
-		'django-hijack >= 2.1.10, < 3.0.0',
-		(
-			'mysqlclient >= 1.3.12'
-			if os.environ.get('BINDER_TEST_MYSQL', '0') == '1' else
-			'psycopg2 >= 2.7'
-		),
-		"openpyxl >= 3.0.0"
-	],
+	extras_require={
+		'test': [
+			'django-hijack >= 2.1.10',
+			(
+				'mysqlclient >= 1.3.12'
+				if os.environ.get('BINDER_TEST_MYSQL', '0') == '1' else
+				'psycopg2 >= 2.7'
+			),
+			"openpyxl >= 3.0.0"
+		],
+	}
 )

@@ -1,4 +1,5 @@
 import re
+from typing import List
 import warnings
 import hashlib
 import mimetypes
@@ -6,18 +7,23 @@ import json
 from collections import defaultdict
 from datetime import date, datetime, time
 from contextlib import suppress
+from decimal import Decimal
+from functools import partial
 
 from django import forms
 from django.db import models
+from django.db.models import Value
 from django.db.models.fields.files import FieldFile, FileField
-from django.contrib.postgres.fields import CITextField, ArrayField, JSONField, DateTimeRangeField as DTRangeField
+from django.contrib.postgres.fields import CITextField, ArrayField, DateTimeRangeField as DTRangeField
 from django.core import checks
 from django.core.files.base import File, ContentFile
 from django.core.files.images import ImageFile
 from django.db.models import signals
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
-from django.utils import timezone
+from datetime import timezone
+from django.utils.timezone import get_fixed_timezone
+
 from django.utils.translation import gettext_lazy as _
 from django.utils.dateparse import parse_date, parse_datetime
 
@@ -26,6 +32,29 @@ from binder.json import jsonloads
 from binder.exceptions import BinderRequestError
 
 from . import history
+
+
+@models.CharField.register_lookup
+@models.TextField.register_lookup
+class FuzzyLookup(models.Lookup):
+
+	lookup_name = 'fuzzy'
+
+	def get_prep_lookup(self):
+		assert isinstance(self.rhs, str)
+		pattern = ['%']
+		for part in self.rhs.split():
+			for char in part:
+				if char in '%_[\\':
+					char.append('\\')
+				pattern.append(char)
+			pattern.append('%')
+		return Value(''.join(pattern))
+
+	def as_sql(self, compiler, connection):
+		lhs, lhs_params = self.process_lhs(compiler, connection)
+		rhs, rhs_params = self.process_rhs(compiler, connection)
+		return f'{lhs} ilike {rhs} escape \'\\\'', (*lhs_params, *rhs_params)
 
 
 class DateTimeRangeField(DTRangeField):
@@ -188,8 +217,9 @@ class FieldFilter(object):
 
 	def check_qualifier(self, qualifier):
 		if qualifier not in self.allowed_qualifiers:
-			raise BinderRequestError('Qualifier {} not supported for type {} ({}).'
-					.format(qualifier, self.__class__.__name__, self.field_description()))
+			raise BinderRequestError('Qualifier {} not supported for type {} ({}). Supported qualifiers: {}'
+					.format(qualifier, self.__class__.__name__, self.field_description(),
+							self.allowed_qualifiers))
 
 
 
@@ -234,6 +264,16 @@ class FloatFieldFilter(FieldFilter):
 		except ValueError:
 			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
+
+class DecimalFieldFilter(FieldFilter):
+	fields = [models.DecimalField]
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
+
+	def clean_value(self, qualifier, v):
+		try:
+			return Decimal(v)
+		except ValueError:
+			raise ValidationError('Invalid value {{{}}} for {}.'.format(v, self.field_description()))
 
 
 class DateFieldFilter(FieldFilter):
@@ -308,7 +348,7 @@ class TimeFieldFilter(FieldFilter):
 			offset = int(tzinfo[1:3]) * 60 + int(tzinfo[3:5])
 			if tzinfo.startswith('-'):
 				offset = -offset
-			tzinfo = timezone.get_fixed_timezone(offset)
+			tzinfo = get_fixed_timezone(offset)
 		# Create time object
 		return time(
 			hour=hour,
@@ -336,7 +376,7 @@ class BooleanFieldFilter(FieldFilter):
 
 class TextFieldFilter(FieldFilter):
 	fields = [models.CharField, models.TextField]
-	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'isnull']
+	allowed_qualifiers = [None, 'in', 'iexact', 'contains', 'icontains', 'startswith', 'istartswith', 'endswith', 'iendswith', 'exact', 'isnull', 'fuzzy']
 
 	# Always valid(?)
 	def clean_value(self, qualifier, v):
@@ -384,7 +424,7 @@ class ArrayFieldFilter(FieldFilter):
 
 
 class JSONFieldFilter(FieldFilter):
-	fields = [JSONField]
+	fields = [models.JSONField]
 	# TODO: Element or path-based lookup is not supported yet
 	allowed_qualifiers = [None, 'contains', 'contained_by', 'has_key', 'has_any_keys', 'has_keys', 'isnull']
 
@@ -436,6 +476,114 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 				fields[field.name] = getattr(self, field.name)
 		return fields
 
+	@classmethod
+	def format_instance_for_history(cls, id: int):
+		"""
+		This method is called during the history endpoint to determine the display name for related objects.
+
+		By default, when model `A` has a foreign key field named `f` of type `B`, it will show a change that looks like
+		```
+		{ field: f, before: old_id, after: new_id }
+		```
+
+		If you override this method, you can display something nicer than just the ID (e.g. the name).
+		"""
+		return str(id)
+
+	@classmethod
+	def format_field_for_history(cls, field_name: str, raw_value: str, is_before: bool, diff_tracker: dict, oid: int):
+		"""
+		This method is called during the history endpoint to improve the way some of the changes in a changeset are displayed.
+		Most fields are intuitive by default, but (m2m) relations need extra attention.
+
+		To demonstrate when this method is called, consider an example model `Zoo`:
+		```
+		class Zoo(BinderModel)
+			contacts = models.ManyToManyField('ContactPerson')
+		```
+		When the history endpoint of a zoo is invoked, the following calls to `format_field_history` could happen:
+		- `Zoo.format_field_for_history(field_name='contacts', raw_value='[[["id", 6]]]', is_before=False, ...)`
+		- `Zoo.format_field_for_history(field_name='contacts', raw_value='[[["id", 8]], [["id", 9]]]', is_before=True, ...)`
+
+		This would mean that:
+		- The `ContactPerson` with id 6 was added to `contacts`.
+		- The `ContactPerson`s with id's 8 and 9 were removed from `contacts`.
+		- The **existing** contacts are **omitted**.
+
+		First of all, this method will do some bookkeeping to figure out the **existing** contacts.
+		Furthermore, it invokes `ContactPerson.format_instance_for_history(6)` to figure out the display name of `ContactPerson` 6,
+		which will be shown instead of the raw ID.
+
+		If you do **not** want this formatting (as was the case in older Binder versions),
+		you can override this method such that it always returns `raw_value`.
+		"""
+		try:
+			field = getattr(cls, field_name).field
+		except Exception:
+			# The except clause will be reached when the field has been deleted or renamed.
+			# Since we don't have any field info, we will just have to fall back to displaying the raw value
+			return raw_value
+
+		try:
+			if field.is_relation:
+				target_model = field.remote_field.model
+
+				def get_cached_display_name(target_id: int):
+					if target_model not in diff_tracker:
+						diff_tracker[target_model] = dict()
+					display_name_cache = diff_tracker[target_model]
+					if target_id not in display_name_cache:
+						display_name_cache[target_id] = target_model.format_instance_for_history(target_id)
+					return display_name_cache[target_id]
+
+				if field.remote_field.multiple:
+
+					if not is_before and field_name not in diff_tracker:
+						try:
+							dict_id_list = list(cls.objects.filter(id=oid).values(field_name).all())
+							for index in range(len(dict_id_list)):
+								dict_id_list[index] = dict_id_list[index][field_name]
+							diff_tracker[field_name] = set(dict_id_list)
+						except cls.DoesNotExist:
+							# If the object doesn't exist anymore, let's assume that the 'most recent' value is empty.
+							diff_tracker[field_name] = []
+
+					ids = list(diff_tracker[field_name])
+
+					entries = json.loads(raw_value)
+					for entry in entries:
+						if len(entry) != 1:
+							raise ValueError()
+						entry = entry[0]
+						if len(entry) != 2 or entry[0] != 'id':
+							raise ValueError()
+						target_id = entry[1]
+						if is_before:
+							ids.append(target_id)
+							diff_tracker[field_name].add(target_id)
+						else:
+							diff_tracker[field_name].remove(target_id)
+
+					ids.sort()
+					result = []
+					for id in ids:
+						if target_model not in diff_tracker:
+							diff_tracker[target_model] = dict()
+						result.append(get_cached_display_name(id))
+
+					return ', '.join(result)
+				else:
+					return get_cached_display_name(int(raw_value))
+			return raw_value
+		except Exception:
+			# If we get an unexpected error when we try to format changes,
+			# it's probably best to ignore the parse/format error, and display the original/raw value instead.
+			#
+			# After all, I don't want to break the history endpoint in our projects,
+			# just because it has outdated/corrupted Change entries in its database
+			# (or because I made a stupid error not caught by unit tests).
+			return raw_value
+
 	def binder_serialize_m2m_field(self, field):
 		if isinstance(field, str):
 			field = getattr(self, field)
@@ -457,12 +605,13 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 			d.pop(field.source_field.name + '_id')
 			d['id'] = d.pop(field.target_field.name + '_id')
 
-		return set(sorted(d.items()) for d in data)
+		return set(tuple(sorted(d.items())) for d in data)
 
 	binder_is_binder_model = True
 
 	class Binder:
 		history = False
+		exclude_history_fields: List[str] = []
 
 	class Meta:
 		abstract = True
@@ -542,13 +691,22 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 def history_obj_post_init(sender, instance, **kwargs):
 	instance._history = instance.binder_concrete_fields_as_dict(skip_deferred_fields=True)
 
+	excluded_fields = getattr(sender.Binder, 'exclude_history_fields', [])
+	for field_name in excluded_fields:
+		instance._history.pop(field_name, None)
+
 	if not instance.pk:
 		instance._history = {k: history.NewInstanceField for k in instance._history}
 
 
 
 def history_obj_post_save(sender, instance, **kwargs):
+	excluded_fields = getattr(sender.Binder, 'exclude_history_fields', [])
+
 	for field_name, new_value in instance.binder_concrete_fields_as_dict().items():
+		if field_name in excluded_fields:
+			continue
+
 		try:
 			old_value = instance._history[field_name]
 			if old_value != new_value:
@@ -577,6 +735,69 @@ def history_obj_m2m_changed(sender, instance, action, reverse, model, pk_set, **
 
 
 
+def history_obj_reverse_relation_pre_save(
+	sender, instance, parent_model, fk_name, reverse_name, **kwargs
+):
+	if getattr(instance, "_history_skip", False):
+		return
+
+	# New Parent
+	try:
+		new_parent = getattr(instance, fk_name)
+	except parent_model.DoesNotExist:
+		new_parent = None
+
+	# Old Parent
+	if instance.pk:
+		try:
+			# We only need the FK field to identify the old parent
+			old_instance = sender.objects.only(fk_name).get(pk=instance.pk)
+			old_parent = getattr(old_instance, fk_name)
+		except (sender.DoesNotExist, parent_model.DoesNotExist):
+			old_parent = None
+	else:
+		old_parent = None
+
+	if old_parent:
+		history.change(
+			parent_model,
+			old_parent.pk,
+			reverse_name,
+			history.DeferredM2M,
+			history.DeferredM2M,
+		)
+
+	if new_parent and new_parent != old_parent:
+		history.change(
+			parent_model,
+			new_parent.pk,
+			reverse_name,
+			history.DeferredM2M,
+			history.DeferredM2M,
+		)
+
+
+def history_obj_reverse_relation_pre_delete(
+	sender, instance, parent_model, fk_name, reverse_name, **kwargs
+):
+	if getattr(instance, "_history_skip", False):
+		return
+
+	try:
+		parent = getattr(instance, fk_name)
+	except parent_model.DoesNotExist:
+		parent = None
+
+	if parent:
+		history.change(
+			parent_model,
+			parent.pk,
+			reverse_name,
+			history.DeferredM2M,
+			history.DeferredM2M,
+		)
+
+
 # FIXME: remove
 def install_m2m_signal_handlers(model):
 	warnings.warn(DeprecationWarning('install_m2m_signal_handlers() is deprecated, call install_history_signal_handlers() instead!'))
@@ -595,7 +816,43 @@ def install_history_signal_handlers(model):
 
 		for field in model._meta.get_fields():
 			if field.many_to_many and field.concrete:
-				signals.m2m_changed.connect(history_obj_m2m_changed, getattr(model, field.name).through)
+				signals.m2m_changed.connect(
+					history_obj_m2m_changed, getattr(model, field.name).through
+				)
+
+		for rel_name in getattr(model.Binder, "include_reverse_relations", []):
+			try:
+				rel_field = model._meta.get_field(rel_name)
+			except models.FieldDoesNotExist:
+				raise ValueError(f'Reverse relation {rel_name} does not exist on model {model.__name__}.')
+
+			if not rel_field.is_relation or not rel_field.auto_created:
+				raise ValueError(f'Field {rel_name} on model {model.__name__} is not a reverse relation.')
+
+			child_model = rel_field.related_model
+			fk_field = rel_field.field
+			fk_name = fk_field.name
+
+			signals.pre_save.connect(
+				partial(
+					history_obj_reverse_relation_pre_save,
+					parent_model=model,
+					fk_name=fk_name,
+					reverse_name=rel_name,
+				),
+				sender=child_model,
+				weak=False,
+			)
+			signals.pre_delete.connect(
+				partial(
+					history_obj_reverse_relation_pre_delete,
+					parent_model=model,
+					fk_name=fk_name,
+					reverse_name=rel_name,
+				),
+				sender=child_model,
+				weak=False,
+			)
 
 	for sub in model.__subclasses__():
 		install_history_signal_handlers(sub)
@@ -686,7 +943,7 @@ class BinderFieldFile(FieldFile):
 		if not self.name:
 			self._content_type = None
 		elif self._content_type is None:
-			self._content_type, _ = mimetypes.guess_type(self.path)
+			self._content_type, _ = mimetypes.guess_type(self.name)
 		return self._content_type
 
 	# So here we have a bunch of methods that might alter the data or name of
@@ -794,12 +1051,13 @@ class BinderFileField(FileField):
 	attr_class = BinderFieldFile
 	descriptor_class = BinderFileDescriptor
 
-	def __init__(self, allowed_extensions=None, *args, **kwargs):
+	def __init__(self, allowed_extensions=None, serve_directly=False, *args, **kwargs):
 		# Since we also need to store a content type and a hash in the field
 		# we up the default max_length from 100 to 200. Now we store also
 		# the original file name, so lets make it 400 chars.
 		kwargs.setdefault('max_length', 400)
 		self.allowed_extensions = allowed_extensions
+		self.serve_directly = serve_directly
 		return super().__init__(*args, **kwargs)
 
 	def get_prep_value(self, value):
@@ -829,6 +1087,7 @@ class BinderFileField(FileField):
 
 		if self.allowed_extensions:
 			kwargs['allowed_extensions'] = self.allowed_extensions
+		kwargs['serve_directly'] = self.serve_directly
 		return name, path, args, kwargs
 
 
@@ -872,11 +1131,11 @@ class BinderImageField(BinderFileField):
 	descriptor_class = BinderImageFileDescriptor
 	description = _("Image")
 
-	def __init__(self, verbose_name=None, name=None, width_field=None, height_field=None, allowed_extensions=None, **kwargs):
+	def __init__(self, verbose_name=None, name=None, width_field=None, height_field=None, allowed_extensions=None, serve_directly=False, **kwargs):
 		self.width_field, self.height_field = width_field, height_field
 		if allowed_extensions is None:
 			allowed_extensions = ['png', 'gif', 'jpg', 'jpeg']
-		super().__init__(allowed_extensions, verbose_name, name, **kwargs)
+		super().__init__(allowed_extensions, serve_directly, verbose_name, name, **kwargs)
 
 	def check(self, **kwargs):
 		return [
@@ -945,7 +1204,7 @@ class BinderImageField(BinderFileField):
 		if not file and not force:
 			return
 
-		dimension_fields_filled = not(
+		dimension_fields_filled = not (
 			(self.width_field and not getattr(instance, self.width_field)) or
 			(self.height_field and not getattr(instance, self.height_field))
 		)

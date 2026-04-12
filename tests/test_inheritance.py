@@ -122,3 +122,24 @@ class InheritanceTest(TestCase):
 		zoo = Zoo.objects.get(pk=zoo_id)
 		zoo_animal_ids = [animal.id for animal in zoo.animals.all()]
 		self.assertEqual(zoo_animal_ids, [animal_id])
+
+	def test_multiput_class_that_has_proxy_subclass(self):
+		response = self.client.put(
+			'/animal/',
+			content_type='application/json',
+			data=json.dumps({
+				'data': [{
+					'id': -1,
+					'name': 'Kowalsky',
+				}],
+				'with': {
+					'zoo': [{
+						'id': -3,
+						'name': 'Artis',
+						'animals': [-1],
+					}],
+				},
+			}),
+		)
+
+		self.assertEqual(response.status_code, 200)

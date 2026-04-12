@@ -62,3 +62,26 @@ operation is allowed.
 In these arguments `request` is current request, `object` is the object we are
 trying to add, change or delete. And `values` is a dict of  the values we are
 trying to save. In case of `delete` this is always empty.
+
+
+### Check permissions & scoping for requests
+Based on whether the created endpoint accepts a `GET`, `PUT`, `POST`, ... a set of scopes is defined that need to be checked.
+
+The following scopes are checked automatically when calling the following methods
+
+Get scoping:
+- view.get_queryset()
+
+Change scoping:
+- view.store(obj, fields, request)
+
+## @no_scoping_required()
+In some cases you might not need the automated scoping. An example might be when your endpoint does not make any  
+changes to the data-model but simply triggers an event or if you have already implemented custom scoping. In that 
+case there is the option of adding `@no_scoping_required()` before the endpoint, which will ignore the scoping checks for the endpoint.
+
+```python
+@detail_route('download', methods=['POST'])
+@no_scoping_required()
+def download(self, request, pk):
+```

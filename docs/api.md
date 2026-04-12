@@ -61,6 +61,36 @@ class AnimalView(ModelView):
 
 After adding the above, you can search on a model by using `api/animal?search=12`, or `api/animal?search=Scooby`.
 
+#### Filtering by groups (alternative_filters)
+
+Sometimes you want to abstract filters for specific parts of the model (name, foreign ids, ...).
+This is a improvement over of `searches`.
+
+```python
+class AnimalView(ModelView):
+	model = Animal
+	alternative_filters = {
+		'name_filter': ['id:startswith', 'name:icontains'],
+		'zoo_history': ['zoo', 'zoo_of_birth'],
+	}
+```
+After adding the above, you can search these fields by using `api/animal?.name_filter=12`, or `api/animal?.zoo_history.name:icontains=Apeldoorn`.
+
+As you can see in above example, selectors like `:icontains` can be within the alternative_filters dict or outside of it
+
+The keys in the `alternative_filters` dictionary may not be fields on the model, or annotations!
+
+##### :any and :all
+You can use `:all` and `:any` in the filter fields. In the example above, using `api/animal?.zoo_history:all=Artis` would require both the `zoo` and `zoo_of_birth` to be equal to Artis, meanwhile `api/animal?.zoo_history:any=Artis` is equivalent to not using `:any` as `api/animal?.zoo_history=Artis`.
+
+Notice that `api/animal?.zoo_history:not:any=Artis` requires that both `zoo` and `zoo_of_birth` are NOT equal to Artis. Meanwhile `api/animal?.zoo_history:not:all=Artis` requires that at least one of `zoo` and `zoo_of_birth` are NOT equal to Artis. Again, one can use `:any` implicitly here, so `api/animal?.zoo_history:not=Artis` is equivalent ot `api/animal?.zoo_history:not:any=Artis`. The order of `:not` and `:any`/`:all` is irrelevant.
+
+It is NOT allowed to use both `:any` and `all` in one filter since this does not make any sense. Also notice that you must first `:all` or `:any`, and only then you can use other filters like `:not:icontains` or `:startswith` etc.
+
+#### Filtering after a certain record
+
+Sometimes you want to filter a request to only return records that come after a certain record. For example you have fetched 25 records already and you want to fetch the next 25. For example if you called `/api/animal/` and the last record had id `1337` you can call `/api/animal/?after=1337` to get the next page of records. This will also respect other filters & ordering.
+
 ### Ordering the collection
 Ordering is a simple matter of enumerating the fields in the `order_by` query parameter, eg. `api/animal?order_by=name`.  If you want to make the ordering stable when there are multiple animals sharing the same name, you can separate with commas like `api/animal?order_by=name,id`.  The results will be sorted on name, and where the name is the same, they'll be sorted by `id`.
 
@@ -322,6 +352,42 @@ class FooView(BaseView):
     model = Foo
 ```
 
+## Combining multiple collections into one
+
+There are some usecases where you want to query multiple collections as one.
+With filtering & pagination this can be cumbersome to do manually. For this
+use case binder supplies a special view that acts like a generic combined
+collection `binder.plugins.views.combined_view`.
+
+This is usually registered in your urlpatterns on `api/combined/<path:names>/`.
+Note that you also need to supply the router to this view in the kwargs that
+you can supply from urlpatterns directly.
+
+You can then for example query `api/combined/zoo/animal/`. This will behave
+like a model that has a nullable foreign key to both `zoo` and `animal` of
+which always exactly 1 will be filled. Filtering, withs, wheres, and ordering
+work the same as normal with a few caveats.
+
+### Scoping
+Scoping of this combined 'model' is done based on view scoping of the related
+models. So for the aforementioned endpoint you would be able to see the entries
+related to a zoo or animal that you are allowed to see.
+
+### Filtering
+When filtering on a field of one of the relations (for example
+`.zoo.name=foo`). This will only filter the models that have a zoo. This is
+done intentionally since you often want to filter models in a similar way
+(think `.animal.name=foo`).
+
+### Ordering
+When supplying a field to `order_by` it will be used for all models. So for
+example you could order `api/combined/zoo/animal/` on `name` since they both
+have this field. If you would want to sort on different fields per model you
+have to wrap them in parenthesis and seperate them with commas. The order of
+the fields should then have the same order as the models. For example with
+the aforementioned api you could use `order_by=(founding_date,birth_date)`.
+Modifiers like the `-`-prefix to sort descending and the suffixes
+`__nulls_last` and `__nulls_first` should be outside of these parenthesis.
 
 
 TODO:

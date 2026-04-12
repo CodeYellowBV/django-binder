@@ -4,14 +4,14 @@ import warnings
 
 from django.db import models
 from django.http import HttpResponse
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.dispatch import Signal
 
 from .json import jsondumps, JsonResponse
 
 
-transaction_commit = Signal(providing_args=['changeset'])
+transaction_commit = Signal()
 
 
 class Changeset(models.Model):
@@ -202,19 +202,22 @@ def _abort():
 
 
 
-def view_changesets(request, changesets):
+def view_changesets(request, changesets, model_class, oid: int):
 	data = []
 	userids = set()
+	diff_tracker = dict()
 	for cs in changesets:
 		changes = []
 		for c in cs.changes.order_by('model', 'oid', 'field'):
-			changes.append({'model': c.model, 'oid': c.oid, 'field': c.field, 'diff': c.diff, 'before': c.before, 'after': c.after})
+			after = model_class.format_field_for_history(field_name=c.field, raw_value=c.after, is_before=False, diff_tracker=diff_tracker, oid=oid)
+			before = model_class.format_field_for_history(field_name=c.field, raw_value=c.before, is_before=True, diff_tracker=diff_tracker, oid=oid)
+			changes.append({'model': c.model, 'oid': c.oid, 'field': c.field, 'diff': c.diff, 'before': before, 'after': after})
 		data.append({'date': cs.date, 'uuid': cs.uuid, 'id': cs.id, 'source': cs.source, 'user': cs.user_id, 'changes': changes})
 		if cs.user_id:
 			userids.add(cs.user_id)
 
 	users = []
-	for u in User.objects.filter(id__in=userids):
+	for u in get_user_model().objects.filter(id__in=userids):
 		users.append({'id': u.id, 'username': u.username, 'email': u.email, 'first_name': u.first_name, 'last_name': u.last_name})
 
 	return JsonResponse({'data': data, 'with': {'user': users}})

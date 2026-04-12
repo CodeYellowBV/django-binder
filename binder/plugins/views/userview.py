@@ -38,44 +38,87 @@ class UserBaseMixin:
 class MasqueradeMixin(UserBaseMixin):
 	__metaclass__ = ABCMeta
 
+	def _maquerade_legacy(self, request, user_to_masquerade_as):
+		"""
+		This is to only used for django <=4, django-hijack <= 2
+		"""
+		from hijack.helpers import login_user
+		login_user(request, user_to_masquerade_as)  # Ignore returned redirect response object
+		return self.respond_with_user(request, user_to_masquerade_as.id)
+
 	@detail_route(name='masquerade')
 	@no_scoping_required()
 	def masquerade(self, request, pk=None):
-		from hijack.helpers import login_user
+		self._require_model_perm('masquerade', request)
 
 		if request.method != 'POST':
 			raise BinderMethodNotAllowed()
 
 		try:
-			user = self.model._default_manager.get(pk=pk)
+			user_to_masquerade_as = self.get_queryset(request).get(pk=pk)
 		except self.model.DoesNotExist:
 			raise BinderNotFound()
 
-		self._require_model_perm('masquerade', request)
+		try:
+			from hijack.views import AcquireUserView
+		except ImportError:
+			return self._maquerade_legacy(request, user_to_masquerade_as)
 
-		login_user(request, user)  # Ignore returned redirect response object
-		return self.respond_with_user(request, user.id)
+		class AcquireUserViewAdapter(AcquireUserView):
+			"""Simple adapter which makes the django-hijack acquire endpoint compatible with the django-binder-api"""
+			def get_object(self):
+				return user_to_masquerade_as
+
+			def get_redirect_url(self):
+				return ''
+
+		AcquireUserViewAdapter().post(request)
+		return self.respond_with_user(request, user_to_masquerade_as.id)
+
+	def _end_masquerade(self, request) -> bool:
+		"""
+		Ends the masquerade for the user, returns a boolean indicating if this was successfull
+		"""
+		try:
+			from hijack.views import ReleaseUserView
+		except ImportError:
+			# Legacy way to do it in django <=4, django-hijack <= 2
+			from hijack.helpers import release_hijack
+			try:
+				release_hijack(request)
+				return True
+			except PermissionDenied:
+				return False
+
+		class ReleaseUserViewAdapter(ReleaseUserView):
+			def get_redirect_url(self):
+				return ''
+
+		try:
+			ReleaseUserViewAdapter().post(request)
+			return True
+		except IndexError:
+			# Raised by the release user view adapter if you are not hijacked currently.
+			return False
+
 
 	@list_route(name='endmasquerade')
 	@no_scoping_required()
 	def endmasquerade(self, request):
-		from hijack.helpers import release_hijack
-
 		if request.method != 'POST':
 			raise BinderMethodNotAllowed()
 
 		self._require_model_perm('unmasquerade', request)
 
-		release_hijack(request)  # Ignore returned redirect response object
+		self._end_masquerade(request)
 		return self.respond_with_user(request, request.user.id)
 
 	def _logout(self, request):
-		from hijack.helpers import release_hijack
-		# Release masquerade on logout if masquerading
-		try:
-			release_hijack(request)
-		except PermissionDenied:  # Means we are not hijacked
-			super()._logout(request)
+		if self._end_masquerade(request):
+			# If we were masqueraded -> that counts as our logout.
+			return
+
+		super()._logout(request)
 
 
 
@@ -290,7 +333,7 @@ class UserViewMixIn(UserBaseMixin):
 
 		return HttpResponse(status=204)
 
-	@never_cache
+	@method_decorator(never_cache)
 	@list_route(name='send_activation_email', unauthenticated=True)
 	@no_scoping_required()
 	def send_activation_email(self, request):
@@ -355,7 +398,7 @@ class UserViewMixIn(UserBaseMixin):
 		return response
 
 	@method_decorator(sensitive_post_parameters())
-	@never_cache
+	@method_decorator(never_cache)
 	@detail_route(name='activate', unauthenticated=True)
 	@no_scoping_required()
 	def activate(self, request, pk=None):
@@ -406,7 +449,7 @@ class UserViewMixIn(UserBaseMixin):
 		return self.respond_with_user(request, user.id)
 
 	@method_decorator(sensitive_post_parameters())
-	@never_cache
+	@method_decorator(never_cache)
 	@detail_route(name='reset_password', unauthenticated=True, methods=['PUT'])
 	@no_scoping_required()
 	def reset_password(self, request, pk=None):
@@ -466,7 +509,7 @@ class UserViewMixIn(UserBaseMixin):
 		return self.respond_with_user(request, user.id)
 
 	@method_decorator(sensitive_post_parameters())
-	@never_cache
+	@method_decorator(never_cache)
 	@list_route(name='change_password')
 	@no_scoping_required()
 	def change_password(self, request):
