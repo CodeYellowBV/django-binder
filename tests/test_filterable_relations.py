@@ -273,7 +273,7 @@ class WithFilterTest(TestCase):
 		cp3 = ContactPerson(name='hans')
 		cp3.save()
 
-		zoo.contacts.set([cp1.id, cp2.id, cp3.id])
+		zoo.contacts.set([cp1.pk, cp2.pk, cp3.pk])
 
 		res = self.client.get('/zoo/', data={
 			'with': 'contacts',
@@ -286,18 +286,18 @@ class WithFilterTest(TestCase):
 			'data': [
 				{
 					'id': zoo.id,
-					'contacts': [cp1.id, cp2.id],
+					'contacts': [cp1.pk, cp2.pk],
 					EXTRA(): None,
 				}
 			],
 			'with': {
 				'contact_person': [
 					{
-						'id': cp1.id,
+						'id': cp1.pk,
 						EXTRA(): None,
 					},
 					{
-						'id': cp2.id,
+						'id': cp2.pk,
 						EXTRA(): None,
 					},
 				]
@@ -317,7 +317,7 @@ class WithFilterTest(TestCase):
 		cp3 = ContactPerson(name='hans')
 		cp3.save()
 
-		zoo.contacts.set([cp1.id, cp2.id, cp3.id])
+		zoo.contacts.set([cp1.pk, cp2.pk, cp3.pk])
 
 		res = self.client.get('/zoo/', data={ '.contacts.name:startswith': 'he' })
 		self.assertEqual(res.status_code, 200)

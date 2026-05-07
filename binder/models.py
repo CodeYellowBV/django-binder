@@ -240,9 +240,6 @@ class IntegerFieldFilter(FieldFilter):
 		models.IntegerField,
 		models.ForeignKey,
 		models.AutoField,
-		models.ManyToOneRel,
-		models.ManyToManyField,
-		models.ManyToManyRel,
 	]
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
 
@@ -477,7 +474,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		return fields
 
 	@classmethod
-	def format_instance_for_history(cls, id: int):
+	def format_instance_for_history(cls, pk):
 		"""
 		This method is called during the history endpoint to determine the display name for related objects.
 
@@ -540,7 +537,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 
 					if not is_before and field_name not in diff_tracker:
 						try:
-							dict_id_list = list(cls.objects.filter(id=oid).values(field_name).all())
+							dict_id_list = list(cls.objects.filter(pk=oid).values(field_name).all())
 							for index in range(len(dict_id_list)):
 								dict_id_list[index] = dict_id_list[index][field_name]
 							diff_tracker[field_name] = set(dict_id_list)
@@ -555,7 +552,7 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 						if len(entry) != 1:
 							raise ValueError()
 						entry = entry[0]
-						if len(entry) != 2 or entry[0] != 'id':
+						if len(entry) != 2 or entry[0] != 'pk':
 							raise ValueError()
 						target_id = entry[1]
 						if is_before:
@@ -595,10 +592,10 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 
 		# Regular many to many; get a list of the target ids.
 		if not extended_m2m:
-			return set(field.values_list('id', flat=True))
+			return set(field.values_list('pk', flat=True))
 
 		# Extended m2m; get dicts of the intermediary join table objects
-		data = list(field.through.objects.filter(**{field.source_field.name: self.id}).values())
+		data = list(field.through.objects.filter(**{field.source_field.name: self.pk}).values())
 		# Then, modify them to leave out the PKs and source ids. Also, rename target ids to 'id'.
 		for d in data:
 			d.pop('id')
@@ -727,7 +724,7 @@ def history_obj_m2m_changed(sender, instance, action, reverse, model, pk_set, **
 	# Find the corresponding field on the instance
 	field = [f for f in instance._meta.get_fields() if f.concrete and f.many_to_many and f.remote_field.through == sender][0]
 
-	history.change(instance.__class__, instance.id, field.name, history.DeferredM2M, history.DeferredM2M)
+	history.change(instance.__class__, instance.pk, field.name, history.DeferredM2M, history.DeferredM2M)
 
 
 

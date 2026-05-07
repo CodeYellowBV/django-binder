@@ -18,10 +18,10 @@ class TestFilterManyRels(TestCase):
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
 
-		ContactPerson(id=1, name='contact1').save()
+		ContactPerson(name='contact1').save()
 		z = Zoo(id=1, name='zoo')
 		z.save()
-		z.contacts.set([1])
+		z.contacts.set(['contact1'])
 		Animal(id=1, name='animal', zoo_id=1).save()
 		Animal(id=2, name='animal2', zoo_id=1).save()
 
@@ -87,7 +87,7 @@ class TestFilterManyRels(TestCase):
 
 
 	def test_filter_m2m_forward(self):
-		response = self.client.get('/zoo/?.contacts=1')
+		response = self.client.get('/zoo/?.contacts=contact1')
 		self.assertEqual(response.status_code, 200)
 		returned_data = jsonloads(response.content)
 
@@ -95,7 +95,7 @@ class TestFilterManyRels(TestCase):
 			'data': [
 				{
 					'id': 1,
-					'contacts': [1],
+					'contacts': ['contact1'],
 					EXTRA(): None,  # Other fields are dontcare
 				}
 			],
@@ -120,7 +120,7 @@ class TestFilterManyRels(TestCase):
 				'zoo': [
 					{
 						'id': 1,
-						'contacts': [1],
+						'contacts': ['contact1'],
 						EXTRA(): None,
 					},
 				],
@@ -147,10 +147,10 @@ class TestFilterManyRels(TestCase):
 
 
 		# Now ensure we don't put both contact person lists on the same pile
-		ContactPerson(id=2, name='contact2').save()
+		ContactPerson(name='contact2').save()
 		z2 = Zoo(id=2, name='zoo2')
 		z2.save()
-		z2.contacts.set([2])
+		z2.contacts.set(['contact2'])
 		animal = Animal.objects.get(pk=1)
 		animal.zoo_of_birth = z2
 		animal.save()
@@ -167,12 +167,12 @@ class TestFilterManyRels(TestCase):
 				'zoo': [
 					{
 						'id': 1,
-						'contacts': [1],
+						'contacts': ['contact1'],
 						EXTRA(): None,
 					},
 					{
 						'id': 2,
-						'contacts': [2],
+						'contacts': ['contact2'],
 						EXTRA(): None,
 					},
 				],

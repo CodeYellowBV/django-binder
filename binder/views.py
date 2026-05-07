@@ -168,7 +168,7 @@ def join_path(keys):
 
 # Haha kill me now
 def multiput_get_id(bla):
-	return bla['id'] if isinstance(bla, dict) else bla
+	return bla['pk'] if isinstance(bla, dict) else bla
 
 
 def fix_output_field(expr, model):
@@ -483,7 +483,7 @@ class ModelView(View):
 		logger.info('request dispatch; verb={}, user={}/{}, path={}'.
 				format(
 					request.method,
-					request.user.id,
+					request.user.pk,
 					request.user,
 					request.path,
 				))
@@ -689,7 +689,7 @@ class ModelView(View):
 					file = getattr(obj, f.attname)
 					if file:
 						# {router-view-instance}
-						data[f.name] = self.router.model_route(self.model, obj.id, f)
+						data[f.name] = self.router.model_route(self.model, obj.pk, f)
 						# {duplicate-binder-file-field-hash-code}
 						if isinstance(f, BinderFileField):
 							data[f.name] += '?h={}&content_type={}&filename={}'.format(
@@ -1304,7 +1304,12 @@ class ModelView(View):
 				return Q(**{partial + 'in': qs})
 			field = annotations[field_name]['field']
 
-		for field_class in inspect.getmro(field.__class__):
+		# For foreign keys and similar fields, we should use the filter of the primary key of the related object
+		class_for_filtering = field.__class__
+		if isinstance(field, models.ForeignObject) or isinstance(field, models.ManyToManyField) or isinstance(field, models.ForeignObjectRel):
+			class_for_filtering = field.related_model._meta.pk.__class__
+
+		for field_class in inspect.getmro(class_for_filtering):
 			filter_class = self.get_field_filter(field_class)
 			if filter_class:
 				filter = filter_class(field)
@@ -1622,7 +1627,7 @@ class ModelView(View):
 	def _get_filtered_queryset_base(self, request, pk=None, include_annotations=None):
 		queryset = self.get_queryset(request)
 		if pk:
-			queryset = queryset.filter(pk=int(pk))
+			queryset = queryset.filter(pk=pk)
 
 		# No parameter repetition. Should be extended to .params too after filters have been refactored.
 		for k, v in request.GET.lists():
@@ -1876,7 +1881,7 @@ class ModelView(View):
 		# ReverseManyToOneDescriptor. Yes, really.
 		if getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseManyToOneDescriptor:
 			#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
-			if any(v for v in value if v < 0):
+			if any(v for v in value if isinstance(v, int) and v < 0):
 				return
 			# If the m2m to be set is actually a reverse FK relation, we need to do extra magic.
 			# We figure out if the remote objects are added or removed. The added ones, we modify/save
@@ -1884,10 +1889,10 @@ class ModelView(View):
 			# doesn't see the changes. The same goes for the removed objects, except there we also
 			# DELETE them if the FK is non-nullable. Interesting stuff.
 			obj_field = getattr(obj, field)
-			old_ids = set(obj_field.values_list('id', flat=True))
+			old_ids = set(obj_field.values_list('pk', flat=True))
 			new_ids = set(value)
 
-			rmobjs = obj_field.model.objects.filter(id__in=old_ids - new_ids)
+			rmobjs = obj_field.model.objects.filter(pk__in=old_ids - new_ids)
 			# Skip already softdeleted objects for models which
 			# support softdeletion (this could be a lot of records)
 			if any([f.name == 'deleted' for f in obj_field.model._meta.fields]):
@@ -1911,7 +1916,7 @@ class ModelView(View):
 					rmobj_view.delete_obj(rmobj, False, request)
 
 
-			for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
+			for addobj in obj_field.model.objects.filter(pk__in=new_ids - old_ids):
 				setattr(addobj, obj_field.field.name, obj)
 				try:
 					addobj.save()
@@ -2082,7 +2087,8 @@ class ModelView(View):
 			if f.name == field:
 				if isinstance(f, models.ForeignKey):
 					if not (value is None or isinstance(value, int)):
-						raise BinderFieldTypeError(self.model.__name__, field)
+						pass
+						#raise BinderFieldTypeError(self.model.__name__, field)
 
 					# Previously, this value was updated using the following code:
 					# - setattr(obj, f.attname, value)
@@ -2212,11 +2218,8 @@ class ModelView(View):
 			if f.name == field:
 				# Force it to be seen as a deferred field
 				if isinstance(obj._meta.get_field(field), models.OneToOneRel):
-					if value is not None and not isinstance(value, int):
-						raise BinderFieldTypeError(self.model.__name__, field)
-
 					value = [value]
-				elif not (isinstance(value, list) and all(isinstance(v, int) for v in value)):
+				elif not isinstance(value, list):
 					raise BinderFieldTypeError(self.model.__name__, field)
 				# FIXME
 				# Check if the ids being saved as m2m actually exist. This kinda sucks, it would be much
@@ -2225,9 +2228,9 @@ class ModelView(View):
 				# So yeah, we kludge around here. :(
 				#ids = set(value)
 				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
-				ids = set(v for v in value if v is not None and v > 0)
-				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
-				if ids:
+				pks = set(v for v in value if v is not None and ((not isinstance(v, int)) or v > 0))
+				pks -= set(obj._meta.get_field(field).remote_field.model.objects.filter(pk__in=pks).values_list('pk', flat=True))
+				if pks:
 					field_name = obj._meta.get_field(field).remote_field.model.__name__
 					model_name = self.get_model_view(obj.__class__)._model_name()
 					raise BinderValidationError({
@@ -2235,9 +2238,9 @@ class ModelView(View):
 							obj.pk: {
 								field: [{
 									'code': 'does_not_exist',
-									'message': '{} instances {} do not exist'.format(field_name, list(ids)),
+									'message': '{} instances {} do not exist'.format(field_name, list(pks)),
 									'model': field_name,
-									'values': list(ids)
+									'values': list(pks)
 								}]
 							}
 						}
@@ -2345,8 +2348,6 @@ class ModelView(View):
 					raise BinderRequestError('with.{}[{}] should be a dictionary'.format(modelname, idx))
 				if not 'id' in obj:
 					raise BinderRequestError('missing id in with.{}[{}]'.format(modelname, idx))
-				if not isinstance(obj['id'], int):
-					raise BinderRequestError('non-numeric id in with.{}[{}]'.format(modelname, idx))
 
 				objects[(model, obj['id'])] = obj
 
@@ -2501,7 +2502,7 @@ class ModelView(View):
 
 			ordered_objects += sorted(
 				this_batch,
-				key=lambda obj: (obj[0].__name__, sign(obj[1]), abs(obj[1])),
+				key=lambda obj: (obj[0].__name__, sign(obj[1]) if isinstance(obj[1], int) else obj[1], abs(obj[1]) if isinstance(obj[1], int) else obj[1]),
 			)
 
 		return ordered_objects
@@ -2515,7 +2516,7 @@ class ModelView(View):
 		# Gather non-negative oids per model (unordered)
 		model_oids = defaultdict(set)
 		for model, oid in ordered_objects:
-			if oid >= 0:
+			if (not isinstance(oid, int)) or oid >= 0:
 				model_oids[model].add(oid)
 
 		# Do one big query to get and lock all the objects of each
@@ -2536,7 +2537,7 @@ class ModelView(View):
 			values = objects[(model, oid)]
 			logger.info('Saving {} {}'.format(model.__name__, oid))
 
-			if oid >= 0:
+			if (not isinstance(oid, int)) or oid >= 0:
 				try:
 					obj = locked_objects[(model, oid)]
 				except KeyError:
@@ -2558,7 +2559,7 @@ class ModelView(View):
 
 			for field in model._meta.many_to_many:
 				if field.name in values:
-					values[field.name] = [(new_id_map[(field.related_model, multiput_get_id(i))] if multiput_get_id(i) < 0 else i) for i in values[field.name]]
+					values[field.name] = [(new_id_map[(field.related_model, multiput_get_id(i))] if isinstance(i, int) and multiput_get_id(i) < 0 else i) for i in values[field.name]]
 
 			for field in [f for f in model._meta.get_fields() if f.one_to_many]:
 				if field.name in values:
@@ -2569,15 +2570,15 @@ class ModelView(View):
 				view._store(obj, values, request, pk=oid)
 			except BinderValidationError as e:
 				validation_errors.append(e)
-			if oid < 0:
-				new_id_map[(model, oid)] = obj.id
+			if isinstance(oid, int) and oid < 0:
+				new_id_map[(model, oid)] = obj.pk
 				for base in getmro(model)[1:]:
 					if not (
 						hasattr(base, 'Meta') and
 						getattr(base.Meta, 'abstract', False)
 					) and isinstance(base, BinderModel):
-						new_id_map[(base, oid)] = obj.id
-				logger.info('Saved as id {}'.format(obj.id))
+						new_id_map[(base, oid)] = obj.pk
+				logger.info('Saved as id {}'.format(obj.pk))
 
 		if validation_errors:
 			raise sum(validation_errors, None)
@@ -2857,13 +2858,13 @@ class ModelView(View):
 				except models.ProtectedError as e:
 					protected_objects = defaultdict(list)
 					for prot in e.protected_objects:
-						protected_objects[self.get_model_view(prot.__class__)._model_name()] += [prot.id]
+						protected_objects[self.get_model_view(prot.__class__)._model_name()] += [prot.pk]
 					raise BinderValidationError({
 						self._model_name(): {
 							obj.pk: {
 								'id': [{
 									'code': 'protected',
-									'message': 'Could not delete object {}'.format(obj.id),
+									'message': 'Could not delete object {}'.format(obj.pk),
 									'objects': protected_objects,
 								}]
 							}
@@ -2943,7 +2944,7 @@ class ModelView(View):
 			self._store(obj, {file_field_name: file}, request, pk=pk)
 
 			field = self.model._meta.get_field(file_field_name)
-			path = self.router.model_route(self.model, obj.id, field)
+			path = self.router.model_route(self.model, obj.pk, field)
 			# {duplicate-binder-file-field-hash-code}
 			if isinstance(field, BinderFileField):
 				file_field = getattr(obj, file_field_name)
@@ -2987,7 +2988,7 @@ class ModelView(View):
 			logger.warning('Debug endpoints disabled.')
 			return HttpResponseForbidden('Debug endpoints disabled.')
 
-		changesets = history.Changeset.objects.filter(id__in=set(history.Change.objects.filter(model=self.model.__name__, oid=pk).values_list('changeset_id', flat=True)))
+		changesets = history.Changeset.objects.filter(pk__in=set(history.Change.objects.filter(model=self.model.__name__, oid=pk).values_list('changeset_id', flat=True)))
 		if debug:
 			return history.view_changesets_debug(request, changesets.order_by('-id'))
 		else:

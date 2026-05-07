@@ -106,7 +106,7 @@ from binder.models import BinderModel
 class Animal(BinderModel):
 	name = models.TextField()
 	secret_notes = models.TextField()  # This field won't be tracked
-	
+
 	class Binder:
 		history = True
 		exclude_history_fields = ['secret_notes']
@@ -164,9 +164,9 @@ you need to override the `format_instance_for_history` method on the target mode
 
 ```python
 @classmethod
-def format_instance_for_history(cls, id: int):
+def format_instance_for_history(cls, pk):
 	try:
-		return ContactPerson.objects.get(id=id).name
+		return ContactPerson.objects.get(pk=pk).name
 	except:
-		return 'deleted? ' + str(id)
+		return 'deleted? ' + str(pk)
 ```
