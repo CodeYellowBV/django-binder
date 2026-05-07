@@ -509,7 +509,7 @@ class MultiPutTest(TestCase):
 		# Now from the other end
 		model_data = {
 			'data': [{
-				'id': contact1.id,
+				'name': contact1.pk,
 				'zoos': [],
 			}]
 		}
