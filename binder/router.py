@@ -124,11 +124,6 @@ class Router(object):
 		urls = []
 		for route, view in self.route_views.items():
 			name = view.model.__name__ if view.model else route.route
-			# List and detail endpoints
-			if route.list_endpoint:
-				urls.append(re_path(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
-			if route.detail_endpoint:
-				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 
 			# History views
 			if view.model and hasattr(view.model, 'Binder') and view.model.Binder.history:
@@ -155,5 +150,11 @@ class Router(object):
 					if hasattr(method, 'list_route'):
 						urls.append(re_path(r'^{}/{}/{}$'.format(route.route, route_name, extra),
 								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
+
+			# List and detail endpoints
+			if route.list_endpoint:
+				urls.append(re_path(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
+			if route.detail_endpoint:
+				urls.append(re_path(r'^{}/(?P<pk>[0-9|a-z|A-Z]+)/$'.format(route.route), view.as_view(), {'router': self}, name=name))
 
 		return urls

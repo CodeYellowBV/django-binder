@@ -44,7 +44,7 @@ class MasqueradeMixin(UserBaseMixin):
 		"""
 		from hijack.helpers import login_user
 		login_user(request, user_to_masquerade_as)  # Ignore returned redirect response object
-		return self.respond_with_user(request, user_to_masquerade_as.id)
+		return self.respond_with_user(request, user_to_masquerade_as.pk)
 
 	@detail_route(name='masquerade')
 	@no_scoping_required()
@@ -73,7 +73,7 @@ class MasqueradeMixin(UserBaseMixin):
 				return ''
 
 		AcquireUserViewAdapter().post(request)
-		return self.respond_with_user(request, user_to_masquerade_as.id)
+		return self.respond_with_user(request, user_to_masquerade_as.pk)
 
 	def _end_masquerade(self, request) -> bool:
 		"""
@@ -111,7 +111,7 @@ class MasqueradeMixin(UserBaseMixin):
 		self._require_model_perm('unmasquerade', request)
 
 		self._end_masquerade(request)
-		return self.respond_with_user(request, request.user.id)
+		return self.respond_with_user(request, request.user.pk)
 
 	def _logout(self, request):
 		if self._end_masquerade(request):
@@ -209,8 +209,8 @@ class UserViewMixIn(UserBaseMixin):
 			raise BinderNotAuthenticated()
 		else:
 			self.auth_login(request, user)
-			logger.info('login for {}/{}'.format(user.id, user))
-			return self.respond_with_user(request, user.id)
+			logger.info('login for {}/{}'.format(user.pk, user))
+			return self.respond_with_user(request, user.pk)
 
 	def _logout(self, request):
 		auth.logout(request)
@@ -234,7 +234,7 @@ class UserViewMixIn(UserBaseMixin):
 			raise BinderMethodNotAllowed()
 
 		self._require_model_perm('logout', request)
-		logger.info('logout for {}/{}'.format(request.user.id, request.user))
+		logger.info('logout for {}/{}'.format(request.user.pk, request.user))
 		self._logout(request)
 		return HttpResponse(status=204)
 
@@ -441,12 +441,12 @@ class UserViewMixIn(UserBaseMixin):
 		if user is None or not self.token_generator.check_token(user, body.get('activation_code')):
 			raise BinderNotFound()
 
-		logger.info('login for {}/{} via successful activation'.format(user.id, user))
+		logger.info('login for {}/{} via successful activation'.format(user.pk, user))
 
 		user.is_active = True
 		user.save()
 		self.auth_login(request, user)
-		return self.respond_with_user(request, user.id)
+		return self.respond_with_user(request, user.pk)
 
 	@method_decorator(sensitive_post_parameters())
 	@method_decorator(never_cache)
@@ -496,7 +496,7 @@ class UserViewMixIn(UserBaseMixin):
 		if user is None or not self.token_generator.check_token(user, token):
 			raise BinderNotFound()
 
-		logger.info('login for {}/{} via successful password reset'.format(user.id, user))
+		logger.info('login for {}/{} via successful password reset'.format(user.pk, user))
 
 		try:
 			password_validation.validate_password(password, user)
@@ -506,7 +506,7 @@ class UserViewMixIn(UserBaseMixin):
 		user.set_password(password)
 		user.save()
 		self.auth_login(request, user)
-		return self.respond_with_user(request, user.id)
+		return self.respond_with_user(request, user.pk)
 
 	@method_decorator(sensitive_post_parameters())
 	@method_decorator(never_cache)
@@ -561,7 +561,7 @@ class UserViewMixIn(UserBaseMixin):
 
 		user.set_password(password)
 		user.save()
-		logger.info('password changed for {}/{}'.format(user.id, user))
+		logger.info('password changed for {}/{}'.format(user.pk, user))
 
 		if user == request.user:
 			"""
@@ -569,7 +569,7 @@ class UserViewMixIn(UserBaseMixin):
 			"""
 			update_session_auth_hash(request, user)
 
-		return self.respond_with_user(request, user.id)
+		return self.respond_with_user(request, user.pk)
 
 	@abstractmethod
 	def _after_soft_delete(self, request, user, undelete):

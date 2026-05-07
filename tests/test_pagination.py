@@ -287,7 +287,7 @@ class TestPagination(TestCase):
 
 		self.assertEqual(1, data['meta']['total_records'])
 		self.assertEqual(1, len(data['data']))
-		self.assertEqual(self.director.id, data['data'][0]['id'])
+		self.assertEqual(self.director.pk, data['data'][0]['id'])
 
 
 		response = self.client.get('/contact_person/', data={'order_by': 'name', 'limit': 2, 'offset': 1, '.zoos.name': 'Wildlands Adventure Zoo Emmen'})
@@ -304,8 +304,8 @@ class TestPagination(TestCase):
 
 		self.assertEqual(3, data['meta']['total_records'])
 		self.assertEqual(2, len(data['data']))
-		self.assertEqual(self.director.id, data['data'][0]['id'])
-		self.assertEqual(self.janitor.id, data['data'][1]['id'])
+		self.assertEqual(self.director.pk, data['data'][0]['id'])
+		self.assertEqual(self.janitor.pk, data['data'][1]['id'])
 
 
 		# Same set, but deeper filtering
@@ -315,8 +315,8 @@ class TestPagination(TestCase):
 
 		self.assertEqual(3, data['meta']['total_records'])
 		self.assertEqual(2, len(data['data']))
-		self.assertEqual(self.director.id, data['data'][0]['id'])
-		self.assertEqual(self.janitor.id, data['data'][1]['id'])
+		self.assertEqual(self.director.pk, data['data'][0]['id'])
+		self.assertEqual(self.janitor.pk, data['data'][1]['id'])
 
 
 	def test_limit_offset_filtering_on_annotations(self):
@@ -326,7 +326,7 @@ class TestPagination(TestCase):
 
 		self.assertEqual(2, data['meta']['total_records'])
 		self.assertEqual(1, len(data['data']))
-		self.assertEqual(self.caretaker1.id, data['data'][0]['id'])
+		self.assertEqual(self.caretaker1.pk, data['data'][0]['id'])
 
 
 		response = self.client.get('/caretaker/', data={'order_by': 'name', 'limit': 1, 'offset': 1, '.animal_count:gt': 1})
@@ -335,7 +335,7 @@ class TestPagination(TestCase):
 
 		self.assertEqual(2, data['meta']['total_records'])
 		self.assertEqual(1, len(data['data']))
-		self.assertEqual(self.caretaker2.id, data['data'][0]['id'])
+		self.assertEqual(self.caretaker2.pk, data['data'][0]['id'])
 
 
 		response = self.client.get('/caretaker/', data={'order_by': 'name', 'limit': 1, 'offset': 0, '.animal_count:gt': 2})
@@ -344,7 +344,7 @@ class TestPagination(TestCase):
 
 		self.assertEqual(1, data['meta']['total_records'])
 		self.assertEqual(1, len(data['data']))
-		self.assertEqual(self.caretaker1.id, data['data'][0]['id'])
+		self.assertEqual(self.caretaker1.pk, data['data'][0]['id'])
 
 
 	# This is a bit of a hack to ensure that people aren't using Q()

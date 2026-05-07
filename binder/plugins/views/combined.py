@@ -181,6 +181,7 @@ def combined_view(request, router, names):
 
 	queries = []
 	params = []
+	# TODO What is this?
 	for i, name in enumerate(names):
 		queryset = querysets[name]
 		suborder_bys = []
@@ -220,6 +221,7 @@ def combined_view(request, router, names):
 		queries.append(query)
 		params.extend(subparams)
 
+	# TODO Update this
 	query = (
 		'SELECT combined.id ' +
 		'FROM (' + ' UNION '.join(f"({query})" for query in queries) + ') AS combined (id' + ''.join(f', ordering_{i}' for i in range(len(order_bys))) + ')' +
