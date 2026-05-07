@@ -16,20 +16,24 @@ class TestFilterAlternativeFilters(TestCase):
 		r = self.client.login(username='testuser', password='test')
 		self.assertTrue(r)
 
-		ContactPerson(id=1, name='contact1').save()
-		ContactPerson(id=2, name='contact2').save()
-		ContactPerson(id=3, name='zoo3').save()
+		ContactPerson(name='contact1').save()
+		ContactPerson(name='contact2').save()
+
+		# Yes... we are really creating a contact person with name zoo3; NOT a zoo with name zoo3.
+		# This is needed for the `test_alt_filters_not_all` test.
+		ContactPerson(name='zoo3').save()
+
 		z1 = Zoo(id=1, name='zoo1')
 		z1.save()
-		z1.contacts.set([1, 2])
+		z1.contacts.set(['contact1', 'contact2'])
 
 		z2 = Zoo(id=2, name='zoo2')
 		z2.save()
-		z2.contacts.set([2])
+		z2.contacts.set(['contact2'])
 
 		z3 = Zoo(id=3, name='zoo3')
 		z3.save()
-		z3.contacts.set([3])
+		z3.contacts.set(['zoo3'])
 
 	def test_filter_alternative_contacts_one_foreign_field(self):
 		response = self.client.get('/zoo/?.all_contact_name:icontains=contact1')

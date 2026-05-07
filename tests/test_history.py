@@ -66,13 +66,13 @@ class HistoryTest(TestCase):
 		self.assertEqual(1, len(data[0]['changes']))
 		add_rene = data[0]['changes'][0]
 		self.assertEqual('contacts', add_rene['field'])
-		self.assertEqual('Burhan, Rene', add_rene['after'])
-		self.assertEqual('Burhan', add_rene['before'])
+		self.assertEqual('BURHAN, RENE', add_rene['after'])
+		self.assertEqual('BURHAN', add_rene['before'])
 
 		self.assertEqual(13, len(data[1]['changes']))
 		add_burhan = data[1]['changes'][4]
 		self.assertEqual('contacts', add_burhan['field'])
-		self.assertEqual('Burhan', add_burhan['after'])
+		self.assertEqual('BURHAN', add_burhan['after'])
 		self.assertEqual('', add_burhan['before'])
 
 	def test_basic_relation_formatting(self):
@@ -96,8 +96,8 @@ class HistoryTest(TestCase):
 		changes = data[0]['changes']
 		set_director = changes[4]
 		self.assertEqual('director', set_director['field'])
-		self.assertEqual('null', set_director['before'])
-		self.assertEqual('Burhan', set_director['after'])
+		self.assertIsNone(set_director['before'])
+		self.assertEqual('BURHAN', set_director['after'])
 
 		model_data = {
 			'name': 'Code Yellow',
@@ -114,31 +114,31 @@ class HistoryTest(TestCase):
 		changes = data[0]['changes']
 		set_director = changes[0]
 		self.assertEqual('director', set_director['field'])
-		self.assertEqual('Burhan', set_director['before'])
-		self.assertEqual('null', set_director['after'])
+		self.assertEqual('BURHAN', set_director['before'])
+		self.assertIsNone(set_director['after'])
 
 	def test_m2m_relation_formatting(self):
-		burhan = ContactPerson.objects.create(name='Burhan')
-		rene = ContactPerson.objects.create(name='Rene')
-		tim = ContactPerson.objects.create(name='Tim')
-		nuria = ContactPerson.objects.create(name='Nuria')
+		atari = Animal.objects.create(name='Atari')
+		yuzu = Animal.objects.create(name='Yuzu')
+		zuki = Animal.objects.create(name='Zuki')
+		moxy = Animal.objects.create(name='Moxy')
 
 		model_data = {
 			'name': 'Code Yellow',
-			'contacts': [burhan.id, rene.id]
+			'most_popular_animals': [atari.pk, yuzu.pk]
 		}
 		response = self.client.post('/zoo/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 		zoo_id = json.loads(response.content)['id']
 
 		model_data = {
-			'contacts': [rene.id, tim.id, nuria.id]
+			'most_popular_animals': [yuzu.pk, zuki.pk, moxy.pk]
 		}
 		response = self.client.put(f'/zoo/{zoo_id}/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 
 		model_data = {
-			'contacts': [burhan.id, nuria.id]
+			'most_popular_animals': [atari.pk, moxy.pk]
 		}
 		response = self.client.put(f'/zoo/{zoo_id}/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
@@ -150,21 +150,21 @@ class HistoryTest(TestCase):
 
 		remove_all = data[0]['changes']
 		self.assertEqual(1, len(remove_all))
-		self.assertEqual('contacts', remove_all[0]['field'])
-		self.assertEqual('Burhan, Nuria', remove_all[0]['after'])
-		self.assertEqual('Rene, Tim, Nuria', remove_all[0]['before'])
+		self.assertEqual('most_popular_animals', remove_all[0]['field'])
+		self.assertEqual(f'Atari, {moxy.pk}', remove_all[0]['after'])
+		self.assertEqual(f'Yuzu, Zuki, {moxy.pk}', remove_all[0]['before'])
 
 		replace = data[1]['changes']
 		self.assertEqual(1, len(replace))
-		self.assertEqual('contacts', replace[0]['field'])
-		self.assertEqual('Rene, Tim, Nuria', replace[0]['after'])
-		self.assertEqual('Burhan, Rene', replace[0]['before'])
+		self.assertEqual('most_popular_animals', replace[0]['field'])
+		self.assertEqual(f'Yuzu, Zuki, {moxy.pk}', replace[0]['after'])
+		self.assertEqual('Atari, Yuzu', replace[0]['before'])
 
 		initial = data[2]['changes']
-		first_contacts = initial[4]
-		self.assertEqual('contacts', first_contacts['field'])
-		self.assertEqual('Burhan, Rene', first_contacts['after'])
-		self.assertEqual('', first_contacts['before'])
+		first_animals = initial[10]
+		self.assertEqual('most_popular_animals', first_animals['field'])
+		self.assertEqual('Atari, Yuzu', first_animals['after'])
+		self.assertEqual('', first_animals['before'])
 
 	def test_model_with_history_creates_changes_on_creation(self):
 		model_data = {
@@ -351,7 +351,7 @@ class HistoryTest(TestCase):
 		"""Test that fields listed in exclude_history_fields are not tracked in history"""
 		original_exclude_fields = getattr(Animal.Binder, 'exclude_history_fields', [])
 		Animal.Binder.exclude_history_fields = ['name']
-		
+
 		try:
 			model_data = {
 				'name': 'Test Animal',
@@ -359,30 +359,30 @@ class HistoryTest(TestCase):
 			response = self.client.post('/animal/', data=json.dumps(model_data), content_type='application/json')
 			self.assertEqual(response.status_code, 200)
 			animal_id = json.loads(response.content)['id']
-			
+
 			# Check that we have a changeset for the creation
 			self.assertEqual(1, Changeset.objects.count())
 			cs = Changeset.objects.get()
-			
+
 			# Check that changes exist for normal fields but not for excluded fields
 			changes = Change.objects.filter(changeset=cs)
 			field_names = [change.field for change in changes]
-			
+
 			# The 'name' field should be excluded from history
 			self.assertNotIn('name', field_names)
 			# Other fields should still be tracked
 			self.assertIn('id', field_names)
 			self.assertIn('deleted', field_names)
-			
+
 			model_data = {
 				'name': 'Updated Animal Name',
 			}
 			response = self.client.patch(f'/animal/{animal_id}/', data=json.dumps(model_data), content_type='application/json')
 			self.assertEqual(response.status_code, 200)
-			
+
 			# Should still only have 1 changeset (no new one created for excluded field)
 			self.assertEqual(1, Changeset.objects.count())
-			
+
 			# Now update both an excluded field AND a non-excluded field
 			zoo = Zoo.objects.create(name='Test Zoo')
 			model_data = {
@@ -391,20 +391,20 @@ class HistoryTest(TestCase):
 			}
 			response = self.client.patch(f'/animal/{animal_id}/', data=json.dumps(model_data), content_type='application/json')
 			self.assertEqual(response.status_code, 200)
-			
+
 			# Now we should have 2 changesets (original creation + this mixed update)
 			self.assertEqual(2, Changeset.objects.count())
-			
+
 			# Check the latest changeset (for the mixed update)
 			latest_cs = Changeset.objects.order_by('-id').first()
 			latest_changes = Change.objects.filter(changeset=latest_cs)
 			latest_field_names = [change.field for change in latest_changes]
-			
+
 			# Only the zoo field should be recorded, not the name
 			self.assertEqual(1, len(latest_field_names))
 			self.assertIn('zoo', latest_field_names)
 			self.assertNotIn('name', latest_field_names)
-			
+
 		finally:
 			# Restore original exclude_history_fields setting
 			Animal.Binder.exclude_history_fields = original_exclude_fields
