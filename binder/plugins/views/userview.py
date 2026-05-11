@@ -110,8 +110,10 @@ class MasqueradeMixin(UserBaseMixin):
 
 		self._require_model_perm('unmasquerade', request)
 
-		self._end_masquerade(request)
-		return self.respond_with_user(request, request.user.pk)
+		if self._end_masquerade(request):
+			return self.respond_with_user(request, request.user.id)
+		else:
+			return HttpResponse(status=403)
 
 	def _logout(self, request):
 		if self._end_masquerade(request):
