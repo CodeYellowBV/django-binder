@@ -18,6 +18,18 @@ class Animal(LoadedValuesMixin, BinderModel):
 	deleted = models.BooleanField(default=False)  # Softdelete
 	birth_date = models.DateField(blank=True, null=True)
 
+	@classmethod
+	def format_instance_for_history(cls, pk):
+		if pk is not None:
+			try:
+				name = Animal.objects.get(pk=pk).name
+				# This looks silly, but is a good opportunity to test how we handle lists containing both names and integer IDs
+				if name != 'Moxy':
+					return name
+			except:
+				pass
+		return pk
+
 	def __str__(self):
 		return 'animal %d: %s' % (self.pk, self.name)
 

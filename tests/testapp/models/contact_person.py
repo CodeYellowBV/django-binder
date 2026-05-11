@@ -3,16 +3,18 @@ from django.core.exceptions import ValidationError
 from binder.models import BinderModel
 
 class ContactPerson(BinderModel):
-	name = models.CharField(unique=True, max_length=50)
+	name = models.CharField(primary_key=True, max_length=50)
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
+	pk_regex = '.*'
+
 	@classmethod
-	def format_instance_for_history(cls, id: int):
-		try:
-			return ContactPerson.objects.get(id=id).name
-		except:
-			return 'deleted? ' + str(id)
+	def format_instance_for_history(cls, pk):
+		if isinstance(pk, str):
+			return pk.upper()
+		else:
+			return pk
 
 	def __str__(self):
 		return 'contact_person %d: %s' % (self.pk, self.name)

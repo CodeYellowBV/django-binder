@@ -16,7 +16,7 @@ def view_logger(logger, log_request_body=True):
 			time_start = time.time()
 			logger.info('request dispatch; verb={}, user={}/{}, path={}'.format(
 				request.method,
-				request.user.id,
+				request.user.pk,
 				request.user,
 				request.path,
 			))
