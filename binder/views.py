@@ -961,7 +961,7 @@ class ModelView(View):
 			view.router = self.router
 			for annotations, with_pks in annotation_ids.items():
 				objs = view._get_objs(
-					view.get_queryset(request).filter(pk__in=with_pks),
+					view.get_queryset(request).filter(pk__in=list(with_pks)),
 					request=request,
 					annotations=annotations,
 					to_annotate={
@@ -1142,7 +1142,6 @@ class ModelView(View):
 						view.model.objects
 						.filter(prefix_q_expression(q, rev_field, field, view.model), **{rev_field + '__in': pks})
 						.values_list(rev_field + '__pk', 'pk')
-						.distinct()
 					)
 				else:
 					# Model default orders (this sometimes matters)

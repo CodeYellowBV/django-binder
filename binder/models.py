@@ -461,6 +461,12 @@ class JSONFieldFilter(FieldFilter):
 			# any other Binder JSON decode when there are errors.
 			return jsonloads(bytes(v, 'utf-8'))
 
+class CompositePrimaryKeyFilter(FieldFilter):
+	fields = [models.CompositePrimaryKey] if hasattr(models, 'CompositePrimaryKey') else []
+	allowed_qualifiers = [None, 'isnull']
+
+	def clean_value(self, qualifier, v):
+		return v
 
 
 class BinderModelBase(models.base.ModelBase):
