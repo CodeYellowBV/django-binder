@@ -69,7 +69,9 @@ class HistoryTest(TestCase):
 		self.assertEqual('BURHAN, RENE', add_rene['after'])
 		self.assertEqual('BURHAN', add_rene['before'])
 
-		self.assertEqual(13, len(data[1]['changes']))
+		# The exact number of changes depends on the upper_name field of Zoo, which depends on the Django version.
+		self.assertGreaterEqual(len(data[1]['changes']), 13)
+		self.assertLessEqual(len(data[1]['changes']), 14)
 		add_burhan = data[1]['changes'][4]
 		self.assertEqual('contacts', add_burhan['field'])
 		self.assertEqual('BURHAN', add_burhan['after'])

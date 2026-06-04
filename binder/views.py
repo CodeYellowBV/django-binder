@@ -1314,6 +1314,8 @@ class ModelView(View):
 		class_for_filtering = field.__class__
 		if isinstance(field, models.ForeignObject) or isinstance(field, models.ManyToManyField) or isinstance(field, models.ForeignObjectRel):
 			class_for_filtering = field.related_model._meta.pk.__class__
+		if hasattr(models, 'GeneratedField') and isinstance(field, models.GeneratedField):
+			class_for_filtering = field.output_field.__class__
 
 		for field_class in inspect.getmro(class_for_filtering):
 			filter_class = self.get_field_filter(field_class)

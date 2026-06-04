@@ -21,11 +21,23 @@ class ZooContactPerson(BinderModel):
 	zoo = models.ForeignKey('Zoo', on_delete=models.CASCADE)
 	contact_person =  models.ForeignKey('ContactPerson', on_delete=models.CASCADE)
 
+def choose_upper_name_field():
+    if 'DJANGO_VERSION' in os.environ and tuple(map(int, os.environ['DJANGO_VERSION'].split('.'))) < (5, 0, 0):
+        return models.TextField(blank=True)
+    else:
+        return models.GeneratedField(
+			expression=models.functions.Upper('name'),
+			output_field=models.TextField(blank=True),
+			db_persist=True,
+		)
+
+
 class Zoo(BinderModel):
 	class Binder:
 		history = True
 
 	name = models.TextField()
+	upper_name = choose_upper_name_field()
 	founding_date = models.DateField(null=True, blank=True)
 	floor_plan = models.ImageField(upload_to='floor-plans', null=True, blank=True)
 	# It is important that this m2m relationship is defined on this model, one of the tests depends on this fact
