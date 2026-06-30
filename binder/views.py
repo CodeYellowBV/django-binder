@@ -1054,7 +1054,9 @@ class ModelView(View):
 				related_model = field.remote_field.model
 				related_field = field.remote_field.related_name # For completeness
 
-			if field.remote_field.hidden: # Skip missing related fields
+			if field.remote_field.hidden and not isinstance(field, django.db.models.fields.reverse_related.OneToOneRel):
+				# Skip missing related fields, but not reverse OneToOne
+				# (reverse OneToOne always has a valid FK field on the child model)
 				related_field = None
 
 		except FieldDoesNotExist:
