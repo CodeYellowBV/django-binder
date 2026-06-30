@@ -560,6 +560,27 @@ class ModelViewBasicsTest(TestCase):
 		self.assertEqual(scrooge.pk, costume_by_id[frock.pk]['id'])
 		self.assertEqual(donald.pk, costume_by_id[sailor.pk]['id'])
 
+	def test_get_collection_with_reverse_one_to_one_mapping(self):
+		"""Reverse OneToOne should populate with_related_name_mapping.
+
+		When querying /animal/?with=costume, the response should include
+		with_related_name_mapping['costume'] == 'animal', so the frontend
+		can correctly resolve the FK field for reverse OneToOne relations.
+		"""
+		scrooge = Animal(name='Scrooge McDuck')
+		scrooge.save()
+
+		frock = Costume(description="Gentleman's frock coat", animal=scrooge)
+		frock.save()
+
+		response = self.client.get('/animal/', data={'order_by': 'name', 'with': 'costume'})
+		self.assertEqual(response.status_code, 200)
+
+		result = jsonloads(response.content)
+		# The key assertion: reverse OneToOne should have a proper with_related_name_mapping
+		self.assertIn('costume', result['with_related_name_mapping'])
+		self.assertEqual('animal', result['with_related_name_mapping']['costume'])
+
 	def test_get_model_with_relation_without_id(self):
 		gaia = Zoo(name='GaiaZOO')
 		gaia.save()
