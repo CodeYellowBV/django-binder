@@ -1,5 +1,49 @@
+# Changelog
 
-## HEAD
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.0.0] - 2026-07-03
+
+We're bringing back versioning! Starting from this release we maintain a
+proper changelog again, following a new, consistent style: each entry is a
+short, human-readable summary of a change grouped under its version.
+
+### Added
+
+- Enforce a changelog entry on pull requests so this list stays up to date.
+- Add support for reverse relation history tracking.
+- Add `icontains` filtering support to `IntegerField`.
+- [T50264] Allow filtering and sorting for `RelativeDeltaField`.
+- Add an `exclude_history_fields` field for binder history.
+- [T35318] Add column settings to `MyFilters`.
+- Django 5 support (#252).
+- Add support for direct serving.
+- Allow the same annotation to be used several times by stats.
+- And many many more stuff from a few years of development.
+
+### Changed
+
+- Include reverse `OneToOne` relations in `with_related_name_mapping`.
+- Improve error handling for reverse relation checks.
+- Make binder compatible with `django-hijack > 3`.
+- [T49679] Fix the `where` parameter when used with included annotations.
+- List the supported qualifiers in the error message when an unsupported qualifier is used.
+- [T50036] Improve history formatting.
+- Greatly speed up download speed of file fields.
+- Prevent Excel export from generating two (empty) sheets.
+- Fix a SQL error when a view scope depended on a nullable foreign key during a PUT.
+- Close RabbitMQ connections after publishing to prevent file descriptor leaks.
+- And many many more stuff from a few years of development.
+
+### Removed
+
+- Stop using the deprecated `setuptools` test command in the test script.
+- And many many more stuff from a few years of development.
+
+## [1.5.0] - 2020-01-13
 
 ### Breaking changes
 
@@ -38,32 +82,32 @@ Django 2 support has been removed.
   `distinct()` call.  The distinct call is not added because this
   would decrease performance.
 
-## Version 1.4.0
+## [1.4.0] - 2018-11-16
 
 ### Features
 - Add `Router.bootstrap()`function, which automatically imports all `views` directories of all the registered apps in django. Also, it automatically registers the default ModelView of binder.
-  
+
   Old:
-  
+
 	```python
 	from binder.router import Router
 	from binder.views import ModelView
-	
+
 	# needed for binder.router to work
 	import cyrm.views  # noqa
 	import base.orders.views  # noqa
 	import ib.ib_orders.views  # noqa
 	....
 	import base.planning.views # noqa
-	
+
 	router = Router().register(ModelView)
-	
+
 	api_urls = [
 		re_path('^', include(router.urls)),
 	]
-	
+
 	```
-	
+
 	New:
 	```python
 	from binder.router import Router
@@ -72,7 +116,7 @@ Django 2 support has been removed.
 		re_path('^', include(router.urls)),
 	]
 	```
-	
+
 - Allow callables for annotations, deferring their initializations until the corresponding view is initialized. Example:
 ```python
     class Annotations:
@@ -94,7 +138,7 @@ Django 2 support has been removed.
 
 ### Deprecations / removals
 
-## Version 1.3.0
+## [1.3.0] - 2018-11-15
 
 ### Features
 - Add support for `nulls_first` and `nulls_last` sorting postfixes on annotations (only in Django >=2.1)
