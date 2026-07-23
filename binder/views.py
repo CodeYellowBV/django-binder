@@ -496,7 +496,7 @@ class ModelView(View):
 		logger.info('request dispatch; verb={}, user={}/{}, path={}'.
 				format(
 					request.method,
-					request.user.id,
+					request.user.pk,
 					request.user,
 					request.path,
 				))
@@ -702,7 +702,7 @@ class ModelView(View):
 					file = getattr(obj, f.attname)
 					if file:
 						# {router-view-instance}
-						data[f.name] = self.router.model_route(self.model, obj.id, f)
+						data[f.name] = self.router.model_route(self.model, obj.pk, f)
 						# {duplicate-binder-file-field-hash-code}
 						if isinstance(f, BinderFileField):
 							data[f.name] += '?h={}&content_type={}&filename={}'.format(
@@ -723,7 +723,8 @@ class ModelView(View):
 				data[prop] = getattr(obj, prop)
 
 			if self.model._meta.pk.name in data:
-				data['id'] = data.pop(self.model._meta.pk.name)
+				# The following line may look a bit weird, but is needed for mobx-spine
+				data['id'] = data[self.model._meta.pk.name]
 
 			datas.append(data) # order matters!
 			datas_by_id[obj.pk] = data
@@ -960,7 +961,7 @@ class ModelView(View):
 			view.router = self.router
 			for annotations, with_pks in annotation_ids.items():
 				objs = view._get_objs(
-					view.get_queryset(request).filter(pk__in=with_pks),
+					view.get_queryset(request).filter(pk__in=list(with_pks)),
 					request=request,
 					annotations=annotations,
 					to_annotate={
@@ -1141,7 +1142,6 @@ class ModelView(View):
 						view.model.objects
 						.filter(prefix_q_expression(q, rev_field, field, view.model), **{rev_field + '__in': pks})
 						.values_list(rev_field + '__pk', 'pk')
-						.distinct()
 					)
 				else:
 					# Model default orders (this sometimes matters)
@@ -1310,7 +1310,14 @@ class ModelView(View):
 				return Q(**{partial + 'in': qs})
 			field = annotations[field_name]['field']
 
-		for field_class in inspect.getmro(field.__class__):
+		# For foreign keys and similar fields, we should use the filter of the primary key of the related object
+		class_for_filtering = field.__class__
+		if isinstance(field, models.ForeignObject) or isinstance(field, models.ManyToManyField) or isinstance(field, models.ForeignObjectRel):
+			class_for_filtering = field.related_model._meta.pk.__class__
+		if hasattr(models, 'GeneratedField') and isinstance(field, models.GeneratedField):
+			class_for_filtering = field.output_field.__class__
+
+		for field_class in inspect.getmro(class_for_filtering):
 			filter_class = self.get_field_filter(field_class)
 			if filter_class:
 				filter = filter_class(field)
@@ -1365,7 +1372,7 @@ class ModelView(View):
 		q = Q()
 		for s, transform in dict(
 			self.transformed_searches,
-			**{s: int if s == 'id' else str for s in self.searches}
+			**{s: int if s == 'id' else str for s in self.searches} # FIXME this may need to be adapted to support non-integer primary keys
 		).items():
 			try:
 				q |= Q(**{s: transform(search)})
@@ -1559,7 +1566,7 @@ class ModelView(View):
 
 		queryset = queryset.annotate(**{name: annotations[name] for name in required_annotations})
 		try:
-			obj = queryset.get(pk=int(after_id))
+			obj = queryset.get(pk=int(after_id)) # FIXME this may need to be adapted to support non-integer primary keys
 		except (ValueError, self.model.DoesNotExist):
 			raise BinderRequestError(f'invalid value for after_id: {after_id!r}')
 
@@ -1628,7 +1635,7 @@ class ModelView(View):
 	def _get_filtered_queryset_base(self, request, pk=None, include_annotations=None):
 		queryset = self.get_queryset(request)
 		if pk:
-			queryset = queryset.filter(pk=int(pk))
+			queryset = queryset.filter(pk=pk)
 
 		# No parameter repetition. Should be extended to .params too after filters have been refactored.
 		for k, v in request.GET.lists():
@@ -1711,7 +1718,7 @@ class ModelView(View):
 		)
 
 		# Now we add all remaining annotations to this data
-		data_by_pk = {obj['id']: obj for obj in data}
+		data_by_pk = {obj[self.model._meta.pk.name]: obj for obj in data}
 		pks = set(data_by_pk)
 
 		#### with
@@ -1882,7 +1889,7 @@ class ModelView(View):
 		# ReverseManyToOneDescriptor. Yes, really.
 		if getattr(obj._meta.model, field).__class__ == models.fields.related.ReverseManyToOneDescriptor:
 			#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
-			if any(v for v in value if v < 0):
+			if any(v for v in value if isinstance(v, int) and v < 0):
 				return
 			# If the m2m to be set is actually a reverse FK relation, we need to do extra magic.
 			# We figure out if the remote objects are added or removed. The added ones, we modify/save
@@ -1890,10 +1897,10 @@ class ModelView(View):
 			# doesn't see the changes. The same goes for the removed objects, except there we also
 			# DELETE them if the FK is non-nullable. Interesting stuff.
 			obj_field = getattr(obj, field)
-			old_ids = set(obj_field.values_list('id', flat=True))
+			old_ids = set(obj_field.values_list('pk', flat=True))
 			new_ids = set(value)
 
-			rmobjs = obj_field.model.objects.filter(id__in=old_ids - new_ids)
+			rmobjs = obj_field.model.objects.filter(pk__in=list(old_ids - new_ids))
 			# Skip already softdeleted objects for models which
 			# support softdeletion (this could be a lot of records)
 			if any([f.name == 'deleted' for f in obj_field.model._meta.fields]):
@@ -1917,7 +1924,7 @@ class ModelView(View):
 					rmobj_view.delete_obj(rmobj, False, request)
 
 
-			for addobj in obj_field.model.objects.filter(id__in=new_ids - old_ids):
+			for addobj in obj_field.model.objects.filter(pk__in=list(new_ids - old_ids)):
 				setattr(addobj, obj_field.field.name, obj)
 				try:
 					addobj.save()
@@ -2087,8 +2094,8 @@ class ModelView(View):
 		for f in self.model._meta.fields:
 			if f.name == field:
 				if isinstance(f, models.ForeignKey):
-					if not (value is None or isinstance(value, int)):
-						raise BinderFieldTypeError(self.model.__name__, field)
+					if value is not None:
+						self._validate_value(f, field, value)
 
 					# Previously, this value was updated using the following code:
 					# - setattr(obj, f.attname, value)
@@ -2217,13 +2224,15 @@ class ModelView(View):
 		for f in list(self.model._meta.many_to_many) + list(self._get_reverse_relations()):
 			if f.name == field:
 				# Force it to be seen as a deferred field
-				if isinstance(obj._meta.get_field(field), models.OneToOneRel):
-					if value is not None and not isinstance(value, int):
-						raise BinderFieldTypeError(self.model.__name__, field)
-
+				field_object = obj._meta.get_field(field)
+				if isinstance(field_object, models.OneToOneRel):
 					value = [value]
-				elif not (isinstance(value, list) and all(isinstance(v, int) for v in value)):
-					raise BinderFieldTypeError(self.model.__name__, field)
+				else:
+					if not isinstance(value, list):
+						raise BinderFieldTypeError(self.model.__name__, field)
+					for v in value:
+						self._validate_value(field_object, field, v)
+
 				# FIXME
 				# Check if the ids being saved as m2m actually exist. This kinda sucks, it would be much
 				# better to have this handled by the DB transaction layer. Which DOES actually check and
@@ -2231,9 +2240,9 @@ class ModelView(View):
 				# So yeah, we kludge around here. :(
 				#ids = set(value)
 				#### XXX FIXME XXX ugly quick fix for reverse relation + multiput issue
-				ids = set(v for v in value if v is not None and v > 0)
-				ids -= set(obj._meta.get_field(field).remote_field.model.objects.filter(id__in=ids).values_list('id', flat=True))
-				if ids:
+				pks = set(v for v in value if v is not None and ((not isinstance(v, int)) or v > 0))
+				pks -= set(obj._meta.get_field(field).remote_field.model.objects.filter(pk__in=list(pks)).values_list('pk', flat=True))
+				if pks:
 					field_name = obj._meta.get_field(field).remote_field.model.__name__
 					model_name = self.get_model_view(obj.__class__)._model_name()
 					raise BinderValidationError({
@@ -2241,9 +2250,9 @@ class ModelView(View):
 							obj.pk: {
 								field: [{
 									'code': 'does_not_exist',
-									'message': '{} instances {} do not exist'.format(field_name, list(ids)),
+									'message': '{} instances {} do not exist'.format(field_name, list(pks)),
 									'model': field_name,
-									'values': list(ids)
+									'values': list(pks)
 								}]
 							}
 						}
@@ -2252,7 +2261,16 @@ class ModelView(View):
 
 		raise BinderInvalidField(self.model.__name__, field)
 
-
+	def _validate_value(self, field_object, field_name, candidate_value):
+		for field_class in inspect.getmro(field_object.related_model._meta.pk.__class__):
+			filter_class = self.get_field_filter(field_class)
+			if filter_class:
+				filter = filter_class(field_name)
+				try:
+					filter.clean_value(None, candidate_value)
+				except Exception:
+					# If the filter can't clean the value, we assume it's invalid
+					raise BinderFieldTypeError(self.model.__name__, field_name)
 
 	def _require_model_perm(self, perm_type, request, pk=None):
 		if hasattr(self, 'perms_via'):
@@ -2333,6 +2351,8 @@ class ModelView(View):
 		return data, deletions
 
 
+	def _is_classic_id(self, pk):
+		return (pk.name == 'id' and isinstance(pk, models.IntegerField)) or (pk.name.endswith('_ptr') and isinstance(pk, models.ForeignObject))
 
 	# Sort object values by model/id
 	def _multi_put_collect_objects(self, data):
@@ -2349,12 +2369,16 @@ class ModelView(View):
 			for idx, obj in enumerate(objs):
 				if not isinstance(obj, dict):
 					raise BinderRequestError('with.{}[{}] should be a dictionary'.format(modelname, idx))
-				if not 'id' in obj:
-					raise BinderRequestError('missing id in with.{}[{}]'.format(modelname, idx))
-				if not isinstance(obj['id'], int):
-					raise BinderRequestError('non-numeric id in with.{}[{}]'.format(modelname, idx))
 
-				objects[(model, obj['id'])] = obj
+				if self._is_classic_id(model._meta.pk):
+					if 'id' not in obj:
+						raise BinderRequestError('missing id in with.{}[{}]'.format(modelname, idx))
+					objects[(model, obj['id'])] = obj
+				else:
+					pk_name = model._meta.pk.name
+					if pk_name not in obj:
+						raise BinderRequestError('missing id in with.{}[{}]'.format(modelname, idx))
+					objects[(model, obj[pk_name])] = obj
 
 		return objects
 
@@ -2408,13 +2432,13 @@ class ModelView(View):
 					# Only look at relations that are included
 					continue
 
-				if isinstance(data[field.name], int):
+				if isinstance(data[field.name], int): # FIXME this may need to be adapted to support non-integer primary keys
 					target = (field.related_model, data[field.name])
 					if target in overrides:
 						data[field.name] = overrides[target][1]
 				elif isinstance(data[field.name], list):
 					for i, mid in enumerate(data[field.name]):
-						if isinstance(mid, int):
+						if isinstance(mid, int): # FIXME this may need to be adapted to support non-integer primary keys
 							target = (field.related_model, mid)
 							if target in overrides:
 								data[field.name][i] = overrides[target][1]
@@ -2427,16 +2451,17 @@ class ModelView(View):
 			for field in filter(lambda f: f.one_to_many or f.one_to_one, model._meta.get_fields()):
 				if field.name in values:
 					if field.one_to_many:
-						if not isinstance(values[field.name], list) or not all(isinstance(v, int) for v in values[field.name]):
+						if not isinstance(values[field.name], list):
 							raise BinderFieldTypeError(model.__name__, field.name)
+						for v in values[field.name]:
+							self._validate_value(field, field.name, v)
 						rids = values[field.name]
 					elif field.one_to_one:
-						if isinstance(values[field.name], int):
+						if values[field.name] is not None:
+							self._validate_value(field, field.name, values[field.name])
 							rids = [values[field.name]]
-						elif values[field.name] is None:
-							rids = []
 						else:
-							raise BinderFieldTypeError(model.__name__, field.name)
+							rids = []
 
 					for rid in rids:
 						if (field.related_model, rid) in objects:
@@ -2457,8 +2482,7 @@ class ModelView(View):
 				if isinstance(field, models.ForeignKey):
 					if field.name in values:
 						if values[field.name] is not None:
-							if not isinstance(values[field.name], int):
-								raise BinderRequestError('with.{}.{} should be an integer'.format(model.__name__, field.name))
+							self._validate_value(field, field.name, values[field.name])
 							deps[field.related_model].append(values[field.name])
 
 			for field in model._meta.many_to_many:
@@ -2466,7 +2490,7 @@ class ModelView(View):
 					if not isinstance(values[field.name], list):
 						raise BinderRequestError('with.{}.{} should be a list'.format(model.__name__, field.name))
 					for i, v in enumerate(values[field.name]):
-						if not isinstance(multiput_get_id(v), int):
+						if not isinstance(multiput_get_id(v), int): # FIXME this may need to be adapted to support non-integer primary keys
 							pass
 					deps[field.related_model] += (values[field.name])
 
@@ -2507,7 +2531,7 @@ class ModelView(View):
 
 			ordered_objects += sorted(
 				this_batch,
-				key=lambda obj: (obj[0].__name__, sign(obj[1]), abs(obj[1])),
+				key=lambda obj: (obj[0].__name__, sign(obj[1]) if isinstance(obj[1], int) else obj[1], abs(obj[1]) if isinstance(obj[1], int) else obj[1]),
 			)
 
 		return ordered_objects
@@ -2521,8 +2545,12 @@ class ModelView(View):
 		# Gather non-negative oids per model (unordered)
 		model_oids = defaultdict(set)
 		for model, oid in ordered_objects:
-			if oid >= 0:
-				model_oids[model].add(oid)
+			if self._is_classic_id(model._meta.pk):
+				if oid >= 0:
+					model_oids[model].add(oid)
+			else:
+				if model.objects.filter(pk=oid).exists():
+					model_oids[model].add(oid)
 
 		# Do one big query to get and lock all the objects of each
 		# type.  This saves us from querying each individual object in
@@ -2539,51 +2567,56 @@ class ModelView(View):
 
 
 		for model, oid in ordered_objects:
-			values = objects[(model, oid)]
+			values = dict(objects[(model, oid)])
 			logger.info('Saving {} {}'.format(model.__name__, oid))
 
-			if oid >= 0:
+			if self._is_classic_id(model._meta.pk):
+				if oid >= 0:
+					try:
+						obj = locked_objects[(model, oid)]
+					except KeyError:
+						raise BinderNotFound('{}[{}]'.format(model.__name__, oid))
+				else:
+					obj = model()
+				del values['id']
+			else:
 				try:
 					obj = locked_objects[(model, oid)]
 				except KeyError:
-					raise BinderNotFound('{}[{}]'.format(model.__name__, oid))
-				if hasattr(obj, 'deleted') and obj.deleted:
-					raise BinderIsDeleted()
-			else:
-				obj = model()
+					obj = model(**{ model._meta.pk.name: oid })
 
-			values = dict(values)
-			del values['id']
+			if hasattr(obj, 'deleted') and obj.deleted:
+				raise BinderIsDeleted()
 
 			# FIXME
 			for field in model._meta.fields:
 				if isinstance(field, models.ForeignKey):
 					if field.name in values:
-						if values[field.name] is not None and values[field.name] < 0:
+						if values[field.name] is not None and isinstance(values[field.name], int) and values[field.name] < 0:
 							values[field.name] = new_id_map[(field.related_model, values[field.name])]
 
 			for field in model._meta.many_to_many:
 				if field.name in values:
-					values[field.name] = [(new_id_map[(field.related_model, multiput_get_id(i))] if multiput_get_id(i) < 0 else i) for i in values[field.name]]
+					values[field.name] = [(new_id_map[(field.related_model, multiput_get_id(i))] if isinstance(i, int) and multiput_get_id(i) < 0 else i) for i in values[field.name]]
 
 			for field in [f for f in model._meta.get_fields() if f.one_to_many]:
 				if field.name in values:
-					values[field.name] = [multiput_get_id(i) for i in values[field.name] if multiput_get_id(i) >= 0]
+					values[field.name] = [multiput_get_id(i) for i in values[field.name] if isinstance(multiput_get_id(i), int) and multiput_get_id(i) >= 0]
 
 			view = self.get_model_view(model)
 			try:
 				view._store(obj, values, request, pk=oid)
 			except BinderValidationError as e:
 				validation_errors.append(e)
-			if oid < 0:
-				new_id_map[(model, oid)] = obj.id
+			if isinstance(oid, int) and oid < 0:
+				new_id_map[(model, oid)] = obj.pk
 				for base in getmro(model)[1:]:
 					if not (
 						hasattr(base, 'Meta') and
 						getattr(base.Meta, 'abstract', False)
 					) and isinstance(base, BinderModel):
-						new_id_map[(base, oid)] = obj.id
-				logger.info('Saved as id {}'.format(obj.id))
+						new_id_map[(base, oid)] = obj.pk
+				logger.info('Saved as id {}'.format(obj.pk))
 
 		if validation_errors:
 			raise sum(validation_errors, None)
@@ -2616,7 +2649,7 @@ class ModelView(View):
 			model_view = self.get_model_view(model)
 
 			for i, pk in enumerate(pks):
-				if not isinstance(pk, int):
+				if not isinstance(pk, int): # FIXME this may need to be adapted to support non-integer primary keys
 					raise BinderRequestError(
 						'with_deletions.{}[{}] should be a numeric id'
 						.format(modelname, i)
@@ -2740,7 +2773,7 @@ class ModelView(View):
 		try:
 			# Step one does the permission check. We cannot do a select for update here, since the queryeset
 			# of get_queryset can potentially have outer joins on nullable values
-			obj = self.get_queryset(request).get(pk=int(pk))
+			obj = self.get_queryset(request).get(pk=pk)
 
 			# Now that we know we have access to this moel, we can get it again, this time with lock.
 			obj = self.model.objects.select_for_update().get(pk=obj.pk)
@@ -2749,7 +2782,7 @@ class ModelView(View):
 			include_annotations = self._parse_include_annotations(request)
 			annotations = include_annotations.get('')
 			old = self._get_objs(
-				self.model.objects.filter(pk=int(pk)),
+				self.model.objects.filter(pk=pk),
 				request=request,
 				annotations=annotations,
 				to_annotate={
@@ -2799,11 +2832,11 @@ class ModelView(View):
 		new.pop('_meta', None)
 
 		meta = data.setdefault('_meta', {})
-		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'], field_results = self._get_withs([new['id']], request=request, withs=None)
+		meta['with'], meta['with_mapping'], meta['with_related_name_mapping'], field_results = self._get_withs([new[self.model._meta.pk.name]], request=request, withs=None)
 		self._annotate_obj_with_related_withs(data, field_results)
 
-		logger.info('POST created {} #{}'.format(self._model_name(), data['id']))
-		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data['id'])):
+		logger.info('POST created {} #{}'.format(self._model_name(), data[self.model._meta.pk.name]))
+		for c in self._obj_diff({}, new, '{}[{}]'.format(self._model_name(), data[self.model._meta.pk.name])):
 			logger.debug('POST ' + c)
 
 		return JsonResponse(data)
@@ -2829,7 +2862,7 @@ class ModelView(View):
 		# This make sure we do all permission checks. We cannot do a select for update here, since there is a possiblity
 		# that we create a queryset that we cannot use in a for select clause.
 		try:
-			obj = self.get_queryset(request).get(pk=int(pk))
+			obj = self.get_queryset(request).get(pk=pk)
 		except ObjectDoesNotExist:
 			raise BinderNotFound()
 		# We now retrieve the model again, without the permission checks, which we already this.
@@ -2863,13 +2896,13 @@ class ModelView(View):
 				except models.ProtectedError as e:
 					protected_objects = defaultdict(list)
 					for prot in e.protected_objects:
-						protected_objects[self.get_model_view(prot.__class__)._model_name()] += [prot.id]
+						protected_objects[self.get_model_view(prot.__class__)._model_name()] += [prot.pk]
 					raise BinderValidationError({
 						self._model_name(): {
 							obj.pk: {
 								'id': [{
 									'code': 'protected',
-									'message': 'Could not delete object {}'.format(obj.id),
+									'message': 'Could not delete object {}'.format(obj.pk),
 									'objects': protected_objects,
 								}]
 							}
@@ -2894,7 +2927,7 @@ class ModelView(View):
 			pk = obj.pk
 		else:
 			try:
-				obj = self.get_queryset(request).get(pk=int(pk))
+				obj = self.get_queryset(request).get(pk=pk)
 			except ObjectDoesNotExist:
 				raise BinderNotFound()
 
@@ -2949,7 +2982,7 @@ class ModelView(View):
 			self._store(obj, {file_field_name: file}, request, pk=pk)
 
 			field = self.model._meta.get_field(file_field_name)
-			path = self.router.model_route(self.model, obj.id, field)
+			path = self.router.model_route(self.model, obj.pk, field)
 			# {duplicate-binder-file-field-hash-code}
 			if isinstance(field, BinderFileField):
 				file_field = getattr(obj, file_field_name)
@@ -2993,7 +3026,17 @@ class ModelView(View):
 			logger.warning('Debug endpoints disabled.')
 			return HttpResponseForbidden('Debug endpoints disabled.')
 
-		changesets = history.Changeset.objects.filter(id__in=set(history.Change.objects.filter(model=self.model.__name__, oid=pk).values_list('changeset_id', flat=True)))
+		query_params = {
+			'model': self.model.__name__
+		}
+
+		if isinstance(self.model._meta.pk, models.IntegerField) or isinstance(self.model._meta.pk, models.ForeignObject):
+			query_params['oid'] = pk
+		else:
+			query_params['oid_string'] = pk
+		changesets = history.Changeset.objects.filter(pk__in=set(
+			history.Change.objects.filter(**query_params).values_list('changeset_id', flat=True)
+		))
 		if debug:
 			return history.view_changesets_debug(request, changesets.order_by('-id'))
 		else:

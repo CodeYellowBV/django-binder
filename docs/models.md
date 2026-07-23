@@ -106,7 +106,7 @@ from binder.models import BinderModel
 class Animal(BinderModel):
 	name = models.TextField()
 	secret_notes = models.TextField()  # This field won't be tracked
-	
+
 	class Binder:
 		history = True
 		exclude_history_fields = ['secret_notes']
@@ -164,9 +164,36 @@ you need to override the `format_instance_for_history` method on the target mode
 
 ```python
 @classmethod
-def format_instance_for_history(cls, id: int):
+def format_instance_for_history(cls, pk):
 	try:
-		return ContactPerson.objects.get(id=id).name
+		return ContactPerson.objects.get(pk=pk).name
 	except:
-		return 'deleted? ' + str(id)
+		return 'deleted? ' + str(pk)
 ```
+
+## Non-integer primary keys
+If you use non-integer primary keys, you can override the `pk_regex` (default `[0-9]`)
+to make sure the router accepts them. For instance:
+```python
+class ContactPerson(BinderModel):
+	name = models.CharField(primary_key=True, max_length=50)
+
+	pk_regex = '.*'
+```
+This `pk_regex` determines what the router & view will consider to be a valid primary key.
+
+The default `pk_regex` only allows integer IDs, which makes sense for models that use an integer primary key,
+which are nearly all our models.
+- This would allow users to use the `/api/model/123/` endpoint to query model details,
+but not `/api/model/abc/`.
+- Likewise, it allows users to use `/api/model/123/detail-route`,
+but not `/api/model/abc/detail-route`.
+
+When you use a model with a non-integer primary key, you may need to override this regex.
+If you don't, the model detail endpoint and the detail route endpoints will be inaccessible.
+
+For instance, if you use a string primary key, you could change this regex to e.g. `[a-z|A-Z]+`,
+which would allow users to query their details from `/api/model/abc`.
+If you want to go wild, you could even use `.+`, which matches nearly any string,
+including strings that contain slashes, whitespaces and dots.
+(A few binder unit tests use such cursed primary keys.)

@@ -240,9 +240,6 @@ class IntegerFieldFilter(FieldFilter):
 		models.IntegerField,
 		models.ForeignKey,
 		models.AutoField,
-		models.ManyToOneRel,
-		models.ManyToManyField,
-		models.ManyToManyRel,
 	]
 	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull', 'icontains']
 
@@ -464,6 +461,12 @@ class JSONFieldFilter(FieldFilter):
 			# any other Binder JSON decode when there are errors.
 			return jsonloads(bytes(v, 'utf-8'))
 
+class CompositePrimaryKeyFilter(FieldFilter):
+	fields = [models.CompositePrimaryKey] if hasattr(models, 'CompositePrimaryKey') else []
+	allowed_qualifiers = [None, 'isnull']
+
+	def clean_value(self, qualifier, v):
+		return v
 
 
 class BinderModelBase(models.base.ModelBase):
@@ -483,6 +486,27 @@ class BinderModelBase(models.base.ModelBase):
 
 
 class BinderModel(models.Model, metaclass=BinderModelBase):
+	pk_regex = '[0-9]+'
+	"""
+	This regex determines what the router & view will consider to be a valid primary key.
+
+	By default, this only allows integers, which makes sense for models that use an integer primary key,
+	which are nearly all our models.
+	- This would allow users to use the `/api/model/123/` endpoint to query model details,
+	but not `/api/model/abc/`.
+	- Likewise, it allows users to use `/api/model/123/detail-route`,
+	but not `/api/model/abc/detail-route`.
+
+	When you use a model with a non-integer primary key, you may need to override this regex.
+	If you don't, the model detail endpoint and the detail route endpoints will be inaccessible.
+
+	For instance, if you use a string primary key, you could change this regex to e.g. `[a-z|A-Z]+`,
+	which would allow users to query their details from `/api/model/abc`.
+	If you want to go wild, you could even use `.+`, which matches nearly any string,
+	including strings that contain slashes, whitespaces and dots.
+	(A few binder unit tests use such cursed primary keys.)
+	"""
+
 	def binder_concrete_fields_as_dict(self, skip_deferred_fields=False):
 		fields = {}
 		deferred_fields = self.get_deferred_fields()
@@ -499,21 +523,21 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		return fields
 
 	@classmethod
-	def format_instance_for_history(cls, id: int):
+	def format_instance_for_history(cls, pk):
 		"""
 		This method is called during the history endpoint to determine the display name for related objects.
 
 		By default, when model `A` has a foreign key field named `f` of type `B`, it will show a change that looks like
 		```
-		{ field: f, before: old_id, after: new_id }
+		{ field: f, before: old_pk, after: new_pk }
 		```
 
-		If you override this method, you can display something nicer than just the ID (e.g. the name).
+		If you override this method, you can display something nicer than just the pk (e.g. the name).
 		"""
-		return str(id)
+		return pk
 
 	@classmethod
-	def format_field_for_history(cls, field_name: str, raw_value: str, is_before: bool, diff_tracker: dict, oid: int):
+	def format_field_for_history(cls, field_name: str, raw_value: str, is_before: bool, diff_tracker: dict, oid):
 		"""
 		This method is called during the history endpoint to improve the way some of the changes in a changeset are displayed.
 		Most fields are intuitive by default, but (m2m) relations need extra attention.
@@ -521,19 +545,19 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 		To demonstrate when this method is called, consider an example model `Zoo`:
 		```
 		class Zoo(BinderModel)
-			contacts = models.ManyToManyField('ContactPerson')
+			most_popular_animals = models.ManyToManyField('Animal', blank=True, related_name='+')
 		```
 		When the history endpoint of a zoo is invoked, the following calls to `format_field_history` could happen:
-		- `Zoo.format_field_for_history(field_name='contacts', raw_value='[[["id", 6]]]', is_before=False, ...)`
-		- `Zoo.format_field_for_history(field_name='contacts', raw_value='[[["id", 8]], [["id", 9]]]', is_before=True, ...)`
+		- `Zoo.format_field_for_history(field_name='most_popular_animals', raw_value='[6]', is_before=False, ...)`
+		- `Zoo.format_field_for_history(field_name='most_popular_animals', raw_value='[8, 9]', is_before=True, ...)`
 
 		This would mean that:
-		- The `ContactPerson` with id 6 was added to `contacts`.
-		- The `ContactPerson`s with id's 8 and 9 were removed from `contacts`.
-		- The **existing** contacts are **omitted**.
+		- The `Animal` with id 6 was added to `most_popular_animals`.
+		- The `Animal`s with id's 8 and 9 were removed from `most_popular_animals`.
+		- The **existing** animals are **omitted**.
 
-		First of all, this method will do some bookkeeping to figure out the **existing** contacts.
-		Furthermore, it invokes `ContactPerson.format_instance_for_history(6)` to figure out the display name of `ContactPerson` 6,
+		First of all, this method will do some bookkeeping to figure out the **existing** animals.
+		Furthermore, it invokes `Animal.format_instance_for_history(6)` to figure out the display name of `Animal` 6,
 		which will be shown instead of the raw ID.
 
 		If you do **not** want this formatting (as was the case in older Binder versions),
@@ -550,19 +574,19 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 			if field.is_relation:
 				target_model = field.remote_field.model
 
-				def get_cached_display_name(target_id: int):
+				def get_cached_display_name(target_pk):
 					if target_model not in diff_tracker:
 						diff_tracker[target_model] = dict()
 					display_name_cache = diff_tracker[target_model]
-					if target_id not in display_name_cache:
-						display_name_cache[target_id] = target_model.format_instance_for_history(target_id)
-					return display_name_cache[target_id]
+					if target_pk not in display_name_cache:
+						display_name_cache[target_pk] = target_model.format_instance_for_history(target_pk)
+					return display_name_cache[target_pk]
 
 				if field.remote_field.multiple:
 
 					if not is_before and field_name not in diff_tracker:
 						try:
-							dict_id_list = list(cls.objects.filter(id=oid).values(field_name).all())
+							dict_id_list = list(cls.objects.filter(pk=oid).values(field_name).all())
 							for index in range(len(dict_id_list)):
 								dict_id_list[index] = dict_id_list[index][field_name]
 							diff_tracker[field_name] = set(dict_id_list)
@@ -574,12 +598,17 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 
 					entries = json.loads(raw_value)
 					for entry in entries:
-						if len(entry) != 1:
-							raise ValueError()
-						entry = entry[0]
-						if len(entry) != 2 or entry[0] != 'id':
-							raise ValueError()
-						target_id = entry[1]
+						# Depending on the context (e.g. whether this is a backward, forward, or m2m relation),
+						# this `entry` can be either an integer or a tuple like `[['id', 'Rene']]`.
+						#
+						# Refactoring this would make sense, but is also going to be complicated,
+						# especially considering all the existing entries in changeset databases of downstream projects.
+						if isinstance(entry, list) and len(entry) == 1:
+							entry = entry[0]
+						if isinstance(entry, list) and len(entry) == 2 and entry[0] == 'id':
+							target_id = entry[1]
+						else:
+							target_id = entry
 						if is_before:
 							ids.append(target_id)
 							diff_tracker[field_name].add(target_id)
@@ -593,9 +622,9 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 							diff_tracker[target_model] = dict()
 						result.append(get_cached_display_name(id))
 
-					return ', '.join(result)
+					return ', '.join(str(r) for r in result)
 				else:
-					return get_cached_display_name(int(raw_value))
+					return get_cached_display_name(json.loads(raw_value))
 			return raw_value
 		except Exception:
 			# If we get an unexpected error when we try to format changes,
@@ -617,10 +646,10 @@ class BinderModel(models.Model, metaclass=BinderModelBase):
 
 		# Regular many to many; get a list of the target ids.
 		if not extended_m2m:
-			return set(field.values_list('id', flat=True))
+			return set(field.values_list('pk', flat=True))
 
 		# Extended m2m; get dicts of the intermediary join table objects
-		data = list(field.through.objects.filter(**{field.source_field.name: self.id}).values())
+		data = list(field.through.objects.filter(**{field.source_field.name: self.pk}).values())
 		# Then, modify them to leave out the PKs and source ids. Also, rename target ids to 'id'.
 		for d in data:
 			d.pop('id')
@@ -749,7 +778,7 @@ def history_obj_m2m_changed(sender, instance, action, reverse, model, pk_set, **
 	# Find the corresponding field on the instance
 	field = [f for f in instance._meta.get_fields() if f.concrete and f.many_to_many and f.remote_field.through == sender][0]
 
-	history.change(instance.__class__, instance.id, field.name, history.DeferredM2M, history.DeferredM2M)
+	history.change(instance.__class__, instance.pk, field.name, history.DeferredM2M, history.DeferredM2M)
 
 
 

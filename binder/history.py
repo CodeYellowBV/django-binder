@@ -23,7 +23,7 @@ class Changeset(models.Model):
 	def __str__(self):
 		uuid = self.uuid[:8] if self.uuid else None
 		username = self.user.username if self.user else None
-		return '{}/{} by {} on {}'.format(self.id, uuid, username, self.date.strftime('%Y%m%d-%H%M%S'))
+		return '{}/{} by {} on {}'.format(self.pk, uuid, username, self.date.strftime('%Y%m%d-%H%M%S'))
 
 	class Meta:
 		ordering = ['id']
@@ -34,13 +34,23 @@ class Change(models.Model):
 	changeset = models.ForeignKey(Changeset, on_delete=models.CASCADE, db_index=True, related_name='changes')
 	model = models.CharField(max_length=64, db_index=True)
 	oid = models.IntegerField(db_index=True)
+	oid_string = models.TextField(db_index=True, blank=True)
+	"""
+	Unfortunately, the original `oid` field is an `IntegerField`, which means that models with a non-integer primary key are not supported.
+	The `oid` field could be modified, but that would be a potentially big and undesirable migration that is sneakily pushed to downstream projects.
+
+	Instead, this field will simply be used as alternative, only for models with a non-integer primary key.
+	"""
 	field = models.CharField(max_length=64, db_index=True)
 	diff = models.BooleanField(default=False)
 	before = models.TextField(blank=True, null=True)
 	after = models.TextField(blank=True, null=True)
 
+	def choose_oid(self):
+		return self.oid if self.oid > 0 else self.oid_string
+
 	def __str__(self):
-		return '{}: {}({}).{}  {}  ->  {}'.format(self.id, self.model, self.oid, self.field, self.before[:20], self.after[:20])
+		return '{}: {}({}).{}  {}  ->  {}'.format(self.pk, self.model, self.oid, self.field, self.before[:20], self.after[:20])
 
 	class Meta:
 		ordering = ['id']
@@ -135,7 +145,7 @@ def change(model, oid, field, old, new):
 		#
 		# The target model may be a non-Binder model (e.g. User), so lbyl.
 		if hasattr(model, 'binder_serialize_m2m_field'):
-			old = model(id=oid).binder_serialize_m2m_field(field)
+			old = model(pk=oid).binder_serialize_m2m_field(field)
 
 	_Transaction.changes[hid] = old, new, False
 
@@ -153,7 +163,7 @@ def _commit():
 		if new is DeferredM2M:
 			# The target model may be a non-Binder model (e.g. User), so lbyl.
 			if hasattr(model, 'binder_serialize_m2m_field'):
-				new = model(id=oid).binder_serialize_m2m_field(field)
+				new = model(pk=oid).binder_serialize_m2m_field(field)
 				_Transaction.changes[model, oid, field] = m2m_diff(old, new)
 
 	# Filter non-changes
@@ -181,7 +191,8 @@ def _commit():
 		change = Change(
 			changeset=changeset,
 			model=model.__name__,
-			oid=oid,
+			oid=oid if isinstance(oid, int) else -1,
+			oid_string=-1 if isinstance(oid, int) else str(oid),
 			field=field,
 			diff=diff,
 			before=jsondumps(old),
@@ -202,23 +213,23 @@ def _abort():
 
 
 
-def view_changesets(request, changesets, model_class, oid: int):
+def view_changesets(request, changesets, model_class, oid):
 	data = []
 	userids = set()
 	diff_tracker = dict()
 	for cs in changesets:
 		changes = []
-		for c in cs.changes.order_by('model', 'oid', 'field'):
+		for c in cs.changes.order_by('model', 'oid', 'oid_string', 'field'):
 			after = model_class.format_field_for_history(field_name=c.field, raw_value=c.after, is_before=False, diff_tracker=diff_tracker, oid=oid)
 			before = model_class.format_field_for_history(field_name=c.field, raw_value=c.before, is_before=True, diff_tracker=diff_tracker, oid=oid)
-			changes.append({'model': c.model, 'oid': c.oid, 'field': c.field, 'diff': c.diff, 'before': before, 'after': after})
-		data.append({'date': cs.date, 'uuid': cs.uuid, 'id': cs.id, 'source': cs.source, 'user': cs.user_id, 'changes': changes})
+			changes.append({'model': c.model, 'oid': c.choose_oid(), 'field': c.field, 'diff': c.diff, 'before': before, 'after': after})
+		data.append({'date': cs.date, 'uuid': cs.uuid, 'id': cs.pk, 'source': cs.source, 'user': cs.user_id, 'changes': changes})
 		if cs.user_id:
 			userids.add(cs.user_id)
 
 	users = []
-	for u in get_user_model().objects.filter(id__in=userids):
-		users.append({'id': u.id, 'username': u.username, 'email': u.email, 'first_name': u.first_name, 'last_name': u.last_name})
+	for u in get_user_model().objects.filter(pk__in=userids):
+		users.append({'id': u.pk, 'username': u.username, 'email': u.email, 'first_name': u.first_name, 'last_name': u.last_name})
 
 	return JsonResponse({'data': data, 'with': {'user': users}})
 
@@ -228,13 +239,13 @@ def view_changesets_debug(request, changesets):
 	body = ['<html>', '<head>', '<style type="text/css">td {padding: 0px 20px;} th {padding: 0px 20px;}</style>', '</head>', '<body>']
 	for cs in changesets:
 		username = cs.user.username if cs.user else None
-		body.append('<h3>Changeset {} by {}: {} on {} {{{}}}'.format(cs.id, cs.source, username, cs.date.strftime('%Y-%m-%d %H:%M:%S'), cs.uuid))
+		body.append('<h3>Changeset {} by {}: {} on {} {{{}}}'.format(cs.pk, cs.source, username, cs.date.strftime('%Y-%m-%d %H:%M:%S'), cs.uuid))
 		body.append('<br><br>')
 		body.append('<table>')
 		body.append('<tr><th>model</th><th>object id</th><th>field</th><th><diff</th><th>before</th><th>after</th></tr>')
-		for c in cs.changes.order_by('model', 'oid', 'field'):
+		for c in cs.changes.order_by('model', 'oid', 'oid_string', 'field'):
 			body.append('<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>'.format(
-				c.model, c.oid, c.field, c.diff, c.before, c.after))
+				c.model, c.choose_oid(), c.field, c.diff, c.before, c.after))
 		body.append('</table>')
 		body.append('<br><br>')
 	body.append('</body>')
