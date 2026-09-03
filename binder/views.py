@@ -2199,7 +2199,7 @@ class ModelView(View):
 
 				else:
 					try:
-						f.to_python(value)
+						converted = f.to_python(value)
 					except TypeError:
 						raise BinderFieldTypeError(self.model.__name__, field)
 					except ValidationError as ve:
@@ -2217,6 +2217,11 @@ class ModelView(View):
 								}
 							}
 						})
+					# Store the parsed value instead of the raw string: non-native
+					# backends (MySQL) call duration_microseconds() which does
+					# not accept strings, unlike PostgreSQL's interval parser.
+					if isinstance(f, models.DurationField):
+						value = converted
 					setattr(obj, f.attname, value)
 				return False
 
