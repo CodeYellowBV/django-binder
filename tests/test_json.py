@@ -1,6 +1,6 @@
 import json as python_core_json
 
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from uuid import UUID
 from decimal import Decimal
 from django.test import TestCase
@@ -78,3 +78,9 @@ class JsonTest(TestCase):
 		t = datetime(2016, 1, 1, 1, 2, 3, 313337, tzinfo=timezone.utc)
 		d = DateTimeTZRange(t, t)
 		self.assertEqual('["2016-01-01T01:02:03.313337+0000", "2016-01-01T01:02:03.313337+0000"]', binder_json.jsondumps(d))
+
+	def test_json_durations_dump_correctly(self):
+		self.assertEqual('["00:30:00"]', binder_json.jsondumps([timedelta(minutes=30)]))
+		self.assertEqual('["02:03:04.123456"]', binder_json.jsondumps([timedelta(hours=2, minutes=3, seconds=4, microseconds=123456)]))
+		self.assertEqual('["2 03:00:00"]', binder_json.jsondumps([timedelta(days=2, hours=3)]))
+		self.assertEqual('["-1 23:30:00"]', binder_json.jsondumps([timedelta(minutes=-30)]))
