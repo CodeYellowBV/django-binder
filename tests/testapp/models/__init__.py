@@ -17,6 +17,7 @@ from .city import City, CityState, PermanentCity
 from .country import Country
 from .web_page import WebPage
 from .pet import Pet
+from .truck import Truck
 from .reverse_config_models import (
     ReverseParent,
     ReverseChild,

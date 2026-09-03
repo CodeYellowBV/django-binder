@@ -25,7 +25,7 @@ from datetime import timezone
 from django.utils.timezone import get_fixed_timezone
 
 from django.utils.translation import gettext_lazy as _
-from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.dateparse import parse_date, parse_datetime, parse_duration
 
 from binder.json import jsonloads
 
@@ -380,6 +380,17 @@ class TimeFieldFilter(FieldFilter):
 			tzinfo=tzinfo,
 		)
 
+
+
+class DurationFieldFilter(FieldFilter):
+	fields = [models.DurationField]
+	allowed_qualifiers = [None, 'in', 'gt', 'gte', 'lt', 'lte', 'range', 'isnull']
+
+	def clean_value(self, qualifier, v):
+		value = parse_duration(v)
+		if value is None:
+			raise ValidationError('Invalid duration value {{{}}} for {}.'.format(v, self.field_description()))
+		return value
 
 
 class BooleanFieldFilter(FieldFilter):

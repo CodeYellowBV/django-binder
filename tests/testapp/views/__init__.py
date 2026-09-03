@@ -22,3 +22,4 @@ from .zoo_employee import ZooEmployeeView
 from .web_page import WebPageView
 from .donor import DonorView
 from .pet import PetView
+from .truck import TruckView
