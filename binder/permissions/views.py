@@ -294,7 +294,7 @@ class PermissionView(ModelView):
 			obj = pk
 		else:
 			try:
-				obj = self.get_queryset(request).get(pk=int(pk))
+				obj = self.get_queryset(request).get(pk=pk)
 			except ObjectDoesNotExist:
 				raise BinderNotFound()
 

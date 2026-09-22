@@ -9,11 +9,23 @@ Code Yellow backend framework for SPA webapps with REST-like API.
 
 - Run with `./test`
 - Access the test database directly by with `docker compose run --rm db psql -h db -U postgres`.
-- It may be possible to recreate the test database (for example when you added/changed models). One way of achieving this is to just remove all the docker images that were build `docker compose rm` or `docker compose down db binder`. The database will be created during the setup in `tests/__init__.py`.
 
 The tests are set up in such a way that there is no need to keep migration files. The setup procedure in `tests/__init__.py` handles the preparation of the database by directly calling some build-in Django commands.
 
 To only run a selection of the tests, use the `-k` flag like `./test -k tests.test_some_specific_test`.
+
+## Refreshing the test database
+After changing models, you may need to forcibly 'refresh' the test database. Use:
+- `docker compose stop binder db`
+- `docker compose rm -f binder db`
+
+After running these commands, the next `./test` may or may not fail with:
+```
+django.db.utils.OperationalError: connection to server at "db" (172.20.0.2), port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+```
+
+If it fails, just retry it.
 
 ## MySQL support
 

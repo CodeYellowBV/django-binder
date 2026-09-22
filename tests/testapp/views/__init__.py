@@ -5,6 +5,7 @@ import os
 from .animal import AnimalView
 from .caretaker import CaretakerView
 from .contact_person import ContactPersonView
+from .contact_person_rating import ContactPersonRatingView
 from .costume import CostumeView
 from .city import CityView
 from .country import CountryView

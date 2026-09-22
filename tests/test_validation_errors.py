@@ -257,13 +257,13 @@ class TestValidationErrors(TestCase):
 			'with': {}
 		}
 
-		response = self.client.put('/contact_person/', data=json.dumps(model_data), content_type='application/json')
+		response = self.client.put('/country/', data=json.dumps(model_data), content_type='application/json')
 		self.assertEqual(response.status_code, 200)
 
-		response = self.client.put('/contact_person/', data=json.dumps(model_data), content_type='application/json')
+		response = self.client.put('/country/', data=json.dumps(model_data), content_type='application/json')
 		returned_data = jsonloads(response.content)
 
 		self.assertEqual(len(returned_data['errors']), 1)
-		self.assertEqual(len(returned_data['errors']['contact_person']), 1)
-		self.assertIn('name', returned_data['errors']['contact_person']['-1'])
-		self.assertEqual('unique', returned_data['errors']['contact_person']['-1']['name'][0]['code'])
+		self.assertEqual(len(returned_data['errors']['country']), 1)
+		self.assertIn('name', returned_data['errors']['country']['-1'])
+		self.assertEqual('unique', returned_data['errors']['country']['-1']['name'][0]['code'])
