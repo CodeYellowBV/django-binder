@@ -43,37 +43,90 @@ class WithFilterTest(TestCase):
 
 		# Filter the animal relations on animals with lion in the name
 		# This means we don't expect the goat and its caretaker in the with response
-		res = self.client.get('/zoo/', data={'with': 'animals.caretaker', 'where': 'animals(name:contains=lion)'})
-		self.assertEqual(res.status_code, 200)
-		res = jsonloads(res.content)
 
-		assert_json(res, {
-			'data': [
-				{
-					'id': zoo.id,
-					'animals': [antlion.id, sealion.id],
-					EXTRA(): None,
-				}
-			],
-			'with': {
-				'animal': [
+		def test_response(res, expected_animals, expected_with):
+			self.assertEqual(res.status_code, 200)
+			res = jsonloads(res.content)
+
+			assert_json(res, {
+				'data': [
 					{
-						'id': antlion.id,
+						'id': zoo.id,
+						'animals': expected_animals,
 						EXTRA(): None,
-					},
-					{
-						'id': sealion.id,
-						EXTRA(): None,
-					},
+					}
 				],
-				'caretaker': [
-					{
-						'id': freeman.id,
-						EXTRA(): None,
-					},
-				]
-			},
-			EXTRA(): None,
+				'with': expected_with,
+				EXTRA(): None,
+			})
+		
+		# Test without offset or limit
+		res = self.client.get('/zoo/', data={'with': 'animals.caretaker', 'where': 'animals(name:contains=lion)'})
+		test_response(res, [antlion.id, sealion.id], {
+			'animal': [
+				{
+					'id': antlion.id,
+					EXTRA(): None,
+				},
+				{
+					'id': sealion.id,
+					EXTRA(): None,
+				},
+			],
+			'caretaker': [
+				{
+					'id': freeman.id,
+					EXTRA(): None,
+				},
+			]
+		})
+
+		# Test with limit
+		res = self.client.get('/zoo/', data={'with': 'animals.caretaker', 'where': 'animals(name:contains=lion),animals(#limit=1)'})
+		test_response(res, [antlion.id], {
+			'animal': [
+				{
+					'id': antlion.id,
+					EXTRA(): None,
+				},
+			],
+			'caretaker': [
+				{
+					'id': freeman.id,
+					EXTRA(): None,
+				},
+			]
+		})
+
+		# Test with offset
+		res = self.client.get('/zoo/', data={'with': 'animals.caretaker', 'where': 'animals(name:contains=lion),animals(#offset=1)'})
+		test_response(res, [sealion.id], {
+			'animal': [
+				{
+					'id': sealion.id,
+					EXTRA(): None,
+				},
+			],
+			'caretaker': []
+		})
+
+		# Test with offset and limit
+		res = self.client.get('/zoo/', data={'with': 'animals.caretaker', 'where': 'animals(name:contains=lion),animals(#offset=1),animals(#limit=1)'})
+		test_response(res, [sealion.id], {
+			'animal': [
+				{
+					'id': sealion.id,
+					EXTRA(): None,
+				},
+			],
+			'caretaker': []
+		})
+
+		# Test with offset and 0 limit
+		res = self.client.get('/zoo/', data={'with': 'animals.caretaker', 'where': 'animals(name:contains=lion),animals(#offset=1),animals(#limit=0)'})
+		test_response(res, [], {
+			'animal': [],
+			'caretaker': []
 		})
 
 
