@@ -178,7 +178,7 @@ class HistoryTest(TestCase):
 		self.assertEqual('testuser', cs.user.username)
 		self.assertAlmostEqual(datetime.now(tz=timezone.utc), cs.date, delta=timedelta(seconds=1))
 
-		self.assertEqual(7, Change.objects.count())
+		self.assertEqual(8, Change.objects.count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='name', before='null', after='"Daffy Duck"').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='id', before='null', after=Animal.objects.get().id).count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='caretaker', before='null', after='null').count())
@@ -186,6 +186,7 @@ class HistoryTest(TestCase):
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='zoo_of_birth', before='null', after='null').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='deleted', before='null', after='false').count())
 		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='birth_date', before='null', after='null').count())
+		self.assertEqual(1, Change.objects.filter(changeset=cs, model='Animal', field='feeding_period', before='null', after='"P1D"').count())
 
 
 
