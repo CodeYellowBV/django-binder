@@ -57,6 +57,14 @@ class TokenAuthTest(TestCase):
 			EXTRA(): None,
 		})
 
+	def test_deactivated_user_token_auth(self):
+		# A deactivated user should not be able to authenticate with a token.
+		self.user.is_active = False
+		self.user.save()
+
+		res = self.client.get('/user/identify/')
+		self.assertEqual(res.status_code, 404)
+
 	def test_token_not_found(self):
 		old_token = self.token.token
 		self.token.token = 'foo'
