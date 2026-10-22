@@ -6,6 +6,7 @@ from .animal import Animal
 from .donor import Donor
 from .caretaker import Caretaker
 from .contact_person import ContactPerson
+from .contact_person_rating import ContactPersonRating
 from .costume import Costume
 from .gate import Gate
 from .nickname import Nickname, NullableNickname

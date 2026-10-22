@@ -1,20 +1,21 @@
 from django.test import TestCase
 
 from binder.exceptions import BinderNotFound
-from binder.json import jsondumps
+from binder.json import jsondumps, jsonloads
 from binder.models import BinderModel
 from binder.router import Router, Route, detail_route
 from binder.views import ModelView
 
+from django.contrib.auth.models import User
 from django.urls.base import is_valid_path, clear_url_caches
 from django.urls import re_path, include
 
 from . import urls_module
 
+from .testapp.models import ContactPerson, Country
+
+
 # Two unique local models, to use for view registration
-from .testapp.models import Country
-
-
 class FooModel(BinderModel):
 	class Meta(BinderModel.Meta):
 		app_label = 'test'
@@ -131,7 +132,7 @@ class RouterTest(TestCase):
 
 class TestFetchObj(TestCase):
 
-		
+
 	def test_get_obj_turns_pk_in_object(self):
 		that = self
 
@@ -183,3 +184,34 @@ class TestFetchObj(TestCase):
 
 		with self.assertRaises(BinderNotFound):
 			Foo().foo(RequestMock(), 5)
+
+class TestWeirdPrimaryKeys(TestCase):
+
+	WEIRD_PK = '"Such a... \\weird/annoying name!\''
+
+	def setUp(self):
+		u = User(username='testuser', is_active=True, is_superuser=True)
+		u.set_password('test')
+		u.save()
+		self.assertTrue(self.client.login(username='testuser', password='test'))
+		ContactPerson.objects.create(name=self.WEIRD_PK)
+
+	def test_detail_route(self):
+		response = self.client.get(f'/contact_person/{self.WEIRD_PK}/upper-name/')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual('"SUCH A... \\WEIRD/ANNOYING NAME!\'', response.content.decode('utf-8'))
+
+	def test_list_route(self):
+		response = self.client.get('/contact_person/counter/')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual('1', response.content.decode('utf-8'))
+
+	def test_detail_endpoint(self):
+		response = self.client.get(f'/contact_person/{self.WEIRD_PK}/')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(self.WEIRD_PK, jsonloads(response.content)['data']['name'])
+
+	def test_list_endpoint(self):
+		response = self.client.get(f'/contact_person/')
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(self.WEIRD_PK, jsonloads(response.content)['data'][0]['name'])

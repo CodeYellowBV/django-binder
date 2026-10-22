@@ -124,20 +124,22 @@ class Router(object):
 		urls = []
 		for route, view in self.route_views.items():
 			name = view.model.__name__ if view.model else route.route
-			# List and detail endpoints
-			if route.list_endpoint:
-				urls.append(re_path(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
-			if route.detail_endpoint:
-				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/$'.format(route.route), view.as_view(), {'router': self}, name=name))
+
+			pk_regex = '[0-9]+'
+			try:
+				pk_regex = view.model.pk_regex
+			except AttributeError:
+				# Some models (e.g. built-in django models) don't inherit from BinderModel, hence don't have a pk_regex.
+				pass
 
 			# History views
 			if view.model and hasattr(view.model, 'Binder') and view.model.Binder.history:
-				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/history/$'.format(route.route), view.as_view(), {'history': 'normal', 'router': self}, name=name))
-				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/history/debug/$'.format(route.route), view.as_view(), {'history': 'debug', 'router': self}, name=name))
+				urls.append(re_path(r'^{}/(?P<pk>{})/history/$'.format(route.route, pk_regex), view.as_view(), {'history': 'normal', 'router': self}, name=name))
+				urls.append(re_path(r'^{}/(?P<pk>{})/history/debug/$'.format(route.route, pk_regex), view.as_view(), {'history': 'debug', 'router': self}, name=name))
 
 			# File field endpoints
 			for ff in view.file_fields:
-				urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/{}/$'.format(route.route, ff),
+				urls.append(re_path(r'^{}/(?P<pk>{})/{}/$'.format(route.route, pk_regex, ff),
 						view.as_view(), {'file_field': ff, 'router': self}, name='{}.{}'.format(name, ff)))
 
 			# Custom endpoints
@@ -150,10 +152,16 @@ class Router(object):
 					if method.unauthenticated:
 						kwargs['unauthenticated'] = True
 					if hasattr(method, 'detail_route'):
-						urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/{}/{}$'.format(route.route, route_name, extra),
+						urls.append(re_path(r'^{}/(?P<pk>{})/{}/{}$'.format(route.route, pk_regex, route_name, extra),
 								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
 					if hasattr(method, 'list_route'):
 						urls.append(re_path(r'^{}/{}/{}$'.format(route.route, route_name, extra),
 								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
+
+			# List and detail endpoints
+			if route.list_endpoint:
+				urls.append(re_path(r'^{}/$'.format(route.route), view.as_view(), {'router': self}, name=name))
+			if route.detail_endpoint:
+				urls.append(re_path(r'^{}/(?P<pk>{})/$'.format(route.route, pk_regex), view.as_view(), {'router': self}, name=name))
 
 		return urls

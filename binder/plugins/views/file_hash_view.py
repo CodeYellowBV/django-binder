@@ -82,7 +82,7 @@ class FileHashView:
             obj = pk
         else:
             try:
-                obj = self.get_queryset(request).get(pk=int(pk))
+                obj = self.get_queryset(request).get(pk=pk)
             except self.model.DoesNotExist:
                 raise BinderNotFound()
 

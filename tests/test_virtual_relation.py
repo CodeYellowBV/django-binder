@@ -53,5 +53,3 @@ class TestVirtualRelation(TestCase):
 
 
 		response = self.client.get('/animal/', data={'.name': 'Peter', 'with': 'nickname.source,zoo.animals.nickname'})
-
-		print(response.content)

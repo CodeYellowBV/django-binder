@@ -858,6 +858,5 @@ class ForUpdateErrorNotOccurringTest(TestCase):
 
 		res = self.client.put(f'/city_state/{city_state.id}/', data=jsondumps({
 		}))
-		print(res.json())
 
 		self.assertEqual(200, res.status_code)

@@ -50,6 +50,10 @@ class MasqueradeTest(TestCase):
 		res = self.client.post('/user/logout/')
 		self.assertEqual(res.status_code, 204)
 
+	def endMasquerade(self):
+		res = self.client.post('/user/endmasquerade/')
+		self.assertEqual(res.status_code, 200)
+
 	# Asserts
 	def assertLoggedIn(self, username=None):
 		res = self.client.get('/user/identify/')
@@ -97,3 +101,18 @@ class MasqueradeTest(TestCase):
 		self.assertLoggedIn('user3')
 		self.logout()
 		self.assertLoggedOut()
+
+	def test_endmasquerade(self):
+		self.assertLoggedOut()
+		self.login('user1')
+		self.assertLoggedIn('user1')
+		self.masquerade('user2')
+		self.assertLoggedIn('user2')
+		self.masquerade('user3')
+		self.assertLoggedIn('user3')
+		self.endMasquerade()
+		self.assertLoggedIn('user2')
+		self.endMasquerade()
+		self.assertLoggedIn('user1')
+		res = self.client.post('/user/endmasquerade/')
+		self.assertEqual(403, res.status_code)
