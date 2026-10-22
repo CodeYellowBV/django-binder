@@ -81,7 +81,7 @@ class TokenAuthMiddleware:
 			return self.get_response(request)
 
 		try:
-			token = Token.objects.get(token=token)
+			token = Token.objects.get(token=token, user__is_active=True)
 		except Token.DoesNotExist:
 			# Token does not exist
 			# Raise and catch needed to provide location
