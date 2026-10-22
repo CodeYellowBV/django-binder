@@ -1,6 +1,10 @@
 name: Continuous Integration
 
-on: push
+on:
+  push:
+    branches: [master]
+    tags: ['*']
+  pull_request:
 
 jobs:
   check:
@@ -89,3 +93,6 @@ jobs:
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v1
+        # Skip the tokenless upload on fork PRs (it fails there, or at best
+        # clutters Codecov with unclaimed uploads).
+        if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
