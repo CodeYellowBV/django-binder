@@ -1,0 +1,1 @@
+- Picks the Python/Django version in the GitHub Actions flow such that they are compatible with the Ubuntu version

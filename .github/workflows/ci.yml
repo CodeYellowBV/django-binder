@@ -11,12 +11,12 @@ jobs:
     strategy:
       matrix:
         # Testing Python 3.7 (deb 10), Python 3.9 (deb 11), Python 3.11 (deb 12)
-        python-version: ["3.9", "3.11"]
-        django-version: ["3.2.25", "4.2.17", "5.1.4"]
+        python-version: ["3.11"]
+        django-version: ["3.2.25", "4.2.17", "5.2.8"]
         database-engine: ["postgres", "mysql"]
         os: [ubuntu-latest]
         include:
-          # 3.7 cannot run on latest ubuntu
+          # 3.7 and 3.9 cannot run on latest ubuntu
           - python-version: 3.7
             django-version: 3.2.25
             database-engine: postgres
@@ -25,9 +25,23 @@ jobs:
             django-version: 3.2.25
             database-engine: mysql
             os: ubuntu-22.04
-        exclude:
           - python-version: 3.9
-            django-version: 5.1.4
+            django-version: 4.2.15
+            database-engine: postgres
+            os: ubuntu-24.04
+          - python-version: 3.9
+            django-version: 4.2.15
+            database-engine: mysql
+            os: ubuntu-24.04
+          # Django 4 doesn't support Python 3.14
+          - python-version: 3.14
+            django-version: 5.2.8
+            database-engine: postgres
+            os: ubuntu-latest
+          - python-version: 3.14
+            django-version: 5.2.8
+            database-engine: mysql
+            os: ubuntu-latest
 
     runs-on: ${{ matrix.os }}
 
