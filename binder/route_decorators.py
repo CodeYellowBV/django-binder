@@ -9,6 +9,7 @@ def _route_decorator(
 	methods: Optional[List[str]] = None,
 	extra_route: str = '',
 	unauthenticated: bool = False,
+	inside_atomic_transaction: bool = True,
 	*,
 	fetch_obj: bool = False):
 	"""
@@ -19,6 +20,7 @@ def _route_decorator(
 	@param methods: List of http methods that the router should be listed at. E.g. ['GET', 'POST']
 	@param extra_route: Postfix for the url which can be added behind the URL. Can be a regex. E.g. extra_route=r'(?P<key>[-a-zA-Z0-9_]+)/'
 	@param unauthenticated: If not True, will first check if the user is logged in.
+	@param inside_atomic_transaction: Whether the endpoint will be executed within `transaction.atomic()` (`True` by default)
 	@param fetch_obj: Boolean indicating if we should inject fetch and inject the object
 	"""
 	def decorator(func):
@@ -55,6 +57,7 @@ def _route_decorator(
 		wrapper.route_name = name
 		wrapper.extra_route = extra_route
 		wrapper.unauthenticated = unauthenticated
+		wrapper.inside_atomic_transaction = inside_atomic_transaction
 		return wrapper
 	return decorator
 
@@ -76,11 +79,11 @@ def list_route(*args, **kwargs):
 
 def detail_route(*args, **kwargs):
 	"""
-	Add a list route, i.e. a route with a id in the name
+	Add a detail route, i.e. a route with a id in the name
 
 	E.g. on the model foo
 
-		@list_route('bar')
+		@detail_route('bar')
 
 	Will register a route api/foo/1/bar/
 	"""

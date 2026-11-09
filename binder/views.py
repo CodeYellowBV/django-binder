@@ -18,7 +18,6 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, FieldError, ValidationError, FieldDoesNotExist
 from django.core.files.base import File, ContentFile
 from django.http import HttpResponse,  HttpResponseForbidden, FileResponse
-from django.http.request import RawPostDataException
 from django.http.multipartparser import MultiPartParser
 from django.db import models, connections
 from django.db.models import Q, F, Count, Case, When
@@ -524,16 +523,21 @@ class ModelView(View):
 		try:
 			#### START TRANSACTION
 			with ExitStack() as stack, history.atomic(source='http', user=request.user, uuid=request.request_id):
-				transaction_dbs = ['default']
 
-				# Check if the TRANSACTION_DATABASES is set in the settings.py, and if so, use that instead
-				try:
-					transaction_dbs = settings.TRANSACTION_DATABASES
-				except AttributeError:
-					pass
+				# By default, all of our endpoints are executed within an atomic transaction,
+				# but you can pass inside_atomic_transaction=False to list routes & detail routes to override this.
+				if kwargs.pop('inside_atomic_transaction', True):
+					transaction_dbs = ['default']
 
-				for db in transaction_dbs:
-					stack.enter_context(transaction.atomic(using=db))
+					# Check if the TRANSACTION_DATABASES is set in the settings.py, and if so, use that instead
+					try:
+						transaction_dbs = settings.TRANSACTION_DATABASES
+					except AttributeError:
+						pass
+
+					for db in transaction_dbs:
+						stack.enter_context(transaction.atomic(using=db))
+
 				is_unauthenticated_endpoint = kwargs.pop('unauthenticated', False)
 				user_is_authenticated = request.user.is_authenticated
 
