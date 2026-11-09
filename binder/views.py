@@ -512,15 +512,11 @@ class ModelView(View):
 		if not self.log_request_body:
 			body = ' censored.'
 		else:
-			# FIXME: ugly workaround, remove when Django bug fixed
-			# Try/except because https://code.djangoproject.com/ticket/27005
-			try:
-				if request.META.get('CONTENT_TYPE', '').lower() == 'application/json':
-					body = ': ' + ellipsize(request.body, length=65536)
-				else:
-					body = ': ' + ellipsize(request.body, length=64)
-			except RawPostDataException:
-				body = ' unavailable.'
+			if request.META.get('CONTENT_TYPE', '').lower() == 'application/json':
+				body = ': ' + ellipsize(request.body, length=65536)
+			else:
+				body = ': ' + ellipsize(request.body, length=64)
+
 
 		logger.debug('body (content-type={}){}'.format(request.META.get('CONTENT_TYPE'), body))
 
