@@ -319,6 +319,8 @@ accept the following keyword options:
 - `unauthenticated`: If `True`, this route should skip the authentication check.
 - `methods`: Either `None` or a list of strings that indicate the allowed methods.  Any other method results in a BinderNotAllowed exception (a 418 status).
 - `extra_route`: An optional string suffix to append to the route. You can use named capturing groups here, just like in `urls.py`.
+- `inside_atomic_transaction`: Whether the endpoint is executed within a `transaction.atomic()` block.
+  This is `True` by default, and should almost always stay `True`, unless you have a very good reason to make it non-atomic.
 
 ## Base View classes ("abstract views")
 

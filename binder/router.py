@@ -149,6 +149,7 @@ class Router(object):
 					kwargs = {'method': m, 'router': self}
 					if method.unauthenticated:
 						kwargs['unauthenticated'] = True
+					kwargs['inside_atomic_transaction'] = method.inside_atomic_transaction
 					if hasattr(method, 'detail_route'):
 						urls.append(re_path(r'^{}/(?P<pk>[0-9]+)/{}/{}$'.format(route.route, route_name, extra),
 								view.as_view(), kwargs, name='{}.{}'.format(name, route_name)))
