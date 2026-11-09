@@ -68,7 +68,9 @@ class CsvExportTest(TestCase):
 		response = self.client.get('/picture/download_excel/')
 
 		with NamedTemporaryFile(suffix='.xlsx') as tmp:
-			tmp.write(response.content)
+			with open(tmp.name, 'wb') as write_tmp:
+				write_tmp.write(response.content)
+				write_tmp.flush()
 
 			wb = openpyxl.load_workbook(tmp.name)
 			self.assertEqual(1, len(wb._sheets))
@@ -132,7 +134,9 @@ class CsvExportTest(TestCase):
 		self.assertEqual(200, response.status_code)
 
 		with NamedTemporaryFile(suffix='.xlsx') as tmp:
-			tmp.write(response.content)
+			with open(tmp.name, 'wb') as write_tmp:
+				write_tmp.write(response.content)
+				write_tmp.flush()
 
 			wb = openpyxl.load_workbook(tmp.name)
 			sheet = wb._sheets[0]
