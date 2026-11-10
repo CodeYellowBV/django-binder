@@ -1,3 +1,4 @@
+from contextlib import ExitStack
 import logging
 import warnings
 from enum import Enum
@@ -259,7 +260,16 @@ class PermissionView(ModelView):
 		Make sure that permissions are checked, and scoping is done
 		"""
 		setattr(request, '_has_permission_check', False)
-		with transaction.atomic():
+
+		# We use ExitStack() rather than using transaction.atomic() directly to avoid code duplication:
+		# we want to invoke the route within an atomic transaction, except when kwargs['inside_atomic_transaction'] is False.
+		with ExitStack() as stack:
+			if kwargs.get('inside_atomic_transaction', True):
+
+				# Note that this atomic transaction is possibly redundant, since ModelView.dispatch **also** wraps the endpoint in a transaction!
+				# Removing this redundant transaction is however a topic for another dev stack dev day
+				stack.enter_context(transaction.atomic())
+
 			result = super().dispatch(request, *args, **kwargs)
 
 			# If an error occured, we can return the result directly

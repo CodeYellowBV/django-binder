@@ -1,1 +1,1 @@
-- Allow non-atomic list & detail routes
+- Allow non-atomic list & detail routes for both `ModelView`s and `PermissionView`s
